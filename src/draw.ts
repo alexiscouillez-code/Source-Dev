@@ -395,12 +395,12 @@ function drawAvatar(
     el("ellipse", {
       cx: "0",
       cy: "3",
-      rx: "12",
-      ry: "3.2",
+      rx: "16",
+      ry: "4",
       fill: "rgba(20, 28, 24, 0.25)",
     }),
   );
-  const body = el("g", { transform: `scale(1.45) rotate(${lean.toFixed(1)})` });
+  const body = el("g", { transform: `scale(2.1) rotate(${lean.toFixed(1)})` });
   body.append(createRunner(avatar));
   actor.append(body);
   actor.dataset.km = visualKm.toFixed(2);

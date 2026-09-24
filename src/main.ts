@@ -197,7 +197,7 @@ function showTrail(next: Save): void {
       <div class="trail-body">
         <div class="stage">
           <div class="world-wrap">
-            <svg id="world" viewBox="0 0 960 420" preserveAspectRatio="xMidYMid slice"></svg>
+            <svg id="world" viewBox="0 0 960 420" preserveAspectRatio="xMidYMax meet"></svg>
           </div>
           <svg id="minimap" viewBox="0 0 960 72" preserveAspectRatio="none"></svg>
         </div>
@@ -443,7 +443,7 @@ function animate(fromKm: number, toKm: number): void {
   const token = ++animToken;
   animating = true;
   setFormLocked(true);
-  const duration = Math.min(2400, Math.max(700, Math.abs(toKm - fromKm) * 70));
+  const duration = Math.min(3200, Math.max(900, Math.abs(toKm - fromKm) * 120));
   const started = performance.now();
   const step = (now: number) => {
     if (token !== animToken) return;
