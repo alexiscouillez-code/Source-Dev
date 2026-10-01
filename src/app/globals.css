@@ -21,4 +21,5 @@ body {
 button,
 a {
   -webkit-tap-highlight-color: transparent;
+  scroll-margin-bottom: 7rem;
 }

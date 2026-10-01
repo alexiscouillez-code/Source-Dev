@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, useSyncExternalStore } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { BottomNav } from "@/components/BottomNav";
 import { GameEngine, type EventView } from "@/game/engine/GameEngine";
@@ -44,10 +44,6 @@ interface Session {
 
 const GameContext = createContext<GameApi | null>(null);
 
-function subscribe(): () => void {
-  return () => undefined;
-}
-
 export function useGame(): GameApi {
   const value = useContext(GameContext);
   if (!value) throw new Error("Jeu indisponible");
@@ -56,23 +52,30 @@ export function useGame(): GameApi {
 
 export function GameProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const mounted = useSyncExternalStore(subscribe, () => true, () => false);
   const [session, setSession] = useState<Session | null>(null);
-
-  if (mounted && session === null) {
-    const engine = new GameEngine(loadSave());
-    setSession({ engine, save: engine.getSave(), race: engine.getRace() });
-  }
+  const [bootError, setBootError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!mounted || !("serviceWorker" in navigator)) return;
-    void navigator.serviceWorker.register("/sw.js").catch(() => undefined);
-  }, [mounted]);
+    try {
+      const engine = new GameEngine(loadSave());
+      // The save lives in localStorage, so it can only be read after mount.
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- client-only persistence
+      setSession({ engine, save: engine.getSave(), race: engine.getRace() });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Sauvegarde illisible";
+      console.error(message);
+      setBootError(message);
+    }
+    if ("serviceWorker" in navigator) {
+      void navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+    }
+  }, []);
 
   if (!session) {
     return (
       <div className="flex min-h-dvh items-center justify-center">
         <p className="text-sm tracking-[0.28em] text-cyan-300">TRAIL SURVIVAL</p>
+        {bootError ? <p className="mt-3 text-sm text-red-400">{bootError}</p> : null}
       </div>
     );
   }

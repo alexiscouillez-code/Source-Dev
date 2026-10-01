@@ -75,7 +75,7 @@ export default function PrepPage() {
   }
 
   return (
-    <main className="px-4 pt-8">
+    <main className="px-4 pt-8 pb-28">
       <p className="text-[11px] font-semibold tracking-[0.18em] text-cyan-300">COURSE FICTIVE</p>
       <h1 className="mt-2 text-3xl font-semibold">{definition.name}</h1>
       <p className="mt-2 text-sm text-zinc-300">
@@ -187,21 +187,25 @@ export default function PrepPage() {
 
       {error ? <p className="mt-4 text-sm text-red-400">{error}</p> : null}
 
-      <button
-        type="button"
-        disabled={Boolean(race)}
-        onClick={() => {
-          const ok = start(definition.id, prep);
-          if (!ok) {
-            setError("Départ impossible avec ce matériel.");
-            return;
-          }
-          router.push("/race");
-        }}
-        className="mt-5 mb-6 flex min-h-14 w-full items-center justify-center rounded-2xl bg-cyan-400 text-base font-semibold text-zinc-950 disabled:opacity-40"
-      >
-        Départ
-      </button>
+      <div className="fixed inset-x-0 bottom-16 z-20">
+        <div className="mx-auto w-full max-w-lg border-t border-zinc-800 bg-[#07090c]/95 px-4 py-3">
+          <button
+            type="button"
+            disabled={Boolean(race)}
+            onClick={() => {
+              const ok = start(definition.id, prep);
+              if (!ok) {
+                setError("Départ impossible avec ce matériel.");
+                return;
+              }
+              router.push("/race");
+            }}
+            className="flex min-h-14 w-full items-center justify-center rounded-2xl bg-cyan-400 text-base font-semibold text-zinc-950 disabled:opacity-40"
+          >
+            Départ
+          </button>
+        </div>
+      </div>
     </main>
   );
 }
