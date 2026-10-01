@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import type { ResultStatus } from "@/game/models/types";
+import type { ResultStatus, SegmentLog } from "@/game/models/types";
 
 const UNAVAILABLE = "Coach IA indisponible : aucune clé API configurée.";
+const MODELS = ["gemini-3.5-flash", "gemini-3.6-flash", "gemini-3.8-flash"] as const;
 
 const SYSTEM = [
   "Tu es un coach de trail. Tu expliques un résultat déjà calculé par un moteur déterministe.",
@@ -19,7 +20,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const key = process.env.OPENAI_API_KEY;
+  const key = process.env.GEMINI_API_KEY;
   if (!key) {
     return NextResponse.json({ available: false, message: UNAVAILABLE }, { status: 503 });
   }
@@ -34,39 +35,54 @@ export async function POST(request: Request) {
   }
 
   try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        temperature: 0.3,
-        messages: [
-          { role: "system", content: SYSTEM },
-          { role: "user", content: JSON.stringify(slim(payload)) },
-        ],
-      }),
-    });
-    if (!response.ok) {
+    const text = await explainWithGemini(key, JSON.stringify(slim(payload)));
+    if (!text) {
       return NextResponse.json({ available: true, message: "Le coach n’a pas répondu." }, { status: 502 });
     }
-    const data = (await response.json()) as {
-      choices?: { message?: { content?: string } }[];
-    };
-    const text = data.choices?.[0]?.message?.content;
-    if (!text?.trim()) {
-      return NextResponse.json({ available: true, message: "Réponse vide du coach." }, { status: 502 });
-    }
-    return NextResponse.json({ available: true, message: text.trim() });
+    return NextResponse.json({ available: true, message: text });
   } catch {
     return NextResponse.json({ available: true, message: "Le coach n’a pas répondu." }, { status: 502 });
   }
 }
 
+async function explainWithGemini(key: string, userText: string): Promise<string | null> {
+  for (const model of MODELS) {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": key,
+          },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: SYSTEM }] },
+            contents: [{ role: "user", parts: [{ text: userText }] }],
+            generationConfig: {
+              temperature: 0.3,
+              maxOutputTokens: 1500,
+              thinkingConfig: { thinkingBudget: 0 },
+            },
+          }),
+        },
+      );
+      if (response.ok) {
+        const data = (await response.json()) as GeminiResponse;
+        const text = data.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("").trim();
+        if (text) return text;
+      } else {
+        console.error("Coach Gemini status", model, response.status);
+      }
+      if (response.status !== 429 && response.status !== 503) break;
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+  }
+  return null;
+}
+
 function hasCoachKey(): boolean {
-  return Boolean(process.env.OPENAI_API_KEY);
+  return Boolean(process.env.GEMINI_API_KEY);
 }
 
 function isCoachPayload(value: unknown): value is CoachPayload {
@@ -96,9 +112,17 @@ interface CoachPayload {
   xpGained: number;
   dnfReason: string | null;
   equipmentIds: string[];
-  segmentLog: unknown[];
+  segmentLog: SegmentLog[];
   actionLog: unknown[];
   eventLog: unknown[];
+}
+
+interface GeminiResponse {
+  candidates?: { content?: { parts?: { text?: string }[] } }[];
+}
+
+function isSegment(value: SegmentLog): value is SegmentLog {
+  return Boolean(value) && typeof value.segmentName === "string";
 }
 
 function slim(result: CoachPayload) {
@@ -119,5 +143,12 @@ function slim(result: CoachPayload) {
     segments: result.segmentLog,
     actions: result.actionLog,
     events: result.eventLog,
+    statHistory: result.segmentLog.filter(isSegment).map((segment) => ({
+      segment: segment.segmentName,
+      energy: [segment.energyBefore, segment.energyAfter],
+      hydration: [segment.hydrationBefore, segment.hydrationAfter],
+      fatigue: [segment.fatigueBefore, segment.fatigueAfter],
+      mental: [segment.mentalBefore, segment.mentalAfter],
+    })),
   };
 }

@@ -12,4 +12,4 @@ La progression (coureur, équipement, XP, historique, course en cours) est enreg
 
 `supabase/schema.sql` décrit les tables pour une synchro ultérieure. Sans identifiants Supabase, aucun compte cloud n’est créé et rien n’est envoyé.
 
-Le coach IA (`/api/coach`) n’explique un résultat que si `OPENAI_API_KEY` est défini. Sans clé, il le dit et n’invente pas de conseil. Il ne calcule ni l’arrivée, ni l’XP, ni les probabilités.
+Le coach IA (`/api/coach`) explique un `RaceResult` déjà calculé si `GEMINI_API_KEY` est défini. Sans cette variable, il le dit et n’invente pas de conseil. Il ne calcule ni l’arrivée, ni l’XP, ni les probabilités.
