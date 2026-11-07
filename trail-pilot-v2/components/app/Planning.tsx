@@ -1,0 +1,351 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { Ctx } from "./AppShell";
+import { api, dayLabel, dayNum, fmtDur, fmtKm, fmtNum, localToday, shortDay, type PlanSession } from "./client";
+import { IconCheck, IconSkip, IconUndo } from "./icons";
+import { StatusChip } from "./Today";
+import { SessionTarget } from "./Targets";
+import type { Targets } from "./client";
+import RaceStrategy from "./RaceStrategy";
+import RaceWeather from "./RaceWeather";
+import SideRaces, { type SideRaceRow } from "./SideRaces";
+import type { RaceRoute, WeatherAdjust } from "@/lib/engine/strategy";
+
+type Verdict = "solide" | "ambitieux" | "risque" | "court";
+interface PlanWeek { monday: string; phase: string; minutes: number; longMin: number; gainM: number; focus: string; light: boolean }
+interface RacePlan {
+  generatedOn: string;
+  race: { name: string; date: string; distanceKm: number; gainM: number; effortKm: number; daysTo: number; assumed: boolean };
+  estimate: { low: number; high: number };
+  demands: { weeklyMin: number; longMin: number; weeklyGain: number; backToBack: boolean };
+  current: { weeklyMin: number; longestMin: number; weeklyGain: number; hasHistory: boolean };
+  reach: { weeklyMin: number; longMin: number };
+  verdict: Verdict; headline: string; notes: string[]; weeks: PlanWeek[];
+  diagnosis?: { causes: string[]; fixes: string[] };
+}
+type Session = PlanSession;
+interface View { today: string; goal: { name: string; date: string; distance_km: number | null; gain_m: number | null; route?: RaceRoute | null } | null; plan: RacePlan | null; sessions: Session[]; doneByWeek: Record<string, number>; races: SideRaceRow[] }
+
+const VERDICT: Record<Verdict, { label: string; color: string }> = {
+  solide: { label: "Objectif solide", color: "var(--ok)" },
+  ambitieux: { label: "Ambitieux mais jouable", color: "var(--lite)" },
+  risque: { label: "Objectif risqué", color: "var(--danger)" },
+  court: { label: "Course très proche", color: "var(--rest)" },
+};
+const PHASE_COLOR: Record<string, string> = {
+  Fondation: "var(--chart-bar-2)", "Développement": "var(--ember-2)", "Spécifique": "var(--ember)",
+  "Affûtage": "var(--ok)", "Semaine de course": "var(--snow)", Entretien: "var(--chart-bar-2)",
+};
+const monday = (iso: string) => { const d = new Date(`${iso}T12:00:00Z`); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); return d.toISOString().slice(0, 10); };
+
+export default function Planning({ me, refresh, toast }: Ctx) {
+  const [v, setV] = useState<View | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [wx, setWx] = useState<WeatherAdjust | null>(null);
+
+  const load = useCallback(async () => { setV(await api<View>("/api/plan")); }, []);
+  useEffect(() => { load().catch((e) => toast(e.message)); }, [load, toast]);
+
+  async function recalc() {
+    setBusy(true);
+    try { await api("/api/plan", { method: "POST" }); await Promise.all([load(), refresh()]); toast("Plan recalculé avec ta charge actuelle."); }
+    catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }
+    finally { setBusy(false); }
+  }
+  async function setStatus(s: Session, status: string) {
+    try { await api(`/api/plan/${s.id}`, { method: "PATCH", body: { status } }); await Promise.all([load(), refresh()]); }
+    catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }
+  }
+  const saved = async (msg: string) => { setEditing(false); await Promise.all([load(), refresh()]); toast(msg); };
+
+  if (!v) return <><Head /><div className="skeleton" /></>;
+
+  if (!v.goal || !v.plan || editing) {
+    return (
+      <>
+        <Head sub={v.goal && !editing ? "Course passée" : undefined} />
+        <RaceForm goal={v.goal} today={v.today} onSaved={saved} onCancel={editing ? () => setEditing(false) : undefined} />
+        {!v.goal && v.sessions.length > 0 && (
+          <section className="card" style={{ marginTop: 14 }}>
+            <div className="card-head"><h2>En attendant : entretien</h2><button className="btn ghost sm" onClick={recalc} disabled={busy}>Recalculer</button></div>
+            <p className="muted small" style={{ margin: 0 }}>Sans course choisie, Trail Pilot te propose 3 semaines pour garder ta forme, à partir de ce que tu fais en ce moment.</p>
+            <WeekList sessions={v.sessions} weeks={[]} today={me.today} doneByWeek={v.doneByWeek} onStatus={setStatus} targets={me.targets} />
+          </section>
+        )}
+        {!editing && <SideRaces races={v.races} today={v.today} mainDate={null} toast={toast} onChanged={async () => { await Promise.all([load(), refresh()]); }} />}
+      </>
+    );
+  }
+
+  const p = v.plan;
+  return (
+    <>
+      <Head sub={`${p.weeks.length} semaines · recalculé chaque lundi`} action={
+        <div className="row">
+          <button className="btn ghost sm" onClick={recalc} disabled={busy}>{busy ? "Calcul…" : "Recalculer avec ma forme"}</button>
+          <button className="btn ghost sm" onClick={() => setEditing(true)}>Changer de course</button>
+        </div>
+      } />
+      <RaceHeader p={p} />
+      <RaceWeather key={v.goal.route?.uploadedAt ?? 0} toast={toast} onAdjust={setWx} />
+      <RaceStrategy route={v.goal.route ?? null} estimate={p.estimate} weather={wx} toast={toast} onChanged={async () => { await Promise.all([load(), refresh()]); }} />
+      <SideRaces races={v.races} today={v.today} mainDate={v.goal.date} toast={toast} onChanged={async () => { await Promise.all([load(), refresh()]); }} />
+      <div className="grid g2" style={{ marginTop: 14 }}>
+        <Needs p={p} />
+        <section className="card">
+          <div className="card-head"><h2>Volume semaine par semaine</h2><span className="chip">Jusqu’au jour J</span></div>
+          <WeekChart weeks={p.weeks} done={v.doneByWeek} today={v.today} />
+          <div className="legend">
+            {["Fondation", "Développement", "Spécifique", "Affûtage"].filter((ph) => p.weeks.some((w) => w.phase === ph)).map((ph) => <span key={ph}><i style={{ background: PHASE_COLOR[ph], height: 8 }} />{ph}</span>)}
+            <span><i style={{ background: "var(--snow)", height: 3 }} />Réalisé</span>
+          </div>
+        </section>
+      </div>
+      <section className="card" style={{ marginTop: 14, paddingTop: 4 }}>
+        <WeekList sessions={v.sessions} weeks={p.weeks} today={v.today} doneByWeek={v.doneByWeek} onStatus={setStatus} targets={me.targets} />
+      </section>
+      <p className="muted small" style={{ marginTop: 12, maxWidth: "75ch" }}>
+        Le plan part de ta charge réelle (séances des 4 dernières semaines, fatigue et forme de fond) et se recalcule chaque lundi.
+        Chaque check-in du soir adapte la séance du lendemain. Progression de {me.profile.level === "debutant" ? "6" : me.profile.level === "confirme" ? "10" : "8"} % par semaine au plus, une semaine plus légère toutes les quatre.
+      </p>
+    </>
+  );
+}
+
+function Head({ sub, action }: { sub?: string; action?: React.ReactNode }) {
+  return <header className="head"><div><span className="eyebrow">{sub ?? "Plan d’entraînement"}</span><h1>Planning</h1></div>{action}</header>;
+}
+
+// ---------- En-tête de course ----------
+function RaceHeader({ p }: { p: RacePlan }) {
+  const vd = VERDICT[p.verdict];
+  return (
+    <section className="card race" style={{ ["--accent" as string]: vd.color }}>
+      <div className="race-top">
+        <div style={{ minWidth: 0 }}>
+          <span className="eyebrow">Ma course · {dayLabel(p.race.date, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</span>
+          <h2 className="race-name">{p.race.name}</h2>
+          <div className="specs">
+            <div><b>{p.race.daysTo > 0 ? `J-${p.race.daysTo}` : "Jour J"}</b><small>Compte à rebours</small></div>
+            <div><b>{fmtKm(p.race.distanceKm)} km</b><small>Distance</small></div>
+            <div><b>{fmtNum(p.race.gainM)} m</b><small>D+</small></div>
+            <div><b>{p.race.effortKm}</b><small>Km-effort</small></div>
+          </div>
+        </div>
+        <div className="race-time">
+          <small>Temps estimé pour finir</small>
+          <b>{fmtDur(p.estimate.low)} – {fmtDur(p.estimate.high)}</b>
+          <span>à ton niveau actuel</span>
+        </div>
+      </div>
+      <div className="race-verdict">
+        <span className="chip" style={{ color: vd.color, borderColor: `color-mix(in srgb, ${vd.color} 45%, transparent)` }}><span className="dot" />{vd.label}</span>
+        <p>{p.headline}</p>
+        {p.notes.length > 0 && <ul className="reasons">{p.notes.map((n) => <li key={n}>{n}</li>)}</ul>}
+      </div>
+      {p.diagnosis && (p.diagnosis.causes.length > 0 || p.diagnosis.fixes.length > 0) && (
+        <div className="diag">
+          {p.diagnosis.causes.length > 0 && (
+            <div><h3>Pourquoi c’est {p.verdict === "risque" ? "risqué" : "ambitieux"}</h3><ul>{p.diagnosis.causes.map((c) => <li key={c}>{c}</li>)}</ul></div>
+          )}
+          <div><h3>Comment le corriger</h3><ol>{p.diagnosis.fixes.map((f) => <li key={f}>{f}</li>)}</ol></div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ---------- Ce qu’il faut pour finir ----------
+function Needs({ p }: { p: RacePlan }) {
+  const rows = [
+    { k: "Volume par semaine", now: p.current.weeklyMin, reach: p.reach.weeklyMin, need: p.demands.weeklyMin, fmt: fmtDur },
+    { k: "Sortie longue", now: p.current.longestMin, reach: p.reach.longMin, need: p.demands.longMin, fmt: fmtDur },
+    { k: "Dénivelé par semaine", now: p.current.weeklyGain, reach: Math.max(...p.weeks.map((w) => w.gainM)), need: p.demands.weeklyGain, fmt: (n: number) => `${fmtNum(n)} m` },
+  ];
+  return (
+    <section className="card">
+      <div className="card-head"><h2>Ce qu’il faut pour finir</h2></div>
+      {rows.map((r) => {
+        const max = Math.max(r.need, r.reach, r.now) || 1;
+        return (
+          <div key={r.k} className="need">
+            <div className="row between small"><span className="soft">{r.k}</span><span className="mono">{r.fmt(r.now)} <span className="muted">→</span> <b>{r.fmt(r.reach)}</b> <span className="muted">/ {r.fmt(r.need)}</span></span></div>
+            <div className="need-bar" role="img" aria-label={`${r.k} : aujourd’hui ${r.fmt(r.now)}, atteint par le plan ${r.fmt(r.reach)}, conseillé ${r.fmt(r.need)}`}>
+              <i className="reach" style={{ width: `${(r.reach / max) * 100}%`, background: r.reach >= r.need * 0.95 ? "var(--ok)" : "var(--lite)" }} />
+              <i className="now" style={{ width: `${(r.now / max) * 100}%` }} />
+              <b style={{ left: `${(r.need / max) * 100}%` }} />
+            </div>
+          </div>
+        );
+      })}
+      <div className="row small muted" style={{ gap: 14 }}>
+        <span><i className="key now" />Aujourd’hui</span><span><i className="key reach" />Atteint par le plan</span><span><i className="key need" />Conseillé pour finir</span>
+      </div>
+      {p.demands.backToBack && <p className="muted small" style={{ margin: 0 }}>Au-delà de 6 h de course, les sorties longues sont complétées par des enchaînements sur deux jours plutôt que rallongées sans fin.</p>}
+    </section>
+  );
+}
+
+// ---------- Graphique des semaines ----------
+function WeekChart({ weeks, done, today }: { weeks: PlanWeek[]; done: Record<string, number>; today: string }) {
+  const W = 360, H = 170, P = { l: 4, r: 4, t: 14, b: 20 };
+  const max = Math.max(60, ...weeks.map((w) => Math.max(w.minutes, done[w.monday] ?? 0)));
+  const bw = (W - P.l - P.r) / weeks.length;
+  const y = (m: number) => H - P.b - (m / max) * (H - P.t - P.b);
+  const cur = monday(today);
+  const every = Math.max(1, Math.ceil(weeks.length / 6));
+  return (
+    <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Volume prévu et réalisé par semaine jusqu’à la course">
+      {weeks.map((w, i) => {
+        const x = P.l + i * bw;
+        const d = done[w.monday];
+        const isCur = w.monday === cur;
+        return (
+          <g key={w.monday}>
+            <rect x={x + bw * 0.12} width={bw * 0.76} y={y(w.minutes)} height={Math.max(1, H - P.b - y(w.minutes))} rx={Math.min(3, bw / 4)}
+              style={{ fill: PHASE_COLOR[w.phase] ?? "var(--chart-bar-2)", opacity: w.monday < cur ? 0.45 : w.light ? 0.6 : 1 }}>
+              <title>{`Semaine du ${dayLabel(w.monday, { day: "numeric", month: "short" })} · ${w.phase} · ${fmtDur(w.minutes)} prévues${d ? `, ${fmtDur(d)} faites` : ""}`}</title>
+            </rect>
+            {d != null && w.monday <= cur && <rect x={x + bw * 0.38} width={bw * 0.24} y={y(d)} height={Math.max(1, H - P.b - y(d))} rx={1} style={{ fill: "var(--snow)" }} />}
+            {isCur && <rect x={x + 1} y={P.t - 6} width={bw - 2} height={H - P.b - P.t + 6} rx={4} fill="none" style={{ stroke: "var(--ember)" }} strokeDasharray="3 3" />}
+            {i % every === 0 && <text x={x + bw / 2} y={H - 5} textAnchor="middle">{dayLabel(w.monday, { day: "numeric", month: "short" })}</text>}
+          </g>
+        );
+      })}
+      <text x={W - P.r} y={10} textAnchor="end" style={{ fill: "var(--ember)" }}>Jour J ⚑</text>
+    </svg>
+  );
+}
+
+// ---------- Liste des semaines ----------
+function WeekList({ sessions, weeks, today, doneByWeek, onStatus, targets }: { sessions: Session[]; weeks: PlanWeek[]; today: string; doneByWeek: Record<string, number>; onStatus: (s: Session, st: string) => void; targets?: Targets }) {
+  const cur = monday(today);
+  const groups = useMemo(() => {
+    const m = new Map<string, Session[]>();
+    for (const s of sessions) { const k = monday(s.date); m.set(k, [...(m.get(k) ?? []), s]); }
+    return [...m.entries()];
+  }, [sessions]);
+  const [open, setOpen] = useState<Set<string>>(() => new Set([cur, groups.find(([k]) => k > cur)?.[0] ?? ""]));
+  const [detail, setDetail] = useState<number | null>(null);
+  const toggle = (k: string) => setOpen((o) => { const n = new Set(o); if (n.has(k)) n.delete(k); else n.add(k); return n; });
+
+  return (
+    <div>
+      {groups.map(([wk, list]) => {
+        const meta = weeks.find((w) => w.monday === wk);
+        const minutes = meta?.minutes ?? list.filter((s) => s.status !== "skipped").reduce((t, s) => t + s.duration_min, 0);
+        const gain = meta?.gainM ?? list.reduce((t, s) => t + (s.gain_m ?? 0), 0);
+        const isOpen = open.has(wk);
+        const n = weeks.findIndex((w) => w.monday === wk);
+        return (
+          <div key={wk} className={`wk ${wk === cur ? "is-cur" : ""} ${wk < cur ? "is-past" : ""}`}>
+            <button className="week-head" onClick={() => toggle(wk)} aria-expanded={isOpen}>
+              <span className="wk-dot" style={{ background: PHASE_COLOR[meta?.phase ?? list[0].phase] ?? "var(--chart-bar-2)" }} />
+              <span style={{ minWidth: 0 }}>
+                <b>{n >= 0 ? `Semaine ${n + 1} · ` : ""}{wk === cur ? "Cette semaine" : `du ${dayLabel(wk, { day: "numeric", month: "long" })}`}</b>
+                <span className="small muted wk-focus">{meta?.phase ?? list[0].phase}{meta ? ` — ${meta.focus}` : ""}</span>
+              </span>
+              <span className="small mono muted wk-sum">{fmtDur(minutes)}{gain ? ` · ${fmtNum(gain)} m` : ""}{doneByWeek[wk] ? ` · fait ${fmtDur(doneByWeek[wk])}` : ""}</span>
+              <span className={`chev ${isOpen ? "on" : ""}`} aria-hidden="true">›</span>
+            </button>
+            {isOpen && (
+              <ul className="list">
+                {list.map((s) => (
+                  <li key={s.id} className={`item ${s.date === today ? "today" : ""} is-${s.status} ${s.template === "race" ? "is-race" : ""}`}>
+                    <div className="date"><small>{shortDay(s.date)}</small><b>{dayNum(s.date)}</b></div>
+                    <button onClick={() => setDetail(detail === s.id ? null : s.id)} style={{ all: "unset", cursor: "pointer", minWidth: 0 }} aria-expanded={detail === s.id}>
+                      <div className="t">{s.template === "race" ? "⚑ " : ""}{s.title}</div>
+                      <div className="s">
+                        {fmtDur(s.duration_min)}{s.gain_m ? ` · ${fmtNum(s.gain_m)} m D+` : ""}{s.template !== "race" ? ` · effort ${s.rpe_target}/10` : ""}
+                        {s.status === "done" && s.a_duration ? ` — réalisé ${fmtDur(s.a_duration)}${s.a_distance ? `, ${fmtKm(s.a_distance)} km` : ""}` : ""}
+                      </div>
+                    </button>
+                    <div className="item-actions">
+                      {s.template !== "race" && <StatusChip status={s.status} />}
+                      {s.template !== "race" && s.date >= today && (s.status === "planned" || s.status === "adapted") && (
+                        <>
+                          <button className="iconbtn" title="Marquer comme faite" aria-label="Marquer comme faite" onClick={() => onStatus(s, "done")}><IconCheck /></button>
+                          <button className="iconbtn" title="Sauter" aria-label="Sauter cette séance" onClick={() => onStatus(s, "skipped")}><IconSkip /></button>
+                        </>
+                      )}
+                      {(s.status === "skipped" || (s.status === "done" && !s.activity_id)) && (
+                        <button className="iconbtn" title="Rétablir" aria-label="Rétablir la séance" onClick={() => onStatus(s, "planned")}><IconUndo /></button>
+                      )}
+                    </div>
+                    {detail === s.id && <div className="details"><SessionTarget targets={targets} template={s.template} rpe={s.rpe_target} /><p style={{ margin: 0 }}>{s.description}</p></div>}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------- Choix de la course ----------
+const FORMATS = [
+  { label: "Trail court", km: 20, d: 900 },
+  { label: "Trail", km: 35, d: 1800 },
+  { label: "Marathon trail", km: 45, d: 2500 },
+  { label: "Ultra", km: 80, d: 4500 },
+  { label: "Ultra XL", km: 120, d: 7000 },
+];
+
+function RaceForm({ goal, today, onSaved, onCancel }: { goal: View["goal"]; today: string; onSaved: (m: string) => Promise<void>; onCancel?: () => void }) {
+  const upcoming = goal && goal.date > today ? goal : null;
+  const [g, setG] = useState({ name: upcoming?.name ?? "", date: upcoming?.date ?? "", distanceKm: upcoming?.distance_km?.toString().replace(".", ",") ?? "", gainM: upcoming?.gain_m?.toString() ?? "" });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const min = (() => { const d = new Date(`${localToday()}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10); })();
+  const max = (() => { const d = new Date(`${localToday()}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + 395); return d.toISOString().slice(0, 10); })();
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault(); setBusy(true); setErr(null);
+    try { await api("/api/goal", { method: "PUT", body: g }); await onSaved("Ton plan jusqu’au jour J est prêt."); }
+    catch (e2) { setErr(e2 instanceof Error ? e2.message : "Erreur"); setBusy(false); }
+  }
+  async function remove() {
+    if (!confirm("Retirer cette course ? Le planning repassera en entretien.")) return;
+    setBusy(true);
+    try { await api("/api/goal", { method: "DELETE" }); await onSaved("Course retirée."); }
+    catch (e2) { setErr(e2 instanceof Error ? e2.message : "Erreur"); setBusy(false); }
+  }
+
+  return (
+    <section className="card race-form">
+      <div className="row between">
+        <div><span className="eyebrow">Étape 1</span><h2 style={{ marginTop: 4, fontSize: 26, letterSpacing: "-.03em" }}>{upcoming ? "Modifier ma course" : "Choisis ta course"}</h2></div>
+        {onCancel && <button className="link small" onClick={onCancel}>Annuler</button>}
+      </div>
+      <p className="soft" style={{ margin: 0, maxWidth: "62ch" }}>
+        Trail Pilot construit ton plan jusqu’au jour J à partir de ta charge actuelle, avec un objectif : que tu termines la course.
+        Il te dit aussi si l’objectif est réaliste dans le temps qu’il reste.
+      </p>
+      <div className="formats" role="group" aria-label="Formats types">
+        {FORMATS.map((f) => (
+          <button key={f.label} type="button" className={`format ${Number(g.distanceKm.replace(",", ".")) === f.km && Number(g.gainM) === f.d ? "on" : ""}`}
+            onClick={() => setG({ ...g, distanceKm: String(f.km), gainM: String(f.d), name: g.name || f.label })}>
+            <b>{f.label}</b><small>{f.km} km · {fmtNum(f.d)} m</small>
+          </button>
+        ))}
+      </div>
+      <form className="form" onSubmit={submit}>
+        <label className="field">Nom de la course<input value={g.name} onChange={(e) => setG({ ...g, name: e.target.value })} placeholder="Trail des Templiers" required maxLength={100} /></label>
+        <div className="fields f3">
+          <label className="field">Date<input type="date" value={g.date} min={min} max={max} onChange={(e) => setG({ ...g, date: e.target.value })} required /></label>
+          <label className="field">Distance (km)<input inputMode="decimal" value={g.distanceKm} onChange={(e) => setG({ ...g, distanceKm: e.target.value })} placeholder="45" required /></label>
+          <label className="field">D+ (m)<input inputMode="numeric" value={g.gainM} onChange={(e) => setG({ ...g, gainM: e.target.value })} placeholder="2500" required /></label>
+        </div>
+        {err && <p className="note err" role="alert">{err}</p>}
+        <div className="row">
+          <button className="btn" type="submit" disabled={busy}>{busy ? "Calcul du plan…" : upcoming ? "Recalculer mon plan" : "Créer mon plan"}</button>
+          {upcoming && <button type="button" className="btn danger" onClick={remove} disabled={busy}>Retirer la course</button>}
+        </div>
+      </form>
+    </section>
+  );
+}

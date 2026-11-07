@@ -1,0 +1,119 @@
+// Schéma Trail Pilot. Chaque migration est appliquée une seule fois, dans une transaction.
+// Ne jamais modifier une migration déjà déployée : en ajouter une nouvelle.
+export const MIGRATIONS: { tag: string; statements: string[] }[] = [
+  {
+    tag: "001_core",
+    statements: [
+      `CREATE TABLE IF NOT EXISTS app_users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL UNIQUE, name TEXT,
+        pass_hash TEXT NOT NULL, created_at INTEGER NOT NULL)`,
+      `CREATE TABLE IF NOT EXISTS app_sessions (
+        token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+        expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL)`,
+      `CREATE INDEX IF NOT EXISTS app_sessions_user ON app_sessions(user_id)`,
+      `CREATE TABLE IF NOT EXISTS app_auth_failures (email TEXT NOT NULL, at INTEGER NOT NULL)`,
+      `CREATE INDEX IF NOT EXISTS app_auth_failures_email ON app_auth_failures(email, at)`,
+      `CREATE TABLE IF NOT EXISTS profiles (
+        user_id INTEGER PRIMARY KEY REFERENCES app_users(id) ON DELETE CASCADE,
+        hr_max INTEGER, hr_rest INTEGER,
+        days_per_week INTEGER NOT NULL DEFAULT 4,
+        long_day INTEGER NOT NULL DEFAULT 6,
+        max_weekly_minutes INTEGER,
+        level TEXT NOT NULL DEFAULT 'regulier',
+        updated_at INTEGER NOT NULL)`,
+      `CREATE TABLE IF NOT EXISTS goals (
+        user_id INTEGER PRIMARY KEY REFERENCES app_users(id) ON DELETE CASCADE,
+        name TEXT NOT NULL, date TEXT NOT NULL, distance_km REAL, gain_m INTEGER, updated_at INTEGER NOT NULL)`,
+      `CREATE TABLE IF NOT EXISTS activities (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+        date TEXT NOT NULL, started_at TEXT, sport TEXT NOT NULL, name TEXT,
+        duration_min REAL NOT NULL, distance_km REAL, gain_m REAL, loss_m REAL,
+        avg_hr REAL, max_hr REAL, rpe INTEGER,
+        source TEXT NOT NULL DEFAULT 'manual', strava_id TEXT,
+        created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`,
+      `CREATE INDEX IF NOT EXISTS activities_user_date ON activities(user_id, date)`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS activities_strava ON activities(user_id, strava_id) WHERE strava_id IS NOT NULL`,
+      `CREATE TABLE IF NOT EXISTS checkins (
+        user_id INTEGER NOT NULL REFERENCES app_users(id) ON DELETE CASCADE, date TEXT NOT NULL,
+        sleep INTEGER NOT NULL, legs INTEGER NOT NULL, motivation INTEGER NOT NULL, pain INTEGER NOT NULL,
+        note TEXT, created_at INTEGER NOT NULL, PRIMARY KEY (user_id, date))`,
+      `CREATE TABLE IF NOT EXISTS plan_sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+        date TEXT NOT NULL, template TEXT NOT NULL, title TEXT NOT NULL, sport TEXT NOT NULL,
+        duration_min INTEGER NOT NULL, gain_m INTEGER, rpe_target INTEGER NOT NULL,
+        description TEXT NOT NULL, phase TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'planned', activity_id INTEGER, locked INTEGER NOT NULL DEFAULT 0, original TEXT,
+        created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`,
+      `CREATE INDEX IF NOT EXISTS plan_user_date ON plan_sessions(user_id, date)`,
+      `CREATE TABLE IF NOT EXISTS strava_links (
+        user_id INTEGER PRIMARY KEY REFERENCES app_users(id) ON DELETE CASCADE,
+        athlete_id TEXT NOT NULL UNIQUE, athlete_name TEXT, access_token TEXT NOT NULL, refresh_token TEXT NOT NULL,
+        expires_at INTEGER NOT NULL, scope TEXT, last_sync_at INTEGER, last_error TEXT,
+        created_at INTEGER NOT NULL)`,
+      `CREATE TABLE IF NOT EXISTS app_kv (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at INTEGER NOT NULL)`,
+    ],
+  },
+  {
+    tag: "002_race_plan",
+    statements: [
+      `ALTER TABLE goals ADD COLUMN plan_meta TEXT`,
+    ],
+  },
+  {
+    tag: "003_features",
+    statements: [
+      // Vérification d’adresse et réinitialisation du mot de passe
+      `ALTER TABLE app_users ADD COLUMN email_verified_at INTEGER`,
+      `CREATE TABLE IF NOT EXISTS app_tokens (
+        token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL, expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL)`,
+      `CREATE INDEX IF NOT EXISTS app_tokens_user ON app_tokens(user_id, kind)`,
+      // Rappel du check-in
+      `CREATE TABLE IF NOT EXISTS push_subs (
+        endpoint TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+        p256dh TEXT NOT NULL, auth TEXT NOT NULL, created_at INTEGER NOT NULL)`,
+      `CREATE INDEX IF NOT EXISTS push_subs_user ON push_subs(user_id)`,
+      `ALTER TABLE profiles ADD COLUMN reminder INTEGER NOT NULL DEFAULT 0`,
+      // Accueil guidé, consentement santé, douleurs localisées
+      `ALTER TABLE profiles ADD COLUMN onboarded_at INTEGER`,
+      `ALTER TABLE profiles ADD COLUMN health_consent_at INTEGER`,
+      `ALTER TABLE checkins ADD COLUMN pain_zones TEXT`,
+      // Tracé de la course et ravitaillements
+      `ALTER TABLE goals ADD COLUMN route TEXT`,
+      // Suivi des erreurs
+      `CREATE TABLE IF NOT EXISTS app_errors (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, source TEXT NOT NULL,
+        message TEXT NOT NULL, stack TEXT, url TEXT, user_id INTEGER)`,
+      `CREATE INDEX IF NOT EXISTS app_errors_at ON app_errors(at)`,
+    ],
+  },
+  {
+    tag: "004_more",
+    statements: [
+      // Tracé GPS simplifié des sorties (polyline encodée)
+      `ALTER TABLE activities ADD COLUMN track TEXT`,
+      // Lieu de départ de la course (météo) quand il n’y a pas de tracé
+      `ALTER TABLE goals ADD COLUMN place TEXT`,
+      // Abonnement agenda (empreinte du jeton secret)
+      `ALTER TABLE profiles ADD COLUMN calendar_token TEXT`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS profiles_calendar ON profiles(calendar_token) WHERE calendar_token IS NOT NULL`,
+      // Mesures de la montre au check-in
+      `ALTER TABLE checkins ADD COLUMN sleep_h REAL`,
+      `ALTER TABLE checkins ADD COLUMN rhr INTEGER`,
+      `ALTER TABLE checkins ADD COLUMN hrv INTEGER`,
+      // Courses de préparation
+      `CREATE TABLE IF NOT EXISTS side_races (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+        name TEXT NOT NULL, date TEXT NOT NULL, distance_km REAL, gain_m INTEGER, priority TEXT NOT NULL DEFAULT 'B',
+        created_at INTEGER NOT NULL)`,
+      `CREATE INDEX IF NOT EXISTS side_races_user ON side_races(user_id, date)`,
+      // Coach IA
+      `CREATE TABLE IF NOT EXISTS coach_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+        role TEXT NOT NULL, content TEXT NOT NULL, at INTEGER NOT NULL)`,
+      `CREATE INDEX IF NOT EXISTS coach_messages_user ON coach_messages(user_id, at)`,
+    ],
+  },
+];

@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Application Trail Pilot, projet séparé avec ses propres dépendances.
+    "trail-pilot-v2/**",
   ]),
 ]);
 
