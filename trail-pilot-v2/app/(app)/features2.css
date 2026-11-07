@@ -48,3 +48,49 @@
 /* ---------- Hors ligne ---------- */
 .offline-bar { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; margin-bottom: 14px; padding: 10px 14px; border-radius: 14px; background: color-mix(in srgb, var(--lite) 14%, var(--ink-2)); border: 1px solid color-mix(in srgb, var(--lite) 45%, var(--line)); font-size: 13.5px; color: var(--soft); }
 .offline-bar b { color: var(--snow); }
+
+/* ---------- Motion design des nouveautés ---------- */
+@media (prefers-reduced-motion: no-preference) {
+  /* Cartes : le tracé se dessine, les repères apparaissent ensuite */
+  .tmap path.tm-draw { stroke-dasharray: var(--len); stroke-dashoffset: var(--len); animation: tm-draw 1.4s var(--ease) both; }
+  @keyframes tm-draw { to { stroke-dashoffset: 0; } }
+  .tmap path.tm-pop { transform-box: fill-box; transform-origin: center; animation: chip-pop .5s var(--ease) both; }
+  .tmap-loading { animation: tm-pulse 1.4s ease-in-out infinite; }
+  @keyframes tm-pulse { 50% { opacity: .45; } }
+  .tmap-layers button { transition: background .25s, color .25s; }
+
+  /* Coach : bulles qui montent depuis leur coin, idées en cascade */
+  .bubble { animation: bubble-in .45s var(--ease) both; }
+  .bubble.user { transform-origin: 100% 100%; }
+  .bubble.assistant { transform-origin: 0 100%; }
+  @keyframes bubble-in { from { opacity: 0; transform: translateY(8px) scale(.94); } }
+  .coach-ideas .zchips button { animation: chip-pop .45s var(--ease) both; }
+  .coach-ideas .zchips button:nth-child(2) { animation-delay: .06s; }
+  .coach-ideas .zchips button:nth-child(3) { animation-delay: .12s; }
+  .coach-ideas .zchips button:nth-child(4) { animation-delay: .18s; }
+  .coach-form textarea { transition: border-color .25s, box-shadow .25s; }
+  .coach-form textarea:focus { box-shadow: 0 0 0 4px color-mix(in srgb, var(--ember) 14%, transparent); }
+
+  /* Check-in : le bloc des mesures se déplie */
+  .watch[open] > :not(summary) { animation: unfold .4s var(--ease) both; }
+  .watch summary::before { transition: transform .3s var(--ease); }
+
+  /* Stratégie de course : sections en cascade */
+  .strat-table .st-row:not(.st-head) { animation: line-in .45s var(--ease) both; }
+  .strat-table .st-row:nth-child(3) { animation-delay: .05s; } .strat-table .st-row:nth-child(4) { animation-delay: .1s; }
+  .strat-table .st-row:nth-child(5) { animation-delay: .15s; } .strat-table .st-row:nth-child(6) { animation-delay: .2s; }
+  .strat-table .st-row:nth-child(n+7) { animation-delay: .25s; }
+  .strat-sum > div { animation: card-in .55s var(--ease) both; }
+  .strat-sum > div:nth-child(2) { animation-delay: .08s; } .strat-sum > div:nth-child(3) { animation-delay: .16s; }
+  .aid-form { animation: unfold .4s var(--ease) both; }
+
+  /* Courses de préparation, lieux trouvés, lien d’agenda */
+  .list.races .item, .wx-places li { animation: line-in .45s var(--ease) both; }
+  .list.races .item:nth-child(2), .wx-places li:nth-child(2) { animation-delay: .05s; }
+  .list.races .item:nth-child(n+3), .wx-places li:nth-child(n+3) { animation-delay: .1s; }
+  .cal-url { animation: unfold .45s var(--ease) both; }
+
+  /* Hors ligne : le bandeau descend */
+  .offline-bar { animation: offline-in .5s var(--ease) both; }
+  @keyframes offline-in { from { opacity: 0; transform: translateY(-10px); } }
+}

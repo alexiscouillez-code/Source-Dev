@@ -36,7 +36,7 @@ export default function SideRaces({ races, today, mainDate, onChanged, toast }: 
       </div>
       {!upcoming.length && !open && <p className="soft small" style={{ margin: 0 }}>Tu fais d’autres courses avant {mainDate ? "ta course principale" : "ton prochain objectif"} ? Ajoute-les : le planning allège les jours d’avant, remplace la sortie longue de la semaine et prévoit la récupération.</p>}
       {upcoming.length > 0 && (
-        <ul className="list">
+        <ul className="list races">
           {upcoming.map((r) => (
             <li key={r.id} className="item" style={{ gridTemplateColumns: "1fr auto" }}>
               <div style={{ minWidth: 0 }}>

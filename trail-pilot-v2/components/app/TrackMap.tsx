@@ -25,6 +25,7 @@ export default function TrackMap({ lines, markers = NO_MARKERS, height = 320, on
   const [layer, setLayer] = useState<keyof typeof LAYERS>("relief");
   const [ready, setReady] = useState(false);
   const sel = useRef(onSelect); sel.current = onSelect;
+  const drawn = useRef(false);
 
   // Création de la carte (une fois).
   useEffect(() => {
@@ -62,6 +63,11 @@ export default function TrackMap({ lines, markers = NO_MARKERS, height = 320, on
       const ember = css.getPropertyValue("--ember").trim() || "#ff6a2b";
       const many = lines.length > 1;
       const sorted = [...lines].sort((a, b) => Number(!!a.highlight) - Number(!!b.highlight));
+      // Premier affichage : les tracés se dessinent du départ à l’arrivée, puis les repères apparaissent.
+      const animate = !drawn.current && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      drawn.current = true;
+      // Leaflet ne crée les éléments SVG qu’une fois la vue définie : on les récupère après le recadrage.
+      const drawnLines: import("leaflet").Polyline[] = [], dots: import("leaflet").CircleMarker[] = [];
       for (const l of sorted) {
         let pts: LatLon[] = [];
         try { pts = decodePolyline(l.poly); } catch { continue; }
@@ -70,14 +76,31 @@ export default function TrackMap({ lines, markers = NO_MARKERS, height = 320, on
         if (l.label) pl.bindTooltip(l.label, { sticky: true });
         if (l.id != null && sel.current) pl.on("click", () => sel.current?.(l.id!));
         pl.addTo(g);
+        drawnLines.push(pl);
       }
       for (const mk of markers) {
         const color = mk.kind === "start" ? "#22c55e" : mk.kind === "finish" ? "#e5383b" : "#f4efe6";
-        L.circleMarker(mk.at, { radius: mk.kind === "aid" ? 5 : 6, color: "#0b0f14", weight: 2, fillColor: color, fillOpacity: 1 }).bindTooltip(mk.label).addTo(g);
+        dots.push(L.circleMarker(mk.at, { radius: mk.kind === "aid" ? 5 : 6, color: "#0b0f14", weight: 2, fillColor: color, fillOpacity: 1 }).bindTooltip(mk.label).addTo(g));
       }
       const b = g.getBounds();
-      if (b.isValid()) map.current!.fitBounds(b, { padding: [18, 18], maxZoom: 15 });
+      if (b.isValid()) map.current!.fitBounds(b, { padding: [18, 18], maxZoom: 15, animate: false });
       else map.current!.setView([45.9, 6.8], 9);
+      if (animate) {
+        // Le tracé n’est mis en place qu’après le recadrage : on mesure à l’image suivante.
+        const paths = drawnLines.map((l) => l.getElement() as SVGPathElement | undefined).filter((e): e is SVGPathElement => !!e);
+        paths.forEach((el) => { el.style.opacity = "0"; });
+        dots.forEach((d, i) => { const el = d.getElement() as SVGPathElement | undefined; if (el) { el.classList.add("tm-pop"); el.style.animationDelay = `${0.9 + i * 0.08}s`; } });
+        requestAnimationFrame(() => requestAnimationFrame(() => paths.forEach((el, i) => {
+          el.style.opacity = "";
+          const len = el.getTotalLength();
+          if (!len) return;
+          el.style.setProperty("--len", `${Math.ceil(len)}`);
+          el.style.animationDelay = `${Math.min(i, 12) * 0.06}s`;
+          el.classList.add("tm-draw");
+          // Une fois dessiné, on retire le pointillé : au zoom, Leaflet recalcule le tracé.
+          el.addEventListener("animationend", () => { el.classList.remove("tm-draw"); el.style.removeProperty("--len"); el.style.animationDelay = ""; }, { once: true });
+        })));
+      }
     })();
   }, [lines, markers, ready]);
 
