@@ -1,0 +1,96 @@
+/* ---------- Cartes (Leaflet) ---------- */
+.tmap { position: relative; border-radius: 14px; overflow: hidden; border: 1px solid var(--line); background: var(--ink-2); isolation: isolate; }
+.tmap-canvas { position: absolute; inset: 0; outline: none; }
+.tmap-canvas:focus-visible { box-shadow: inset 0 0 0 2px var(--ember); }
+.tmap-layers { position: absolute; top: 10px; right: 10px; z-index: 500; }
+.tmap-loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--mute); font-size: 13px; z-index: 400; pointer-events: none; }
+.tmap .leaflet-container { background: var(--ink-2); font: inherit; }
+.tmap .leaflet-control-attribution { font-size: 10px; background: rgba(255, 255, 255, .78); color: #333; }
+.tmap .leaflet-control-attribution a { color: #1a5fb4; }
+.tmap .leaflet-bar a { background: var(--ink-2); color: var(--snow); border-color: var(--line); }
+.tmap .leaflet-tooltip { font: 12.5px/1.3 inherit; }
+
+/* ---------- Météo du jour J ---------- */
+.wx-places { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.wx-places button { width: 100%; text-align: left; border: 1px solid var(--line); background: var(--ink-2); color: var(--snow); padding: 10px 12px; border-radius: 12px; font: inherit; font-size: 14px; cursor: pointer; }
+.wx-places button:hover { border-color: color-mix(in srgb, var(--ember) 45%, var(--line)); }
+.picks.p2 { grid-template-columns: repeat(2, 1fr); }
+
+/* ---------- Mesures de la montre au check-in ---------- */
+.watch { border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; background: var(--ink-2); }
+.watch[open] { display: grid; gap: 10px; }
+.watch summary { cursor: pointer; font-weight: 600; font-size: 14px; list-style: none; display: flex; align-items: center; gap: 8px; }
+.watch summary::-webkit-details-marker { display: none; }
+.watch summary::before { content: "›"; display: inline-block; transition: transform .2s; color: var(--mute); }
+.watch[open] summary::before { transform: rotate(90deg); }
+.watch summary small { font-weight: 400; color: var(--mute); }
+.watch > small { font-size: 12px; line-height: 1.45; }
+.watch input:disabled { opacity: .5; }
+
+/* ---------- Agenda ---------- */
+.cal-url { display: flex; gap: 8px; }
+.cal-url input { flex: 1; min-width: 0; font-family: var(--mono); font-size: 12px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--ink-2); color: var(--soft); }
+
+/* ---------- Coach IA ---------- */
+.coach-log { display: grid; gap: 8px; max-height: 420px; overflow-y: auto; padding: 4px 2px; overscroll-behavior: contain; }
+.bubble { max-width: 88%; padding: 10px 13px; border-radius: 16px; font-size: 14.5px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.bubble.user { justify-self: end; background: var(--ember); color: #fff; border-bottom-right-radius: 5px; }
+.bubble.assistant { justify-self: start; background: var(--ink-2); border: 1px solid var(--line); color: var(--snow); border-bottom-left-radius: 5px; }
+.bubble.typing { display: inline-flex; gap: 4px; padding: 13px 14px; }
+.bubble.typing i { width: 6px; height: 6px; border-radius: 50%; background: var(--mute); animation: dot 1.2s infinite ease-in-out; }
+.bubble.typing i:nth-child(2) { animation-delay: .15s; } .bubble.typing i:nth-child(3) { animation-delay: .3s; }
+@keyframes dot { 0%, 80%, 100% { opacity: .3; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
+.coach-ideas { display: grid; gap: 10px; }
+.coach-form { display: flex; gap: 8px; align-items: flex-end; }
+.coach-form textarea { flex: 1; min-width: 0; resize: vertical; min-height: 44px; max-height: 160px; padding: 11px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--ink-2); color: var(--snow); font: inherit; font-size: 15px; }
+.coach-form textarea:focus { outline: none; border-color: color-mix(in srgb, var(--ember) 60%, var(--line)); }
+
+/* ---------- Hors ligne ---------- */
+.offline-bar { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; margin-bottom: 14px; padding: 10px 14px; border-radius: 14px; background: color-mix(in srgb, var(--lite) 14%, var(--ink-2)); border: 1px solid color-mix(in srgb, var(--lite) 45%, var(--line)); font-size: 13.5px; color: var(--soft); }
+.offline-bar b { color: var(--snow); }
+
+/* ---------- Motion design des nouveautés ---------- */
+@media (prefers-reduced-motion: no-preference) {
+  /* Cartes : le tracé se dessine, les repères apparaissent ensuite */
+  .tmap path.tm-draw { stroke-dasharray: var(--len); stroke-dashoffset: var(--len); animation: tm-draw 1.4s var(--ease) both; }
+  @keyframes tm-draw { to { stroke-dashoffset: 0; } }
+  .tmap path.tm-pop { transform-box: fill-box; transform-origin: center; animation: chip-pop .5s var(--ease) both; }
+  .tmap-loading { animation: tm-pulse 1.4s ease-in-out infinite; }
+  @keyframes tm-pulse { 50% { opacity: .45; } }
+  .tmap-layers button { transition: background .25s, color .25s; }
+
+  /* Coach : bulles qui montent depuis leur coin, idées en cascade */
+  .bubble { animation: bubble-in .45s var(--ease) both; }
+  .bubble.user { transform-origin: 100% 100%; }
+  .bubble.assistant { transform-origin: 0 100%; }
+  @keyframes bubble-in { from { opacity: 0; transform: translateY(8px) scale(.94); } }
+  .coach-ideas .zchips button { animation: chip-pop .45s var(--ease) both; }
+  .coach-ideas .zchips button:nth-child(2) { animation-delay: .06s; }
+  .coach-ideas .zchips button:nth-child(3) { animation-delay: .12s; }
+  .coach-ideas .zchips button:nth-child(4) { animation-delay: .18s; }
+  .coach-form textarea { transition: border-color .25s, box-shadow .25s; }
+  .coach-form textarea:focus { box-shadow: 0 0 0 4px color-mix(in srgb, var(--ember) 14%, transparent); }
+
+  /* Check-in : le bloc des mesures se déplie */
+  .watch[open] > :not(summary) { animation: unfold .4s var(--ease) both; }
+  .watch summary::before { transition: transform .3s var(--ease); }
+
+  /* Stratégie de course : sections en cascade */
+  .strat-table .st-row:not(.st-head) { animation: line-in .45s var(--ease) both; }
+  .strat-table .st-row:nth-child(3) { animation-delay: .05s; } .strat-table .st-row:nth-child(4) { animation-delay: .1s; }
+  .strat-table .st-row:nth-child(5) { animation-delay: .15s; } .strat-table .st-row:nth-child(6) { animation-delay: .2s; }
+  .strat-table .st-row:nth-child(n+7) { animation-delay: .25s; }
+  .strat-sum > div { animation: card-in .55s var(--ease) both; }
+  .strat-sum > div:nth-child(2) { animation-delay: .08s; } .strat-sum > div:nth-child(3) { animation-delay: .16s; }
+  .aid-form { animation: unfold .4s var(--ease) both; }
+
+  /* Courses de préparation, lieux trouvés, lien d’agenda */
+  .list.races .item, .wx-places li { animation: line-in .45s var(--ease) both; }
+  .list.races .item:nth-child(2), .wx-places li:nth-child(2) { animation-delay: .05s; }
+  .list.races .item:nth-child(n+3), .wx-places li:nth-child(n+3) { animation-delay: .1s; }
+  .cal-url { animation: unfold .45s var(--ease) both; }
+
+  /* Hors ligne : le bandeau descend */
+  .offline-bar { animation: offline-in .5s var(--ease) both; }
+  @keyframes offline-in { from { opacity: 0; transform: translateY(-10px); } }
+}

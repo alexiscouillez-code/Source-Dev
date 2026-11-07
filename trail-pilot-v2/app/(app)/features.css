@@ -1,0 +1,105 @@
+/* ---------- Consignes de séance (allures et FC) ---------- */
+.target { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: flex-end; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--ember) 7%, var(--ink-2)); border: 1px solid color-mix(in srgb, var(--ember) 22%, var(--line)); }
+.target span { display: grid; gap: 2px; }
+.target small { font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--mute); }
+.target b { font-size: 15px; color: var(--snow); }
+.target em { flex-basis: 100%; font-style: normal; font-size: 12.5px; color: var(--soft); }
+.details { display: grid; gap: 8px; }
+
+.targets-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; padding-top: 6px; border-top: 1px solid var(--line); }
+@media (max-width: 800px) { .targets-grid { grid-template-columns: 1fr; } }
+.tlist { list-style: none; margin: 0; padding: 0; display: grid; }
+.tlist li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.tlist li:last-child { border-bottom: 0; }
+.tlist li > span:first-child { display: grid; gap: 2px; min-width: 0; }
+.tlist b { font-size: 14px; display: flex; align-items: center; gap: 8px; }
+.tlist small { color: var(--mute); font-size: 12px; }
+.tlist .mono { font-size: 15px; white-space: nowrap; }
+.zchip { font-style: normal; font-family: var(--mono); font-size: 10.5px; font-weight: 700; padding: 2px 6px; border-radius: 6px; color: #0b0f14; }
+.zchip.z1 { background: #8fb8de; } .zchip.z2 { background: #7cc6a0; } .zchip.z3 { background: #e6c55c; } .zchip.z4 { background: #f08a4b; } .zchip.z5 { background: #e5383b; color: #fff; }
+
+/* ---------- Douleurs localisées ---------- */
+.pain-where { display: grid; gap: 8px; margin-top: 10px; }
+.pain-where > small { font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--mute); }
+.consent { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; color: var(--soft); line-height: 1.45; cursor: pointer; }
+.consent input { margin-top: 3px; accent-color: var(--ember); flex: none; width: 16px; height: 16px; }
+.zchips { display: flex; flex-wrap: wrap; gap: 6px; }
+.zchips button { border: 1px solid var(--line); background: var(--ink-2); color: var(--soft); padding: 7px 11px; border-radius: 999px; font: inherit; font-size: 13px; cursor: pointer; transition: background .2s, color .2s, border-color .2s; }
+.zchips button.on { background: color-mix(in srgb, #e5383b 18%, var(--ink-2)); border-color: #e5383b88; color: var(--snow); }
+.chip.pain { color: #e5383b; border-color: #e5383b66; background: color-mix(in srgb, #e5383b 10%, transparent); }
+.pain-note { border-color: #e5383b55 !important; background: color-mix(in srgb, #e5383b 8%, transparent) !important; }
+
+/* ---------- Stratégie de course ---------- */
+.strat .card-head { flex-wrap: wrap; gap: 8px 12px; }
+.strat .profile { width: 100%; height: auto; display: block; }
+.aid-form { display: grid; gap: 10px; padding: 12px; border-radius: 14px; background: var(--ink-2); border: 1px solid var(--line); }
+.strat-sum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.strat-sum > div { display: grid; gap: 2px; padding: 12px; border-radius: 14px; background: var(--ink); border: 1px solid var(--line); min-width: 0; }
+.strat-sum small { font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: .1em; color: var(--mute); }
+.strat-sum b { font-size: 17px; }
+@media (max-width: 600px) { .strat-sum { grid-template-columns: 1fr; } }
+.strat-table { display: grid; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.st-row { display: grid; grid-template-columns: 1.5fr 1fr 1fr .9fr 1fr; gap: 10px; padding: 10px 12px; border-top: 1px solid var(--line); align-items: start; font-size: 13.5px; }
+.st-row:first-child { border-top: 0; }
+.st-row > span { display: grid; gap: 2px; min-width: 0; }
+.st-row small { color: var(--mute); font-size: 11.5px; font-family: var(--mono); }
+.st-row b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st-head { background: var(--ink-2); font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--mute); }
+@media (max-width: 700px) {
+  .st-row { grid-template-columns: 1fr 1fr; }
+  .st-head { display: none; }
+  .st-row > span:first-child { grid-column: 1 / -1; }
+}
+
+/* ---------- Accueil guidé ---------- */
+.onb-back { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 16px; background: color-mix(in srgb, var(--ink) 72%, transparent); backdrop-filter: blur(8px); overflow-y: auto; }
+.onb { position: relative; width: min(560px, 100%); display: grid; gap: 18px; padding: 24px; box-shadow: 0 30px 80px -20px rgba(0, 0, 0, .5); }
+.onb-title { margin: 6px 0 8px; font-size: 26px; letter-spacing: -.03em; }
+.onb-steps { display: flex; gap: 6px; flex-wrap: wrap; }
+.onb-steps span { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--mute); padding: 4px 10px 4px 4px; border-radius: 999px; border: 1px solid var(--line); }
+.onb-steps i { font-style: normal; display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--ink-3); font-family: var(--mono); font-size: 11px; }
+.onb-steps span.on { color: var(--snow); border-color: color-mix(in srgb, var(--ember) 45%, var(--line)); }
+.onb-steps span.on i { background: var(--ember); color: #fff; }
+.onb-choices { display: grid; gap: 8px; }
+.onb-choices .btn { justify-content: center; }
+.onb-skip { justify-self: center; opacity: .7; }
+@media (prefers-reduced-motion: no-preference) {
+  .onb-back { animation: fadein .25s ease both; }
+  .onb { animation: card-in .45s var(--ease) both; }
+}
+
+/* ---------- Diagnostic d’un objectif ambitieux ou risqué ---------- */
+.diag { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+@media (max-width: 800px) { .diag { grid-template-columns: 1fr; } }
+.diag h3 { margin: 0 0 8px; font-size: 15px; }
+.diag ul, .diag ol { margin: 0; padding-left: 18px; display: grid; gap: 8px; font-size: 14px; color: var(--soft); line-height: 1.5; }
+.diag ul li::marker { color: var(--accent, var(--ember)); }
+.diag ol li::marker { color: var(--ok); font-family: var(--mono); font-weight: 700; }
+
+/* ---------- Profil trail ---------- */
+.tp-grid { display: grid; grid-template-columns: minmax(0, 420px) minmax(0, 1fr); gap: 24px; align-items: center; }
+@media (max-width: 800px) { .tp-grid { grid-template-columns: 1fr; } }
+.radar { width: 100%; max-width: 420px; height: auto; justify-self: center; overflow: visible; }
+.radar-ring { fill: none; stroke: var(--line); }
+.radar-target { fill: color-mix(in srgb, var(--snow) 6%, transparent); stroke: var(--soft); stroke-dasharray: 4 4; stroke-width: 1.4; }
+.radar-you { fill: color-mix(in srgb, var(--ember) 24%, transparent); stroke: var(--ember); stroke-width: 2; stroke-linejoin: round; }
+.radar-dot { fill: var(--ember); }
+.radar-label { font-size: 15px; fill: var(--soft); font-weight: 600; }
+.radar-num { font-family: var(--mono); fill: var(--mute); font-weight: 500; }
+.tp-side { display: grid; gap: 16px; }
+.tp-side h3 { margin: 0 0 6px; font-size: 15px; }
+.tp-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.tp-list li { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--ink-2); }
+.tp-list li small { grid-column: 1 / -1; color: var(--mute); font-size: 12.5px; }
+.tp-list li .mono { font-size: 15px; }
+.tp-list.ok li { border-left: 3px solid var(--ok); }
+.tp-list.low li { border-left: 3px solid var(--lite); }
+.tp-advice { display: grid; gap: 10px; padding-top: 14px; border-top: 1px solid var(--line); }
+.tp-advice h3 { margin: 0; font-size: 15px; }
+.tp-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.tp-card { display: grid; gap: 6px; align-content: start; padding: 14px; border-radius: 14px; background: var(--ink-2); border: 1px solid var(--line); }
+.tp-card ul { margin: 2px 0 0; padding-left: 18px; display: grid; gap: 5px; font-size: 13.5px; color: var(--soft); line-height: 1.45; }
+@media (prefers-reduced-motion: no-preference) {
+  .radar-you { transform-origin: 50% 50%; transform-box: view-box; animation: radar-in .9s var(--ease) both; }
+  @keyframes radar-in { from { transform: scale(.2); opacity: 0; } }
+}

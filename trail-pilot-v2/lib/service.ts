@@ -1,0 +1,207 @@
+import "server-only";
+import { all, libsql, one, run } from "@/db/client";
+import { addDays, diffDays, mondayOf, todayIn } from "./engine/dates";
+import { adapt, decide, watchBaseline, type CheckIn, type PlannedLike, type Verdict, type Watch } from "./engine/decision";
+import { isFoot, sessionLoad, type ActivityLike, type Sport } from "./engine/load";
+import { buildRacePlan, maintenancePlan, phaseFor, type Level, type RacePlan } from "./engine/planner";
+import { withSideRaces, withStrength, type SideRace } from "./engine/extras";
+import { timeline, weeklySummary } from "./engine/timeline";
+import { HttpError } from "./api";
+
+export interface ProfileRow { hr_max: number | null; hr_rest: number | null; days_per_week: number; long_day: number; max_weekly_minutes: number | null; level: Level }
+export interface GoalRow { name: string; date: string; distance_km: number | null; gain_m: number | null; plan_meta?: string | null; route?: string | null }
+export interface ActivityRow { id: number; date: string; sport: Sport; name: string | null; duration_min: number; distance_km: number | null; gain_m: number | null; loss_m: number | null; avg_hr: number | null; max_hr: number | null; rpe: number | null; source: string; strava_id: string | null }
+export interface PlanRow { id: number; date: string; template: string; title: string; sport: string; duration_min: number; gain_m: number | null; rpe_target: number; description: string; phase: string; status: string; activity_id: number | null; locked: number; original: string | null }
+export interface CheckinRow { date: string; sleep: number; legs: number; motivation: number; pain: 0 | 1 | 2; note: string | null; pain_zones?: string | null; sleep_h?: number | null; rhr?: number | null; hrv?: number | null }
+
+/** Mesures de la montre du jour et référence des 14 jours précédents. */
+export async function watchOf(userId: number, today: string, c: { sleep_h?: number | null; rhr?: number | null; hrv?: number | null } | null): Promise<Watch | undefined> {
+  if (!c || (c.sleep_h == null && c.rhr == null && c.hrv == null)) return undefined;
+  const rows = await all<{ rhr: number | null; hrv: number | null }>("SELECT rhr, hrv FROM checkins WHERE user_id = ? AND date < ? AND date >= ?", [userId, today, addDays(today, -14)]);
+  return { sleepH: c.sleep_h ?? null, rhr: c.rhr ?? null, hrv: c.hrv ?? null, base: watchBaseline(rows) };
+}
+export const painZonesOf = (c: { pain_zones?: string | null } | null | undefined): string[] => { try { return c?.pain_zones ? JSON.parse(c.pain_zones) : []; } catch { return []; } };
+
+/** Date du jour côté client (fuseau de l’utilisateur), bornée à ±1 jour de Paris pour éviter les abus. */
+export function resolveToday(param: string | null) {
+  const paris = todayIn("Europe/Paris");
+  if (param && /^\d{4}-\d{2}-\d{2}$/.test(param) && Math.abs(diffDays(paris, param)) <= 1) return param;
+  return paris;
+}
+
+export const toActivityLike = (a: ActivityRow): ActivityLike => ({ date: a.date, sport: a.sport, durationMin: a.duration_min, distanceKm: a.distance_km, gainM: a.gain_m, lossM: a.loss_m, avgHr: a.avg_hr, rpe: a.rpe });
+const toPlanned = (p: PlanRow): PlannedLike => ({ title: p.title, durationMin: p.duration_min, rpeTarget: p.rpe_target, template: p.template, sport: p.sport, description: p.description, gainM: p.gain_m });
+
+export async function loadProfile(userId: number) {
+  const p = await one<ProfileRow>("SELECT hr_max, hr_rest, days_per_week, long_day, max_weekly_minutes, level FROM profiles WHERE user_id = ?", [userId]);
+  return p ?? { hr_max: null, hr_rest: null, days_per_week: 4, long_day: 6, max_weekly_minutes: null, level: "regulier" as Level };
+}
+export const loadSideRaces = (userId: number) =>
+  all<SideRace & { id: number }>("SELECT id, name, date, distance_km AS distanceKm, gain_m AS gainM, priority FROM side_races WHERE user_id = ? ORDER BY date", [userId]);
+export const loadGoal = (userId: number) => one<GoalRow>("SELECT name, date, distance_km, gain_m, plan_meta, route FROM goals WHERE user_id = ?", [userId]);
+export const readPlanMeta = (g: GoalRow | null | undefined): RacePlan | null => { try { return g?.plan_meta ? JSON.parse(g.plan_meta) : null; } catch { return null; } };
+export const loadActivities = (userId: number, since: string) =>
+  all<ActivityRow>("SELECT id, date, sport, name, duration_min, distance_km, gain_m, loss_m, avg_hr, max_hr, rpe, source, strava_id FROM activities WHERE user_id = ? AND date >= ? ORDER BY date DESC, id DESC", [userId, since]);
+
+export function withLoad(a: ActivityRow, physio: { hrMax: number | null; hrRest: number | null }) {
+  const l = sessionLoad(toActivityLike(a), physio);
+  return { ...a, load: l.total, effort: l.rpe, effortSource: l.source };
+}
+
+/** Lie les séances réalisées au planning et marque les séances manquées. */
+export async function reconcile(userId: number, today: string) {
+  const plans = await all<PlanRow>("SELECT * FROM plan_sessions WHERE user_id = ? AND date <= ? AND status IN ('planned', 'adapted')", [userId, today]);
+  if (!plans.length) return;
+  const acts = await all<ActivityRow>("SELECT id, date, sport FROM activities WHERE user_id = ? AND date >= ?", [userId, plans.reduce((m, p) => (p.date < m ? p.date : m), today)]);
+  for (const p of plans) {
+    const done = acts.find((a) => a.date === p.date && (isFoot(a.sport) || a.sport === p.sport));
+    if (done) await run("UPDATE plan_sessions SET status = 'done', activity_id = ?, updated_at = ? WHERE id = ?", [done.id, Date.now(), p.id]);
+    else if (p.date < today) await run("UPDATE plan_sessions SET status = 'missed', updated_at = ? WHERE id = ?", [Date.now(), p.id]);
+  }
+}
+
+/**
+ * Recalcule le plan jusqu’à la course (ou 3 semaines d’entretien sans course) à partir de la charge réelle,
+ * sans toucher aux séances verrouillées, réalisées ou passées.
+ */
+export async function regeneratePlan(userId: number, today: string) {
+  const [{ profile, acts, tl }, goal, sides] = await Promise.all([loadState(userId, today), loadGoal(userId), loadSideRaces(userId)]);
+  const pp = { daysPerWeek: profile.days_per_week, longDay: profile.long_day, maxWeeklyMinutes: profile.max_weekly_minutes, level: profile.level };
+  const likes = acts.map(toActivityLike);
+  let items;
+  if (goal && goal.date > today) {
+    const r = buildRacePlan({ today, profile: pp, goal: { name: goal.name, date: goal.date, distanceKm: goal.distance_km, gainM: goal.gain_m }, activities: likes,
+      load: { ctl: tl.ctl, atl: tl.atl, ratio: tl.ratio, calibrated: tl.calibrated } });
+    items = r.items;
+    const upcoming = sides.filter((s) => s.date > today && s.date < goal.date);
+    if (upcoming.length) r.plan.notes.push(`Course${upcoming.length > 1 ? "s" : ""} de préparation intégrée${upcoming.length > 1 ? "s" : ""} au plan : ${upcoming.map((s) => `${s.name} (${s.priority === "B" ? "objectif secondaire" : "entraînement"}, le ${new Date(`${s.date}T12:00:00Z`).toLocaleDateString("fr-FR", { day: "numeric", month: "long", timeZone: "UTC" })})`).join(", ")}. La sortie longue de ces semaines est remplacée par la course, avec allègement avant et récupération après.`);
+    await run("UPDATE goals SET plan_meta = ? WHERE user_id = ?", [JSON.stringify(r.plan), userId]);
+  } else {
+    items = maintenancePlan({ today, profile: pp, activities: likes });
+  }
+  items = withSideRaces(withStrength(items), sides, { start: addDays(today, 1), level: profile.level, ctl: tl.ctl, mainDate: goal && goal.date > today ? goal.date : null });
+  const keep = await all<{ date: string }>("SELECT date FROM plan_sessions WHERE user_id = ? AND date > ? AND (locked = 1 OR status NOT IN ('planned', 'adapted'))", [userId, today]);
+  const kept = new Set(keep.map((k) => k.date));
+  const now = Date.now();
+  await libsql().batch([
+    { sql: "DELETE FROM plan_sessions WHERE user_id = ? AND date > ? AND locked = 0 AND status IN ('planned', 'adapted')", args: [userId, today] },
+    ...items.filter((i) => !kept.has(i.date)).map((i) => ({
+      sql: "INSERT INTO plan_sessions(user_id, date, template, title, sport, duration_min, gain_m, rpe_target, description, phase, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'planned', ?, ?)",
+      args: [userId, i.date, i.template, i.title, i.sport, i.durationMin, i.gainM, i.rpeTarget, i.description, i.phase, now, now],
+    })),
+  ], "write");
+  return items.length;
+}
+
+async function loadState(userId: number, today: string) {
+  const [profile, acts] = await Promise.all([loadProfile(userId), loadActivities(userId, addDays(today, -240))]);
+  const physio = { hrMax: profile.hr_max, hrRest: profile.hr_rest };
+  return { profile, acts, physio, tl: timeline(acts.map(toActivityLike), physio, today) };
+}
+
+/** Enregistre le check-in du soir et adapte la prochaine séance prévue. */
+export async function saveCheckin(userId: number, today: string, c: CheckIn & { note?: string | null }, health: { zones: string[]; consent: boolean } = { zones: [], consent: false }, watch: { sleepH: number | null; rhr: number | null; hrv: number | null } = { sleepH: null, rhr: null, hrv: null }) {
+  // Les zones douloureuses sont des données de santé : enregistrées seulement avec un accord explicite.
+  if (health.consent) await run("UPDATE profiles SET health_consent_at = COALESCE(health_consent_at, ?) WHERE user_id = ?", [Date.now(), userId]);
+  const consent = await one<{ ok: number }>("SELECT 1 AS ok FROM profiles WHERE user_id = ? AND health_consent_at IS NOT NULL", [userId]);
+  const zones = consent && c.pain > 0 && health.zones.length ? JSON.stringify(health.zones) : null;
+  // FC au réveil et VFC sont des mesures physiologiques : enregistrées seulement avec le même accord.
+  const rhr = consent ? watch.rhr : null, hrv = consent ? watch.hrv : null;
+  await run(
+    `INSERT INTO checkins(user_id, date, sleep, legs, motivation, pain, note, pain_zones, sleep_h, rhr, hrv, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(user_id, date) DO UPDATE SET sleep = excluded.sleep, legs = excluded.legs, motivation = excluded.motivation, pain = excluded.pain, note = excluded.note, pain_zones = excluded.pain_zones,
+       sleep_h = excluded.sleep_h, rhr = excluded.rhr, hrv = excluded.hrv`,
+    [userId, today, c.sleep, c.legs, c.motivation, c.pain, c.note ?? null, zones, watch.sleepH, rhr, hrv, Date.now()],
+  );
+  const [{ tl }, goal] = await Promise.all([loadState(userId, today), loadGoal(userId)]);
+  const d = decide({ ...c, zones: zones ? health.zones : [], watch: await watchOf(userId, today, { sleep_h: watch.sleepH, rhr, hrv }) }, tl, today, goal?.date);
+  const next = await one<PlanRow>("SELECT * FROM plan_sessions WHERE user_id = ? AND date = ? AND locked = 0 AND status IN ('planned', 'adapted')", [userId, addDays(today, 1)]);
+  if (next) await applyVerdict(next, d.verdict);
+  return d;
+}
+
+async function applyVerdict(p: PlanRow, v: Verdict) {
+  const original: PlannedLike = p.original ? JSON.parse(p.original) : toPlanned(p);
+  const target = adapt(original, v);
+  const status = v === "ok" ? "planned" : "adapted";
+  await run(
+    "UPDATE plan_sessions SET title = ?, sport = ?, template = ?, duration_min = ?, rpe_target = ?, gain_m = ?, description = ?, status = ?, original = ?, updated_at = ? WHERE id = ?",
+    [target.title, target.sport, target.template, target.durationMin, target.rpeTarget, target.gainM, target.description, status, v === "ok" ? null : JSON.stringify(original), Date.now(), p.id],
+  );
+}
+
+/** Tout ce qu’il faut pour l’écran « Aujourd’hui ». */
+export async function dashboard(userId: number, today: string) {
+  await reconcile(userId, today);
+  const [{ profile, acts, physio, tl }, goal, checkin, upcoming, planCount] = await Promise.all([
+    loadState(userId, today),
+    loadGoal(userId),
+    one<CheckinRow>("SELECT date, sleep, legs, motivation, pain, note, pain_zones, sleep_h, rhr, hrv FROM checkins WHERE user_id = ? AND date = ?", [userId, today]),
+    all<PlanRow>("SELECT * FROM plan_sessions WHERE user_id = ? AND date >= ? AND date <= ? ORDER BY date", [userId, today, addDays(today, 7)]),
+    one<{ n: number }>("SELECT COUNT(*) AS n FROM plan_sessions WHERE user_id = ? AND date > ?", [userId, today]),
+  ]);
+  const decision = checkin ? decide({ ...checkin, zones: painZonesOf(checkin), watch: await watchOf(userId, today, checkin) }, tl, today, goal?.date) : null;
+  const daysToGoal = goal ? diffDays(today, goal.date) : null;
+  return {
+    today,
+    profile,
+    goal: goal ? { name: goal.name, date: goal.date, distance_km: goal.distance_km, gain_m: goal.gain_m, daysToGoal, phase: upcoming[0]?.phase ?? phaseFor(daysToGoal), verdict: readPlanMeta(goal)?.verdict ?? null } : null,
+    load: { atl: tl.atl, ctl: tl.ctl, form: tl.form, ratio: tl.ratio, monotony: tl.monotony, load7: tl.load7, calibrated: tl.calibrated, historyDays: tl.historyDays },
+    checkin, decision,
+    todayPlan: upcoming.find((p) => p.date === today) ?? null,
+    tomorrowPlan: upcoming.find((p) => p.date === addDays(today, 1)) ?? null,
+    upcoming,
+    needsPlan: (planCount?.n ?? 0) === 0,
+    recent: acts.slice(0, 6).map((a) => withLoad(a, physio)),
+  };
+}
+
+export async function analysis(userId: number, today: string) {
+  const { acts, physio, tl } = await loadState(userId, today);
+  const likes = acts.map(toActivityLike);
+  const bySport = new Map<string, number>();
+  for (const a of acts.filter((x) => diffDays(x.date, today) < 28)) bySport.set(a.sport, (bySport.get(a.sport) ?? 0) + a.duration_min);
+  return {
+    points: tl.points.map((p) => ({ date: p.date, load: Math.round(p.load), atl: Math.round(p.atl), ctl: Math.round(p.ctl), form: Math.round(p.form) })),
+    weeks: weeklySummary(likes, physio, today, 12),
+    sports: Object.fromEntries(bySport),
+    summary: { atl: tl.atl, ctl: tl.ctl, form: tl.form, ratio: tl.ratio, monotony: tl.monotony, calibrated: tl.calibrated, historyDays: tl.historyDays },
+  };
+}
+
+export async function ownActivity(userId: number, id: number) {
+  const a = await one<ActivityRow>("SELECT * FROM activities WHERE id = ? AND user_id = ?", [id, userId]);
+  if (!a) throw new HttpError(404, "Séance introuvable.");
+  return a;
+}
+
+/** Le plan suit la charge réelle : il se recalcule automatiquement chaque nouvelle semaine. */
+export async function planView(userId: number, today: string) {
+  await reconcile(userId, today);
+  let goal = await loadGoal(userId);
+  let meta = readPlanMeta(goal);
+  if (goal && goal.date > today && (!meta || mondayOf(meta.generatedOn) < mondayOf(today) || meta.race.date !== goal.date || ((meta.verdict === "risque" || meta.verdict === "ambitieux") && !meta.diagnosis))) {
+    await regeneratePlan(userId, today);
+    goal = await loadGoal(userId);
+    meta = readPlanMeta(goal);
+  }
+  const from = addDays(mondayOf(today), -7);
+  const to = goal && goal.date > today ? goal.date : addDays(today, 21);
+  const [sessions, done, races] = await Promise.all([
+    all<PlanRow & { a_duration: number | null; a_distance: number | null; a_gain: number | null; a_name: string | null }>(
+      `SELECT p.*, a.duration_min AS a_duration, a.distance_km AS a_distance, a.gain_m AS a_gain, a.name AS a_name
+       FROM plan_sessions p LEFT JOIN activities a ON a.id = p.activity_id
+       WHERE p.user_id = ? AND p.date BETWEEN ? AND ? ORDER BY p.date`, [userId, from, to]),
+    all<{ date: string; duration_min: number; sport: Sport }>("SELECT date, duration_min, sport FROM activities WHERE user_id = ? AND date >= ? AND date <= ?",
+      [userId, meta?.weeks[0]?.monday ?? from, today]),
+    loadSideRaces(userId),
+  ]);
+  const doneByWeek: Record<string, number> = {};
+  for (const a of done) if (isFoot(a.sport)) { const m = mondayOf(a.date); doneByWeek[m] = Math.round((doneByWeek[m] ?? 0) + a.duration_min); }
+  return {
+    today,
+    goal: goal ? { name: goal.name, date: goal.date, distance_km: goal.distance_km, gain_m: goal.gain_m, route: (() => { try { return goal.route ? JSON.parse(goal.route) : null; } catch { return null; } })() } : null,
+    plan: goal && goal.date > today ? meta : null,
+    sessions, doneByWeek, races,
+  };
+}
