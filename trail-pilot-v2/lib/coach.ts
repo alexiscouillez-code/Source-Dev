@@ -8,10 +8,11 @@ import { dashboard, loadActivities, loadSideRaces, readPlanMeta, loadGoal } from
 
 /**
  * Coach IA : répond aux questions d’entraînement en s’appuyant sur les données réelles du coureur
- * (plan, charge, check-in, séances récentes). Utilise l’API Anthropic ; inactif sans ANTHROPIC_API_KEY.
+ * (plan, charge, check-in, séances récentes). Utilise Groq (GROQ_API_KEY) ou, à défaut, Anthropic (ANTHROPIC_API_KEY).
  */
-export const coachConfigured = () => !!process.env.ANTHROPIC_API_KEY;
-const MODEL = () => process.env.COACH_MODEL || "claude-sonnet-5-5";
+const provider = () => (process.env.GROQ_API_KEY ? "groq" : process.env.ANTHROPIC_API_KEY ? "anthropic" : null);
+export const coachConfigured = () => provider() !== null;
+const MODEL = () => process.env.COACH_MODEL || (provider() === "groq" ? "openai/gpt-oss-120b" : "claude-sonnet-5-5");
 export const DAILY_LIMIT = 30;
 
 const SYSTEM = `Tu es le coach de Trail Pilot, une appli d’entraînement pour le trail, la course et la randonnée.
@@ -76,18 +77,27 @@ export async function ask(userId: number, today: string, message: string) {
   while (messages.length && messages[0].role !== "user") messages.shift();
   const merged = messages.reduce<typeof messages>((acc, m) => { const last = acc[acc.length - 1]; if (last && last.role === m.role) last.content += `\n\n${m.content}`; else acc.push({ ...m }); return acc; }, []);
 
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY!, "anthropic-version": "2023-06-01" },
-    body: JSON.stringify({ model: MODEL(), max_tokens: 900, system: SYSTEM, messages: merged }),
-    signal: AbortSignal.timeout(45000),
-  });
+  const groq = provider() === "groq";
+  const res = groq
+    ? await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${process.env.GROQ_API_KEY}` },
+      body: JSON.stringify({ model: MODEL(), max_completion_tokens: 2000, temperature: 0.5, reasoning_effort: "low", include_reasoning: false, messages: [{ role: "system", content: SYSTEM }, ...merged] }),
+      signal: AbortSignal.timeout(45000),
+    })
+    : await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY!, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({ model: MODEL(), max_tokens: 900, system: SYSTEM, messages: merged }),
+      signal: AbortSignal.timeout(45000),
+    });
   if (!res.ok) {
     console.error("Coach IA", res.status, (await res.text().catch(() => "")).slice(0, 300));
     throw new HttpError(502, res.status === 429 ? "Le coach est très demandé : réessaie dans une minute." : "Le coach ne répond pas pour le moment. Réessaie dans un instant.");
   }
-  const j = (await res.json()) as { content?: { type: string; text?: string }[] };
-  const reply = (j.content ?? []).filter((c) => c.type === "text").map((c) => c.text).join("\n").trim();
+  const reply = groq
+    ? (((await res.json()) as { choices?: { message?: { content?: string | null } }[] }).choices?.[0]?.message?.content ?? "").trim()
+    : (((await res.json()) as { content?: { type: string; text?: string }[] }).content ?? []).filter((c) => c.type === "text").map((c) => c.text).join("\n").trim();
   if (!reply) throw new HttpError(502, "Le coach n’a pas su répondre. Reformule ta question.");
   const now = Date.now();
   await run("INSERT INTO coach_messages(user_id, role, content, at) VALUES (?, 'user', ?, ?)", [userId, message, now]);

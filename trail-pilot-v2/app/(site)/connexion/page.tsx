@@ -20,7 +20,7 @@ export default async function Connexion({ searchParams }: { searchParams: Promis
         <ThemeToggle />
         <Logo />
         <AuthForm returnTo={returnTo} initialMode={sp.mode === "inscription" ? "signup" : "login"} />
-        <p className="auth-legal">En créant un compte, tu acceptes les <a href="/cgu">conditions d’utilisation</a> et la <a href="/confidentialite">politique de confidentialité</a>.</p>
+        <p className="auth-legal">En créant un compte, tu confirmes avoir 18 ans ou plus et tu acceptes les <a href="/cgu">conditions d’utilisation</a> et la <a href="/confidentialite">politique de confidentialité</a>.</p>
       </section>
     </main>
   );
