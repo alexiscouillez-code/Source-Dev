@@ -6,7 +6,10 @@ import { TerrainError } from "@/lib/terrain/finders";
 self.onmessage = async (e: MessageEvent<{ id: number; input: SearchInput }>) => {
   const { id, input } = e.data;
   try {
-    self.postMessage({ id, ok: true, results: await searchTerrains(input) });
+    const t0 = performance.now();
+    const results = await searchTerrains(input, (step) => self.postMessage({ id, progress: step }));
+    console.info(`Recherche de terrains : ${Math.round(performance.now() - t0)} ms`);
+    self.postMessage({ id, ok: true, results });
   } catch (err) {
     console.warn("Recherche de terrains", err);
     self.postMessage({ id, ok: false, error: err instanceof TerrainError ? err.message : "La recherche a échoué. Réessaie dans un instant." });

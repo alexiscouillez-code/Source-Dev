@@ -21,10 +21,11 @@ class Reader {
     else throw new Error(`Type protobuf inconnu ${wire}`);
   }
   bytes(): Uint8Array { const n = this.varint(), out = this.buf.subarray(this.pos, this.pos + n); this.pos += n; return out; }
-  string(): string { return new TextDecoder().decode(this.bytes()); }
+  string(): string { return utf8.decode(this.bytes()); }
   packed(): number[] { const end = this.varint() + this.pos, out: number[] = []; while (this.pos < end) out.push(this.varint()); return out; }
 }
 
+const utf8 = new TextDecoder();
 const zz = (n: number) => (n % 2 === 1 ? -(n + 1) / 2 : n / 2);
 
 function value(r: Reader): string | number | boolean {

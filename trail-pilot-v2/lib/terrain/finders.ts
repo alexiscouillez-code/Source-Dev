@@ -4,7 +4,7 @@
  * Pur calcul : l’altitude est fournie par une fonction injectée.
  */
 import { decodePolyline, encodePolyline, thin, type LatLon } from "@/lib/polyline";
-import { componentOf, dist, gainLoss, nearestNode, offset, pathPoints, resample, ROADLIKE, shortest, type Graph } from "./graph";
+import { astar, componentOf, contract, dist, gainLoss, nearestNode, offset, pathPoints, resample, ROADLIKE, type Graph } from "./graph";
 
 export type Kind = "loop" | "climb" | "descent" | "track" | "stairs" | "fitness" | "water";
 export const KINDS: Kind[] = ["loop", "climb", "descent", "track", "stairs", "fitness", "water"];
@@ -94,20 +94,25 @@ export async function findLoops(g: Graph, start: { lat: number; lon: number }, p
   const comp = componentOf(g, s.i);
   const D = p.distanceKm * 1000;
   const base = costFn(g, p.surface);
+  // Calculs sur le réseau réduit aux carrefours : bien plus rapide sur un téléphone.
+  const net = contract(g, [s.i]);
+  const ccost = net.chains.map((ch) => ch.edges.reduce((a, e) => a + base(e), 0));
+  const jmask = new Uint8Array(g.n);
+  for (let i = 0; i < g.n; i++) if (comp[i] && net.isJ[i] && net.out[i]?.length) jmask[i] = 1;
   type Cand = { edges: number[]; len: number; reuse: number; trail: number; score: number };
   const cands: Cand[] = [];
 
   const loopFrom = (r: number, bearing: number): Cand | null => {
     const a = offset(start.lat, start.lon, r, bearing - 30), b = offset(start.lat, start.lon, r, bearing + 30);
-    const na = nearestNode(g, a[0], a[1], comp).i, nb = nearestNode(g, b[0], b[1], comp).i;
+    const na = nearestNode(g, a[0], a[1], jmask).i, nb = nearestNode(g, b[0], b[1], jmask).i;
     if (na < 0 || nb < 0 || na === nb || na === s.i || nb === s.i) return null;
-    const used = new Map<number, number>();
-    const cost = (e: number) => base(e) * (used.has(e >> 1) ? 7 : 1);
+    const used = new Set<number>();
+    const cost = (ci: number) => ccost[ci] * (used.has(net.chains[ci].id) ? 7 : 1);
     const edges: number[] = [];
     for (const [u, v] of [[s.i, na], [na, nb], [nb, s.i]] as const) {
-      const leg = shortest(g, u, v, cost, D * 4);
+      const leg = astar(g, net, u, v, cost, D * 3);
       if (!leg) return null;
-      for (const e of leg) { used.set(e >> 1, (used.get(e >> 1) ?? 0) + 1); edges.push(e); }
+      for (const ci of leg) { used.add(net.chains[ci].id); for (const e of net.chains[ci].edges) edges.push(e); }
     }
     let len = 0, again = 0;
     const seen = new Set<number>();
@@ -118,14 +123,14 @@ export async function findLoops(g: Graph, start: { lat: number; lon: number }, p
     return { edges, len, reuse, trail, score };
   };
 
-  for (let bearing = 0; bearing < 360; bearing += 30) {
+  for (let bearing = 0; bearing < 360; bearing += 45) {
     let r = D / 3.75, best: Cand | null = null;
     for (let it = 0; it < 3; it++) {
       const c = loopFrom(r, bearing);
       if (!c) break;
       if (!best || Math.abs(c.len - D) < Math.abs(best.len - D)) best = c;
       const off = c.len / D;
-      if (Math.abs(off - 1) < 0.08) break;
+      if (Math.abs(off - 1) < 0.1) break;
       r *= Math.min(1.6, Math.max(0.6, 1 / off));
     }
     if (best && Math.abs(best.len - D) / D < 0.3) cands.push(best);

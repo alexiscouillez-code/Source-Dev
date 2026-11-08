@@ -40,9 +40,9 @@ async function fetchTile(x: number, y: number): Promise<MvtLayer[]> {
     p = (async () => {
       const url = (await tileUrl()).replace("{z}", String(Z)).replace("{x}", String(x)).replace("{y}", String(y));
       let last: unknown = null;
-      for (let attempt = 0; attempt < 3; attempt++) {
+      for (let attempt = 0; attempt < 2; attempt++) {
         try {
-          const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
+          const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
           if (res.status === 204 || res.status === 404) return [];
           if (!res.ok) throw new Error(`Tuile ${res.status}`);
           return decodeTile(new Uint8Array(await res.arrayBuffer()), new Set(["transportation", "transportation_name", "poi"]));
@@ -57,10 +57,10 @@ async function fetchTile(x: number, y: number): Promise<MvtLayer[]> {
   return p;
 }
 
-export async function loadTiles(tiles: [number, number][]): Promise<{ x: number; y: number; layers: MvtLayer[] }[]> {
+export async function loadTiles(tiles: [number, number][], progress?: (done: number, total: number) => void): Promise<{ x: number; y: number; layers: MvtLayer[] }[]> {
   const out: { x: number; y: number; layers: MvtLayer[] }[] = [];
   let i = 0;
-  const worker = async () => { while (i < tiles.length) { const [x, y] = tiles[i++]; out.push({ x, y, layers: await fetchTile(x, y) }); } };
+  const worker = async () => { while (i < tiles.length) { const [x, y] = tiles[i++]; out.push({ x, y, layers: await fetchTile(x, y) }); progress?.(out.length, tiles.length); } };
   await Promise.all(Array.from({ length: Math.min(PARALLEL, tiles.length) }, worker));
   return out;
 }

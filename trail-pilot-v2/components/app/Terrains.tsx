@@ -80,12 +80,13 @@ function gpx(t: Terrain) {
 }
 /** Worker gardé entre deux recherches : les tuiles déjà lues restent en mémoire. */
 let worker: Worker | null = null, seq = 0;
-const pending = new Map<number, { resolve: (r: Terrain[]) => void; reject: (e: Error) => void }>();
+const pending = new Map<number, { resolve: (r: Terrain[]) => void; reject: (e: Error) => void; progress?: (s: string) => void }>();
 function getWorker(): Worker | null {
   if (worker) return worker;
   try { worker = new Worker(new URL("./terrain.worker.ts", import.meta.url), { type: "module" }); } catch { return null; }
-  worker.onmessage = (e: MessageEvent<{ id: number; ok: boolean; results?: Terrain[]; error?: string }>) => {
+  worker.onmessage = (e: MessageEvent<{ id: number; ok?: boolean; results?: Terrain[]; error?: string; progress?: string }>) => {
     const p = pending.get(e.data.id); if (!p) return;
+    if (e.data.progress) { p.progress?.(e.data.progress); return; }
     pending.delete(e.data.id);
     if (e.data.ok) p.resolve(e.data.results!); else p.reject(new Error(e.data.error));
   };
@@ -94,16 +95,16 @@ function getWorker(): Worker | null {
 }
 
 /** Lance la recherche dans le worker (repli sur le fil principal si le navigateur ne le permet pas). */
-async function runSearch(p: SearchInput): Promise<Terrain[]> {
+async function runSearch(p: SearchInput, progress?: (s: string) => void): Promise<Terrain[]> {
   if (!navigator.onLine) throw new Error("Pas de connexion : la recherche de terrains a besoin du réseau.");
-  const inPage = async () => (await import("@/lib/terrain/engine")).searchTerrains(p);
+  const inPage = async () => (await import("@/lib/terrain/engine")).searchTerrains(p, progress);
   const w = getWorker();
   if (!w) return inPage();
   const id = ++seq;
   try {
     return await new Promise<Terrain[]>((resolve, reject) => {
       const t = setTimeout(() => { pending.delete(id); reject(new Error("La recherche prend trop de temps. Réessaie, ou réduis la distance ou le rayon.")); }, 90000);
-      pending.set(id, { resolve: (r) => { clearTimeout(t); resolve(r); }, reject: (e) => { clearTimeout(t); reject(e); } });
+      pending.set(id, { resolve: (r) => { clearTimeout(t); resolve(r); }, reject: (e) => { clearTimeout(t); reject(e); }, progress });
       w.postMessage({ id, input: p });
     });
   } catch (e) {
@@ -181,6 +182,7 @@ export default function Terrains({ me, toast }: Ctx) {
   const [places, setPlaces] = useState<Start[] | null>(null);
   const [locating, setLocating] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [step, setStep] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [results, setResults] = useState<Terrain[] | null>(null);
   const [searched, setSearched] = useState<Query | null>(null);
@@ -228,7 +230,7 @@ export default function Terrains({ me, toast }: Ctx) {
 
   async function search() {
     if (!start) { setErr("Choisis d’abord un point de départ : ta position, un lieu, ou touche la carte."); return; }
-    setBusy(true); setErr(null); setResults(null);
+    setBusy(true); setErr(null); setResults(null); setStep("Préparation…");
     const sl = q.kind === "climb" || q.kind === "descent" ? SLOPE[q.kind][q.slope] : null;
     const bodyQ: Record<string, unknown> = { kind: q.kind, lat: start.lat, lon: start.lon, radiusKm: q.radiusKm };
     if (q.kind === "loop") {
@@ -240,11 +242,11 @@ export default function Terrains({ me, toast }: Ctx) {
     }
     if (sl) Object.assign(bodyQ, { minLen: LEN[q.len].min, maxLen: LEN[q.len].max, minGrade: sl.min, maxGrade: sl.max });
     try {
-      const found = await runSearch(bodyQ as unknown as SearchInput);
+      const found = await runSearch(bodyQ as unknown as SearchInput, setStep);
       setResults(found); setSearched(q); setSel(0); setFitKey(`res-${Date.now()}`);
       if (!found.length) setErr("Rien trouvé dans ce rayon. Agrandis la zone ou change de point de départ.");
     } catch (e) { setErr(e instanceof Error ? e.message : "Erreur"); }
-    finally { setBusy(false); }
+    finally { setBusy(false); setStep(null); }
   }
 
   // Tes propres boucles proches du départ et de la bonne distance, proposées en premier.
@@ -370,7 +372,7 @@ export default function Terrains({ me, toast }: Ctx) {
           {err && <p className="note err" role="alert" style={{ margin: 0 }}>{err}</p>}
           <div className="row">
             <button className="btn" onClick={search} disabled={busy}>{busy ? "Recherche en cours…" : "Chercher"}</button>
-            {busy && <span className="soft small terr-wait">Lecture des chemins et du relief : souvent quelques secondes, jusqu’à une minute si les serveurs de cartes sont chargés.</span>}
+            {busy && <span className="soft small terr-wait" role="status">{step ?? "Recherche…"}</span>}
           </div>
         </section>
       )}

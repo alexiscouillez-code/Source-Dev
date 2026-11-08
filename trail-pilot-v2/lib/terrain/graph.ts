@@ -157,3 +157,86 @@ export function gainLoss(z: number[], threshold = 2): { gain: number; loss: numb
   }
   return { gain, loss };
 }
+
+// ---------- Réseau simplifié pour les recherches d’itinéraires ----------
+/** Tronçon entre deux carrefours : suite de demi-tronçons du réseau complet. */
+export interface Chain { from: number; to: number; edges: number[]; len: number; id: number }
+export interface Contracted { chains: Chain[]; out: (number[] | undefined)[]; isJ: Uint8Array }
+
+/**
+ * Regroupe les points de passage (nœuds de degré 2) : seuls les carrefours restent, ce qui divise
+ * la taille du réseau par 5 à 10 et accélère d’autant les calculs d’itinéraires.
+ */
+export function contract(g: Graph, force: number[] = []): Contracted {
+  const isJ = new Uint8Array(g.n);
+  for (let i = 0; i < g.n; i++) if (g.adj[i].length && g.adj[i].length !== 2) isJ[i] = 1;
+  for (const f of force) isJ[f] = 1;
+  const chains: Chain[] = [], out: (number[] | undefined)[] = new Array(g.n);
+  const seen = new Uint8Array(g.eFrom.length);
+  const add = (c: Chain) => { (out[c.from] ??= []).push(chains.push(c) - 1); };
+  for (let u = 0; u < g.n; u++) {
+    if (!isJ[u]) continue;
+    for (const e0 of g.adj[u]) {
+      if (seen[e0]) continue;
+      const edges = [e0];
+      seen[e0] = 1; seen[e0 ^ 1] = 1;
+      let v = g.eTo[e0], prev = e0, len = g.eLen[e0], guard = 0;
+      while (!isJ[v] && guard++ < 100000) {
+        const a = g.adj[v];
+        const nx = a[0] === (prev ^ 1) ? a[1] : a[0];
+        if (nx === undefined || seen[nx]) break;
+        edges.push(nx); seen[nx] = 1; seen[nx ^ 1] = 1;
+        len += g.eLen[nx]; prev = nx; v = g.eTo[nx];
+      }
+      if (!isJ[v]) continue; // boucle isolée sans carrefour
+      const id = chains.length >> 1;
+      add({ from: u, to: v, edges, len, id });
+      add({ from: v, to: u, edges: edges.map((x) => x ^ 1).reverse(), len, id });
+    }
+  }
+  return { chains, out, isJ };
+}
+
+/** A* sur le réseau simplifié (heuristique : distance à vol d’oiseau ; les coûts valent au moins la longueur). */
+export function astar(g: Graph, c: Contracted, src: number, dst: number, cost: (chain: number) => number, maxCost = Infinity): number[] | null {
+  if (src === dst) return [];
+  const cosL = Math.cos(g.lat[dst] * rad), K = 111195;
+  const h = (v: number) => { const dy = g.lat[v] - g.lat[dst], dx = (g.lon[v] - g.lon[dst]) * cosL; return Math.sqrt(dx * dx + dy * dy) * K * 0.995; };
+  const best = new Map<number, number>(), via = new Map<number, number>();
+  const heap: number[] = [], key: number[] = [], gs: number[] = [];
+  const push = (v: number, gv: number) => {
+    heap.push(v); gs.push(gv); key.push(gv + h(v));
+    let i = heap.length - 1;
+    while (i > 0) { const p = (i - 1) >> 1; if (key[p] <= key[i]) break; [heap[p], heap[i]] = [heap[i], heap[p]]; [key[p], key[i]] = [key[i], key[p]]; [gs[p], gs[i]] = [gs[i], gs[p]]; i = p; }
+  };
+  const pop = () => {
+    const v = heap[0], gv = gs[0], lv = heap.pop()!, lk = key.pop()!, lg = gs.pop()!;
+    if (heap.length) {
+      heap[0] = lv; key[0] = lk; gs[0] = lg;
+      let i = 0;
+      for (;;) {
+        const l = 2 * i + 1, r = l + 1; let m = i;
+        if (l < heap.length && key[l] < key[m]) m = l;
+        if (r < heap.length && key[r] < key[m]) m = r;
+        if (m === i) break;
+        [heap[m], heap[i]] = [heap[i], heap[m]]; [key[m], key[i]] = [key[i], key[m]]; [gs[m], gs[i]] = [gs[i], gs[m]]; i = m;
+      }
+    }
+    return [v, gv] as const;
+  };
+  best.set(src, 0); push(src, 0);
+  while (heap.length) {
+    const [u, gu] = pop();
+    if (gu > (best.get(u) ?? Infinity)) continue;
+    if (u === dst) break;
+    if (gu > maxCost) return null;
+    for (const ci of c.out[u] ?? []) {
+      const ch = c.chains[ci], v = ch.to, gv = gu + cost(ci);
+      if (gv < (best.get(v) ?? Infinity)) { best.set(v, gv); via.set(v, ci); push(v, gv); }
+    }
+  }
+  if (!best.has(dst)) return null;
+  const path: number[] = [];
+  for (let v = dst; v !== src; ) { const ci = via.get(v)!; path.push(ci); v = c.chains[ci].from; }
+  return path.reverse();
+}

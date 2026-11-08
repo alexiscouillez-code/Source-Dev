@@ -56,10 +56,10 @@ async function nodeAltitudes(g: Graph, center: { lat: number; lon: number }, rad
 export const loopRadiusKm = (km: number) => Math.min(6, Math.max(1.5, km / 3.4));
 
 /** Chemins et lieux du secteur, lus dans les tuiles vectorielles. */
-async function area(lat: number, lon: number, radiusM: number) {
+async function area(lat: number, lon: number, radiusM: number, progress?: Progress) {
   const list = tilesFor(lat, lon, radiusM);
   if (list.length > MAX_TILES) throw new TerrainError("Zone trop grande : réduis la distance ou le rayon de recherche.");
-  try { return await loadTiles(list); }
+  try { const t = await loadTiles(list, (d, n) => progress?.(`Chargement des cartes : ${d}/${n}`)); progress?.("Calcul des itinéraires…"); return t; }
   catch (e) {
     console.warn("Tuiles de carte indisponibles", e);
     throw new TerrainError(typeof navigator !== "undefined" && !navigator.onLine ? "Pas de connexion : la recherche de terrains a besoin du réseau." : "Les données de carte ne répondent pas pour le moment. Réessaie dans un instant.", 503);
@@ -74,28 +74,31 @@ const POI: Record<"track" | "fitness" | "water", (cls: string, sub: string) => T
   track: (c, s) => (s === "athletics" || s === "running" || c === "athletics" ? { leisure: "track", sport: "athletics" } as Tags : s === "stadium" || c === "stadium" ? { leisure: "stadium" } : null),
 };
 
-export async function searchTerrains(p: SearchInput): Promise<Terrain[]> {
+export type Progress = (step: string) => void;
+
+export async function searchTerrains(p: SearchInput, progress?: Progress): Promise<Terrain[]> {
   const start = { lat: p.lat, lon: p.lon };
   const R = p.radiusKm * 1000;
   switch (p.kind) {
     case "loop": {
-      const ways = waysFromTiles(await area(p.lat, p.lon, loopRadiusKm(p.distanceKm!) * 1000));
+      const ways = waysFromTiles(await area(p.lat, p.lon, loopRadiusKm(p.distanceKm!) * 1000, progress));
       if (!ways.length) throw new TerrainError("Aucun chemin trouvé autour de ce point de départ.");
       return findLoops(buildGraph(ways), start, { distanceKm: p.distanceKm!, gainM: p.gainM ?? null, surface: p.surface ?? "trail" }, elevation);
     }
     case "climb": case "descent": {
-      const ways = waysFromTiles(await area(p.lat, p.lon, R + 300));
+      const ways = waysFromTiles(await area(p.lat, p.lon, R + 300, progress));
       if (!ways.length) throw new TerrainError("Aucun chemin trouvé dans ce rayon.");
       const g = buildGraph(ways);
+      progress?.("Lecture du relief…");
       await nodeAltitudes(g, start, R + 200);
       return findSlopes(g, start, { minLen: p.minLen!, maxLen: p.maxLen!, minGrade: p.minGrade!, maxGrade: p.maxGrade!, radiusKm: p.radiusKm }, p.kind === "climb" ? 1 : -1);
     }
     case "stairs": {
-      const steps = within(waysFromTiles(await area(p.lat, p.lon, R)).filter((w) => w.tags?.highway === "steps"), p.lat, p.lon, R);
+      const steps = within(waysFromTiles(await area(p.lat, p.lon, R, progress)).filter((w) => w.tags?.highway === "steps"), p.lat, p.lon, R);
       return stairsFrom(steps.map((w) => ({ type: "way" as const, id: -w.id, tags: w.tags, geometry: w.geometry })), start, elevation);
     }
     case "track": case "fitness": case "water": {
-      const els = poisFromTiles(await area(p.lat, p.lon, R), POI[p.kind]).filter((e) => dist(p.lat, p.lon, e.lat!, e.lon!) <= R).map((e) => ({ ...e, id: -e.id }));
+      const els = poisFromTiles(await area(p.lat, p.lon, R, progress), POI[p.kind]).filter((e) => dist(p.lat, p.lon, e.lat!, e.lon!) <= R).map((e) => ({ ...e, id: -e.id }));
       return placesFrom(p.kind, els, start);
     }
   }
