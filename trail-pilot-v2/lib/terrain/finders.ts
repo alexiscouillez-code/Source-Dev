@@ -3,7 +3,7 @@
  * boucles à distance et D+ visés, côtes et descentes, et lieux ponctuels (pistes, escaliers, agrès, eau).
  * Pur calcul : l’altitude est fournie par une fonction injectée.
  */
-import { encodePolyline, thin, type LatLon } from "@/lib/polyline";
+import { decodePolyline, encodePolyline, thin, type LatLon } from "@/lib/polyline";
 import { componentOf, dist, gainLoss, nearestNode, offset, pathPoints, resample, ROADLIKE, shortest, type Graph } from "./graph";
 
 export type Kind = "loop" | "climb" | "descent" | "track" | "stairs" | "fitness" | "water";
@@ -164,7 +164,17 @@ export async function findLoops(g: Graph, start: { lat: number; lon: number }, p
       profile: z ? profileOf(at, z) : null, osm: null,
     });
   }
-  return out.sort((a, b) => a._score - b._score).slice(0, 4).map(({ _score, ...t }) => (void _score, t));
+  const best = out.sort((a, b) => a._score - b._score).slice(0, 4).map(({ _score, ...t }) => (void _score, t));
+  // Deux boucles du même nom : on précise la direction dans laquelle chacune part.
+  const DIRS = ["nord", "nord-est", "est", "sud-est", "sud", "sud-ouest", "ouest", "nord-ouest"];
+  for (const t of best) {
+    if (best.filter((o) => o.name === t.name).length < 2) continue;
+    const pts = decodePolyline(t.poly!);
+    const cLat = pts.reduce((a, p) => a + p[0], 0) / pts.length, cLon = pts.reduce((a, p) => a + p[1], 0) / pts.length;
+    const brg = (Math.atan2((cLon - start.lon) * Math.cos((start.lat * Math.PI) / 180), cLat - start.lat) * 180) / Math.PI;
+    t.name = `${t.name}, côté ${DIRS[Math.round(((brg + 360) % 360) / 45) % 8]}`;
+  }
+  return best;
 }
 
 // ---------- Côtes et descentes ----------
@@ -261,7 +271,8 @@ export function findSlopes(g: Graph, start: { lat: number; lon: number }, p: Slo
 // ---------- Lieux ponctuels ----------
 export interface OsmEl { type: "node" | "way" | "relation"; id: number; lat?: number; lon?: number; center?: { lat: number; lon: number }; tags?: Record<string, string>; geometry?: { lat: number; lon: number }[] }
 
-const osmUrl = (el: OsmEl) => `https://www.openstreetmap.org/${el.type}/${el.id}`;
+/** Lien vers la fiche OSM quand l’identifiant est connu (les éléments lus dans les tuiles n’en ont pas). */
+const osmUrl = (el: OsmEl) => (el.id > 0 ? `https://www.openstreetmap.org/${el.type}/${el.id}` : null);
 const posOf = (el: OsmEl): LatLon | null => (el.lat != null ? [el.lat, el.lon!] : el.center ? [el.center.lat, el.center.lon] : el.geometry?.length ? [el.geometry[0].lat, el.geometry[0].lon] : null);
 
 export function placesFrom(kind: "track" | "fitness" | "water", els: OsmEl[], start: { lat: number; lon: number }): Terrain[] {
@@ -290,10 +301,12 @@ export function placesFrom(kind: "track" | "fitness" | "water", els: OsmEl[], st
   }
   if (kind === "track") {
     const seen: P[] = [];
+    items.sort((a, b) => Number(a.el.tags?.leisure === "stadium") - Number(b.el.tags?.leisure === "stadium") || a.d - b.d);
     for (const it of items) if (!seen.some((o) => o.d === it.d || dist(o.at[0], o.at[1], it.at[0], it.at[1]) < 150)) seen.push(it);
     return seen.slice(0, 8).map((it) => {
       const t = it.el.tags ?? {};
       const acc = t.access === "private" || t.access === "no" ? "Accès privé" : t.access === "customers" || t.access === "members" ? "Accès réservé (club)" : t.access === "yes" || t.access === "public" ? "Accès public" : "Accès à vérifier";
+      if (t.leisure === "stadium") return mk(it, t.name ?? "Stade", "Stade : la présence d’une piste d’athlétisme est à vérifier", ["Accès à vérifier"]);
       return mk(it, t.name ?? "Piste d’athlétisme", [t.surface && SURF[t.surface] ? `Revêtement : ${SURF[t.surface]}` : t.surface === "tartan" ? "Revêtement synthétique" : null, t.lanes ? `${t.lanes} couloirs` : null].filter(Boolean).join(" · ") || "Piste d’athlétisme", [acc]);
     });
   }

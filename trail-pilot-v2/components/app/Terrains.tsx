@@ -78,19 +78,38 @@ function gpx(t: Terrain) {
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
-/** Lance la recherche dans un worker (repli sur le fil principal si le navigateur ne le permet pas). */
+/** Worker gardé entre deux recherches : les tuiles déjà lues restent en mémoire. */
+let worker: Worker | null = null, seq = 0;
+const pending = new Map<number, { resolve: (r: Terrain[]) => void; reject: (e: Error) => void }>();
+function getWorker(): Worker | null {
+  if (worker) return worker;
+  try { worker = new Worker(new URL("./terrain.worker.ts", import.meta.url), { type: "module" }); } catch { return null; }
+  worker.onmessage = (e: MessageEvent<{ id: number; ok: boolean; results?: Terrain[]; error?: string }>) => {
+    const p = pending.get(e.data.id); if (!p) return;
+    pending.delete(e.data.id);
+    if (e.data.ok) p.resolve(e.data.results!); else p.reject(new Error(e.data.error));
+  };
+  worker.onerror = (e) => { e.preventDefault(); worker?.terminate(); worker = null; for (const p of pending.values()) p.reject(new Error("WORKER")); pending.clear(); };
+  return worker;
+}
+
+/** Lance la recherche dans le worker (repli sur le fil principal si le navigateur ne le permet pas). */
 async function runSearch(p: SearchInput): Promise<Terrain[]> {
   if (!navigator.onLine) throw new Error("Pas de connexion : la recherche de terrains a besoin du réseau.");
-  let w: Worker | null = null;
-  try { w = new Worker(new URL("./terrain.worker.ts", import.meta.url), { type: "module" }); } catch { w = null; }
-  if (!w) { const { searchTerrains } = await import("@/lib/terrain/engine"); return searchTerrains(p); }
-  return new Promise<Terrain[]>((resolve, reject) => {
-    const done = () => { clearTimeout(t); w!.terminate(); };
-    const t = setTimeout(() => { done(); reject(new Error("La recherche prend trop de temps. Réessaie, ou réduis la distance ou le rayon.")); }, 90000);
-    w!.onmessage = (e: MessageEvent<{ ok: boolean; results?: Terrain[]; error?: string }>) => { done(); if (e.data.ok) resolve(e.data.results!); else reject(new Error(e.data.error)); };
-    w!.onerror = (e) => { e.preventDefault(); done(); import("@/lib/terrain/engine").then(({ searchTerrains }) => searchTerrains(p)).then(resolve, reject); };
-    w!.postMessage(p);
-  });
+  const inPage = async () => (await import("@/lib/terrain/engine")).searchTerrains(p);
+  const w = getWorker();
+  if (!w) return inPage();
+  const id = ++seq;
+  try {
+    return await new Promise<Terrain[]>((resolve, reject) => {
+      const t = setTimeout(() => { pending.delete(id); reject(new Error("La recherche prend trop de temps. Réessaie, ou réduis la distance ou le rayon.")); }, 90000);
+      pending.set(id, { resolve: (r) => { clearTimeout(t); resolve(r); }, reject: (e) => { clearTimeout(t); reject(e); } });
+      w.postMessage({ id, input: p });
+    });
+  } catch (e) {
+    if (e instanceof Error && e.message === "WORKER") return inPage();
+    throw e;
+  }
 }
 const directions = (t: { lat: number; lon: number }) => `https://www.google.com/maps/dir/?api=1&destination=${t.lat.toFixed(6)},${t.lon.toFixed(6)}`;
 const keyOf = (t: Terrain) => `${t.kind}:${t.lat.toFixed(4)}:${t.lon.toFixed(4)}:${t.name}`;
@@ -368,7 +387,7 @@ export default function Terrains({ me, toast }: Ctx) {
               <Card key={t.id + i} domId={`terr-${i}`} t={t} on={i === sel} onSelect={() => setSel(i)} saved={savedKeys.has(keyOf(t))} onSave={() => save(t)} />
             ))}
           </ul>
-          <p className="muted terr-legal">Tracés calculés automatiquement à partir d’OpenStreetMap : vérifie l’accès, l’état des chemins et les conditions avant de partir. D+ estimé à partir d’un modèle de terrain. Données © contributeurs <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> ; altitude : <a href="https://registry.opendata.aws/terrain-tiles/" target="_blank" rel="noreferrer">Mapzen Terrain Tiles</a> (SRTM, EU-DEM, Copernicus et autres sources ouvertes).</p>
+          <p className="muted terr-legal">Tracés calculés automatiquement à partir d’OpenStreetMap : vérifie l’accès, l’état des chemins et les conditions avant de partir. D+ estimé à partir d’un modèle de terrain. Données © contributeurs <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>, tuiles <a href="https://openfreemap.org" target="_blank" rel="noreferrer">OpenFreeMap</a> © OpenMapTiles ; altitude : <a href="https://registry.opendata.aws/terrain-tiles/" target="_blank" rel="noreferrer">Mapzen Terrain Tiles</a> (SRTM, EU-DEM, Copernicus et autres sources ouvertes).</p>
         </section>
       )}
 
