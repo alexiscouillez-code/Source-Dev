@@ -32,7 +32,7 @@ export function offset(lat: number, lon: number, m: number, bearing: number): La
 }
 
 const TRAIL = new Set(["path", "track", "bridleway", "footway", "steps"]);
-export const ROADLIKE = new Set(["residential", "unclassified", "service", "living_street", "tertiary"]);
+export const ROADLIKE = new Set(["residential", "unclassified", "service", "living_street", "tertiary", "secondary"]);
 
 export function buildGraph(ways: OsmWay[]): Graph {
   const idx = new Map<number, number>();

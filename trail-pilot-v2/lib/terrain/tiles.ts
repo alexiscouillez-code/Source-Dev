@@ -74,6 +74,8 @@ function highwayOf(t: Record<string, string | number | boolean>): string | null 
     case "path": return PATHS[String(t.subclass)] ?? null;
     case "track": return "track";
     case "minor": return "residential";
+    case "tertiary": return "tertiary";
+    case "secondary": return "secondary";
     case "service": return t.service === "driveway" || t.service === "parking_aisle" ? null : "service";
     default: return null;
   }
@@ -107,7 +109,7 @@ function clip(line: Pt[], E: number): Pt[][] {
 
 /** Construit des « voies » au format OSM (nœuds numérotés, géométrie, tags) à partir des tuiles. */
 export function waysFromTiles(tiles: { x: number; y: number; layers: MvtLayer[] }[]): OsmWay[] {
-  type Raw = { pts: Pt[]; tags: Record<string, string> };
+  type Raw = { pts: Pt[]; tags: Record<string, string>; brunnel: boolean };
   const raws: Raw[] = [];
   const names = new Map<string, string>();
   let E = 4096;
@@ -129,10 +131,12 @@ export function waysFromTiles(tiles: { x: number; y: number; layers: MvtLayer[] 
         if (f.tags.surface === "paved") tags.surface = "asphalt";
         else if (f.tags.surface === "unpaved") tags.surface = "ground";
         if (typeof f.tags.mtb_scale === "string" && Number(f.tags.mtb_scale) >= 2) tags.sac_scale = "mountain_hiking";
-        for (const l of f.lines) for (const c of clip(l, E)) raws.push({ pts: c.map(([x, y]) => [ox + x, oy + y] as Pt), tags });
+        const brunnel = f.tags.brunnel === "bridge" || f.tags.brunnel === "tunnel";
+        for (const l of f.lines) for (const c of clip(l, E)) raws.push({ pts: c.map(([x, y]) => [ox + x, oy + y] as Pt), tags, brunnel });
       }
     }
   }
+  snapJunctions(raws);
   // Raccord des points : sommets identiques d’une tuile à l’autre ; points de coupe rapprochés le long des bords.
   const ids = new Map<string, number>();
   const border = new Map<string, { v: number; id: number }[]>();
@@ -169,6 +173,65 @@ export function waysFromTiles(tiles: { x: number; y: number; layers: MvtLayer[] 
       tags: name ? { ...r.tags, name } : r.tags,
     };
   });
+}
+
+/**
+ * Les tuiles simplifient les tracés : un carrefour situé sur une portion droite peut disparaître d’une des deux lignes,
+ * et le sentier qui y débouche ne touche plus la route. On recolle chaque bout de ligne (jusqu’à ~5 m) et chaque
+ * sommet posé sur une autre ligne (~1 m) en insérant le point manquant. Ponts et tunnels ne sont raccordés qu’à leurs extrémités.
+ */
+function snapJunctions(raws: { pts: Pt[]; brunnel: boolean }[]) {
+  const CELL = 48, END_TOL = 12, MID_TOL = 2.5;
+  const grid = new Map<string, number[]>(); // paires (tronçon, segment) à plat
+  const cellKey = (cx: number, cy: number) => `${cx}:${cy}`;
+  raws.forEach((r, ri) => {
+    for (let i = 0; i + 1 < r.pts.length; i++) {
+      const [ax, ay] = r.pts[i], [bx, by] = r.pts[i + 1];
+      for (let cx = Math.floor((Math.min(ax, bx) - END_TOL) / CELL); cx <= Math.floor((Math.max(ax, bx) + END_TOL) / CELL); cx++)
+        for (let cy = Math.floor((Math.min(ay, by) - END_TOL) / CELL); cy <= Math.floor((Math.max(ay, by) + END_TOL) / CELL); cy++) {
+          const k = cellKey(cx, cy), l = grid.get(k);
+          if (l) l.push(ri, i); else grid.set(k, [ri, i]);
+        }
+    }
+  });
+  const inserts = new Map<number, { seg: number; t: number; p: Pt }[]>();
+  raws.forEach((r, ri) => {
+    const last = r.pts.length - 1;
+    r.pts.forEach((p, k) => {
+      const isEnd = k === 0 || k === last;
+      if (!isEnd && r.brunnel) return;
+      const tol = isEnd ? END_TOL : MID_TOL;
+      const cand = grid.get(cellKey(Math.floor(p[0] / CELL), Math.floor(p[1] / CELL)));
+      if (!cand) return;
+      let best = -1, bt = 0, bd = tol;
+      for (let c = 0; c < cand.length; c += 2) {
+        const rj = cand[c], sj = cand[c + 1];
+        if (rj === ri || (!isEnd && raws[rj].brunnel)) continue;
+        const [ax, ay] = raws[rj].pts[sj], [bx, by] = raws[rj].pts[sj + 1];
+        const dx = bx - ax, dy = by - ay, L = dx * dx + dy * dy;
+        const t = L ? Math.max(0, Math.min(1, ((p[0] - ax) * dx + (p[1] - ay) * dy) / L)) : 0;
+        const d = Math.hypot(p[0] - (ax + t * dx), p[1] - (ay + t * dy));
+        if (d < bd) { bd = d; best = c; bt = t; }
+      }
+      if (best < 0) return;
+      const rj = cand[best], sj = cand[best + 1];
+      const q = bt <= 0 ? raws[rj].pts[sj] : bt >= 1 ? raws[rj].pts[sj + 1] : null;
+      if (q) { if (Math.hypot(p[0] - q[0], p[1] - q[1]) > 0.5) r.pts[k] = [q[0], q[1]]; return; } // colle au sommet existant
+      const list = inserts.get(rj) ?? [];
+      list.push({ seg: sj, t: bt, p: [p[0], p[1]] });
+      inserts.set(rj, list);
+    });
+  });
+  for (const [rj, list] of inserts) {
+    list.sort((a, b) => a.seg - b.seg || a.t - b.t);
+    const pts = raws[rj].pts, out: Pt[] = [];
+    let n = 0;
+    for (let i = 0; i < pts.length; i++) {
+      out.push(pts[i]);
+      while (n < list.length && list[n].seg === i) out.push(list[n++].p);
+    }
+    raws[rj].pts = out;
+  }
 }
 
 // ---------- Lieux ----------

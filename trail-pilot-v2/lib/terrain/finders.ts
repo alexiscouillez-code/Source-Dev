@@ -27,7 +27,7 @@ const fmtKm = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(m < 10000 ? 1 : 
 
 const HW: Record<string, string> = {
   path: "Sentier", track: "Chemin", bridleway: "Chemin", footway: "Allée piétonne", steps: "Escaliers", pedestrian: "Zone piétonne",
-  cycleway: "Voie verte", residential: "Petite route", unclassified: "Petite route", service: "Voie de desserte", living_street: "Rue calme", tertiary: "Route",
+  cycleway: "Voie verte", residential: "Petite route", unclassified: "Petite route", service: "Voie de desserte", living_street: "Rue calme", tertiary: "Route", secondary: "Route départementale",
 };
 const SURF: Record<string, string> = {
   ground: "terre", dirt: "terre", earth: "terre", grass: "herbe", gravel: "gravier", fine_gravel: "gravier fin", compacted: "stabilisé", rock: "roche",
@@ -41,9 +41,9 @@ function costFn(g: Graph, surface: Surface) {
   g.ways.forEach((w, i) => {
     const road = ROADLIKE.has(w.highway);
     m[i] = w.trail ? (w.highway === "steps" ? 1.4 : w.highway === "footway" ? 1.15 : 1)
-      : road ? (surface === "trail" ? 2.8 : surface === "mixed" ? 1.5 : 1.05)
+      : road ? (surface === "trail" ? 2.8 : surface === "mixed" ? 1.5 : 1.05) * (w.highway === "secondary" ? 1.8 : w.highway === "tertiary" ? 1.3 : 1)
         : 1.3;
-    if (surface === "any") m[i] = Math.min(m[i], 1.2);
+    if (surface === "any") m[i] = Math.min(m[i], w.highway === "secondary" ? 1.6 : 1.2);
   });
   return (e: number) => g.eLen[e] * m[g.eWay[e]];
 }
@@ -88,8 +88,28 @@ function surfaceTags(g: Graph, edges: number[]): string[] {
 }
 
 // ---------- Boucles ----------
+/** Point de départ sur le réseau principal : le nœud le plus proche appartenant à un grand ensemble de chemins reliés. */
+function mainStart(g: Graph, start: { lat: number; lon: number }): { i: number; d: number } {
+  const label = new Int32Array(g.n).fill(-1), sizes: number[] = [];
+  for (let i = 0; i < g.n; i++) {
+    if (label[i] >= 0 || !g.adj[i].length) continue;
+    const id = sizes.length, stack = [i];
+    let n = 0;
+    label[i] = id;
+    while (stack.length) { const u = stack.pop()!; n++; for (const e of g.adj[u]) { const v = g.eTo[e]; if (label[v] < 0) { label[v] = id; stack.push(v); } } }
+    sizes.push(n);
+  }
+  const big = Math.max(0, ...sizes);
+  const near = nearestNode(g, start.lat, start.lon);
+  if (near.i < 0 || sizes[label[near.i]] >= big * 0.3) return near;
+  const mask = new Uint8Array(g.n);
+  for (let i = 0; i < g.n; i++) if (label[i] >= 0 && sizes[label[i]] >= big * 0.3) mask[i] = 1;
+  const alt = nearestNode(g, start.lat, start.lon, mask);
+  return alt.i >= 0 && alt.d - near.d < 400 ? alt : near;
+}
+
 export async function findLoops(g: Graph, start: { lat: number; lon: number }, p: { distanceKm: number; gainM: number | null; surface: Surface }, elev: Elev): Promise<Terrain[]> {
-  const s = nearestNode(g, start.lat, start.lon);
+  const s = mainStart(g, start);
   if (s.i < 0 || s.d > 700) throw new TerrainError("Aucun chemin trouvé près de ce point de départ. Choisis un départ plus proche d’un sentier ou d’une route.");
   const comp = componentOf(g, s.i);
   const D = p.distanceKm * 1000;
@@ -100,17 +120,18 @@ export async function findLoops(g: Graph, start: { lat: number; lon: number }, p
   const jmask = new Uint8Array(g.n);
   for (let i = 0; i < g.n; i++) if (comp[i] && net.isJ[i] && net.out[i]?.length) jmask[i] = 1;
   type Cand = { edges: number[]; len: number; reuse: number; trail: number; score: number };
-  const cands: Cand[] = [];
+  const cands: Cand[] = [], all: Cand[] = [];
 
   const loopFrom = (r: number, bearing: number): Cand | null => {
     const a = offset(start.lat, start.lon, r, bearing - 30), b = offset(start.lat, start.lon, r, bearing + 30);
     const na = nearestNode(g, a[0], a[1], jmask).i, nb = nearestNode(g, b[0], b[1], jmask).i;
     if (na < 0 || nb < 0 || na === nb || na === s.i || nb === s.i) return null;
     const used = new Set<number>();
-    const cost = (ci: number) => ccost[ci] * (used.has(net.chains[ci].id) ? 7 : 1);
+    const cost = (ci: number) => ccost[ci] * (used.has(net.chains[ci].id) ? 4 : 1);
     const edges: number[] = [];
     for (const [u, v] of [[s.i, na], [na, nb], [nb, s.i]] as const) {
-      const leg = astar(g, net, u, v, cost, D * 3);
+      // Pas de plafond de coût : un accès unique par la route doit rester possible (retour par le même chemin).
+      const leg = astar(g, net, u, v, cost);
       if (!leg) return null;
       for (const ci of leg) { used.add(net.chains[ci].id); for (const e of net.chains[ci].edges) edges.push(e); }
     }
@@ -133,8 +154,12 @@ export async function findLoops(g: Graph, start: { lat: number; lon: number }, p
       if (Math.abs(off - 1) < 0.1) break;
       r *= Math.min(1.6, Math.max(0.6, 1 / off));
     }
+    if (best) all.push(best);
     if (best && Math.abs(best.len - D) / D < 0.3) cands.push(best);
   }
+  // Rien d’assez proche : on propose quand même les boucles les plus proches de la distance demandée.
+  let approx = false;
+  if (!cands.length) { cands.push(...all.filter((c) => Math.abs(c.len - D) / D < 0.6)); approx = cands.length > 0; }
   if (!cands.length) throw new TerrainError("Pas de boucle de cette distance avec les chemins du secteur. Essaie une autre distance ou un autre départ.");
 
   // Garde des boucles vraiment différentes.
@@ -162,7 +187,7 @@ export async function findLoops(g: Graph, start: { lat: number; lon: number }, p
       _score: c.score + gScore,
       id: `loop-${c.edges[0]}-${c.edges.length}`, kind: "loop", source: "osm",
       name: name ? `Boucle par ${name}` : `Boucle de ${String(km).replace(".", ",")} km`,
-      detail: [`${Math.round(c.trail * 100)} % de sentiers et chemins`, c.reuse > 0.12 ? "repasse en partie par le même chemin" : null].filter(Boolean).join(" · "),
+      detail: [approx ? `${c.len < D ? "plus courte" : "plus longue"} que demandé : le réseau du secteur ne permet pas mieux` : null, `${Math.round(c.trail * 100)} % de sentiers et chemins`, c.reuse > 0.12 ? "repasse en partie par le même chemin" : null].filter(Boolean).join(" · "),
       tags: surfaceTags(g, c.edges), lat: g.lat[s.i], lon: g.lon[s.i], fromStartKm: r1(s.d / 1000),
       poly: encodePolyline(thin(pts, 700)), distanceKm: km, gainM: gain, lossM: gl ? Math.round(gl.loss) : null,
       grade: null, maxGrade: z ? maxGradeOf(at, z, 1) : null, trailShare: Math.round(c.trail * 100) / 100,
