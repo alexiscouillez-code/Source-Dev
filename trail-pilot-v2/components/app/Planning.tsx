@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Ctx } from "./AppShell";
-import { api, dayLabel, dayNum, fmtDur, fmtKm, fmtNum, localToday, shortDay, type PlanSession } from "./client";
-import { IconCheck, IconSkip, IconUndo } from "./icons";
+import { api, dayLabel, dayNum, fmtDur, fmtKm, fmtNum, localToday, PRESET_KEY, shortDay, type PlanSession } from "./client";
+import { IconCheck, IconSkip, IconTerrain, IconUndo } from "./icons";
 import { StatusChip } from "./Today";
 import { SessionTarget } from "./Targets";
 import type { Targets } from "./client";
@@ -39,7 +39,12 @@ const PHASE_COLOR: Record<string, string> = {
 };
 const monday = (iso: string) => { const d = new Date(`${iso}T12:00:00Z`); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); return d.toISOString().slice(0, 10); };
 
-export default function Planning({ me, refresh, toast }: Ctx) {
+export default function Planning({ me, refresh, toast, go }: Ctx) {
+  // Ouvre l’onglet Terrains avec les réglages de la séance.
+  const whereTo = (s: Pick<PlanSession, "title" | "date" | "template" | "duration_min" | "gain_m">) => {
+    try { sessionStorage.setItem(PRESET_KEY, JSON.stringify({ title: s.title, date: s.date, template: s.template, durationMin: s.duration_min, gainM: s.gain_m })); } catch { /* stockage indisponible */ }
+    go("terrains");
+  };
   const [v, setV] = useState<View | null>(null);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -71,7 +76,7 @@ export default function Planning({ me, refresh, toast }: Ctx) {
           <section className="card" style={{ marginTop: 14 }}>
             <div className="card-head"><h2>En attendant : entretien</h2><button className="btn ghost sm" onClick={recalc} disabled={busy}>Recalculer</button></div>
             <p className="muted small" style={{ margin: 0 }}>Sans course choisie, Trail Pilot te propose 3 semaines pour garder ta forme, à partir de ce que tu fais en ce moment.</p>
-            <WeekList sessions={v.sessions} weeks={[]} today={me.today} doneByWeek={v.doneByWeek} onStatus={setStatus} targets={me.targets} />
+            <WeekList sessions={v.sessions} weeks={[]} today={me.today} doneByWeek={v.doneByWeek} onStatus={setStatus} targets={me.targets} onWhere={whereTo} />
           </section>
         )}
         {!editing && <SideRaces races={v.races} today={v.today} mainDate={null} toast={toast} onChanged={async () => { await Promise.all([load(), refresh()]); }} />}
@@ -104,7 +109,7 @@ export default function Planning({ me, refresh, toast }: Ctx) {
         </section>
       </div>
       <section className="card" style={{ marginTop: 14, paddingTop: 4 }}>
-        <WeekList sessions={v.sessions} weeks={p.weeks} today={v.today} doneByWeek={v.doneByWeek} onStatus={setStatus} targets={me.targets} />
+        <WeekList sessions={v.sessions} weeks={p.weeks} today={v.today} doneByWeek={v.doneByWeek} onStatus={setStatus} targets={me.targets} onWhere={whereTo} />
       </section>
       <p className="muted small" style={{ marginTop: 12, maxWidth: "75ch" }}>
         Le plan part de ta charge réelle (séances des 4 dernières semaines, fatigue et forme de fond) et se recalcule chaque lundi.
@@ -220,7 +225,7 @@ function WeekChart({ weeks, done, today }: { weeks: PlanWeek[]; done: Record<str
 }
 
 // ---------- Liste des semaines ----------
-function WeekList({ sessions, weeks, today, doneByWeek, onStatus, targets }: { sessions: Session[]; weeks: PlanWeek[]; today: string; doneByWeek: Record<string, number>; onStatus: (s: Session, st: string) => void; targets?: Targets }) {
+function WeekList({ sessions, weeks, today, doneByWeek, onStatus, targets, onWhere }: { sessions: Session[]; weeks: PlanWeek[]; today: string; doneByWeek: Record<string, number>; onStatus: (s: Session, st: string) => void; targets?: Targets; onWhere: (s: Session) => void }) {
   const cur = monday(today);
   const groups = useMemo(() => {
     const m = new Map<string, Session[]>();
@@ -274,7 +279,7 @@ function WeekList({ sessions, weeks, today, doneByWeek, onStatus, targets }: { s
                         <button className="iconbtn" title="Rétablir" aria-label="Rétablir la séance" onClick={() => onStatus(s, "planned")}><IconUndo /></button>
                       )}
                     </div>
-                    {detail === s.id && <div className="details"><SessionTarget targets={targets} template={s.template} rpe={s.rpe_target} /><p style={{ margin: 0 }}>{s.description}</p></div>}
+                    {detail === s.id && <div className="details"><SessionTarget targets={targets} template={s.template} rpe={s.rpe_target} /><p style={{ margin: 0 }}>{s.description}</p>{s.template !== "race" && s.date >= today && <button className="btn ghost sm where" onClick={() => onWhere(s)}><IconTerrain />Où la faire ?</button>}</div>}
                   </li>
                 ))}
               </ul>
