@@ -31,6 +31,9 @@ export async function api<T = unknown>(path: string, init: { method?: string; bo
   return data as T;
 }
 
+/** Séance transmise à l’onglet Terrains (« Où la faire ? »). */
+export const PRESET_KEY = "tp-terrain-preset";
+
 export const SPORT_LABEL: Record<string, string> = { trail: "Trail", course: "Course", rando: "Randonnée", velo: "Vélo", renfo: "Renforcement", autre: "Autre" };
 export const DAYS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"];
 

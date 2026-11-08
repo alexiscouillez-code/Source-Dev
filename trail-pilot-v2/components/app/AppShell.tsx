@@ -2,23 +2,25 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, type Me } from "./client";
-import { IconChart, IconPlan, IconRuns, IconToday, IconUser, Logo } from "./icons";
+import { IconChart, IconPlan, IconRuns, IconTerrain, IconToday, IconUser, Logo } from "./icons";
 import Today from "./Today";
 import Planning from "./Planning";
 import Sessions from "./Sessions";
 import Analysis from "./Analysis";
 import Account from "./Account";
 import XRay from "./XRay";
+import Terrains from "./Terrains";
 import ThemeToggle from "@/components/ThemeToggle";
 import { startCountUps } from "./motion";
 
-export type Tab = "today" | "plan" | "xray" | "runs" | "analysis" | "account";
+export type Tab = "today" | "plan" | "terrains" | "xray" | "runs" | "analysis" | "account";
 const IconXray = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 3.5c-.5 3 .2 5.5 1 8l-.6 5 1.1 4M16 3.5c.5 3-.2 5.5-1 8l.6 5-1.1 4" /><path d="M8.6 7.5h6.8M9.2 12h5.6" /></svg>
 );
 const TABS: { id: Tab; label: string; Icon: () => React.JSX.Element }[] = [
   { id: "today", label: "Aujourd’hui", Icon: IconToday },
   { id: "plan", label: "Planning", Icon: IconPlan },
+  { id: "terrains", label: "Terrains", Icon: IconTerrain },
   { id: "xray", label: "X-Ray", Icon: IconXray },
   { id: "runs", label: "Séances", Icon: IconRuns },
   { id: "analysis", label: "Analyse", Icon: IconChart },
@@ -144,6 +146,7 @@ export default function AppShell({ user }: { user: { name: string | null; email:
             )}
             {tab === "today" && <Today {...ctx} />}
             {tab === "plan" && <Planning {...ctx} />}
+            {tab === "terrains" && <Terrains {...ctx} />}
             {tab === "xray" && <XRay {...ctx} />}
             {tab === "runs" && <Sessions {...ctx} />}
             {tab === "analysis" && <Analysis {...ctx} />}

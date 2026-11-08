@@ -5,7 +5,7 @@ import "leaflet/dist/leaflet.css";
 import { decodePolyline, type LatLon } from "@/lib/polyline";
 
 export interface MapLine { poly: string; id?: number; highlight?: boolean; label?: string }
-export interface MapMarker { at: LatLon; label: string; kind?: "start" | "finish" | "aid" }
+export interface MapMarker { at: LatLon; label: string; kind?: "start" | "finish" | "aid"; id?: number }
 
 const LAYERS = {
   relief: { url: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", max: 17, attr: "Carte © <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a>, SRTM · style © <a href=\"https://opentopomap.org\">OpenTopoMap</a> (CC-BY-SA)" },
@@ -15,8 +15,12 @@ const LAYERS = {
 /** Carte des tracés GPS : sorties ou parcours de course, avec fond relief ou plan. */
 const NO_MARKERS: MapMarker[] = [];
 
-export default function TrackMap({ lines, markers = NO_MARKERS, height = 320, onSelect, label }: {
+export default function TrackMap({ lines, markers = NO_MARKERS, height = 320, onSelect, onPick, fitKey, label }: {
   lines: MapLine[]; markers?: MapMarker[]; height?: number; onSelect?: (id: number) => void; label: string;
+  /** Clic sur la carte (hors tracé) : choisit un point. */
+  onPick?: (lat: number, lon: number) => void;
+  /** Si fourni, la carte ne se recadre que lorsque cette clé change. */
+  fitKey?: string;
 }) {
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<import("leaflet").Map | null>(null);
@@ -25,6 +29,8 @@ export default function TrackMap({ lines, markers = NO_MARKERS, height = 320, on
   const [layer, setLayer] = useState<keyof typeof LAYERS>("relief");
   const [ready, setReady] = useState(false);
   const sel = useRef(onSelect); sel.current = onSelect;
+  const pick = useRef(onPick); pick.current = onPick;
+  const fitted = useRef<string | null>(null);
   const drawn = useRef(false);
 
   // Création de la carte (une fois).
@@ -36,6 +42,7 @@ export default function TrackMap({ lines, markers = NO_MARKERS, height = 320, on
       const m = L.map(el.current, { zoomControl: true, attributionControl: true, scrollWheelZoom: false });
       m.on("focus", () => m.scrollWheelZoom.enable());
       m.on("blur", () => m.scrollWheelZoom.disable());
+      m.on("click", (e) => pick.current?.(e.latlng.lat, e.latlng.lng));
       map.current = m; group.current = L.featureGroup().addTo(m);
       setReady(true);
     })();
@@ -74,17 +81,22 @@ export default function TrackMap({ lines, markers = NO_MARKERS, height = 320, on
         if (pts.length < 2) continue;
         const pl = L.polyline(pts, { color: l.highlight || !many ? ember : "#3b82f6", weight: l.highlight || !many ? 4 : 2.5, opacity: l.highlight || !many ? 0.95 : 0.55, lineJoin: "round" });
         if (l.label) pl.bindTooltip(l.label, { sticky: true });
-        if (l.id != null && sel.current) pl.on("click", () => sel.current?.(l.id!));
+        if (l.id != null && sel.current) pl.on("click", (ev) => { L.DomEvent.stopPropagation(ev); sel.current?.(l.id!); });
         pl.addTo(g);
         drawnLines.push(pl);
       }
       for (const mk of markers) {
         const color = mk.kind === "start" ? "#22c55e" : mk.kind === "finish" ? "#e5383b" : "#f4efe6";
-        dots.push(L.circleMarker(mk.at, { radius: mk.kind === "aid" ? 5 : 6, color: "#0b0f14", weight: 2, fillColor: color, fillOpacity: 1 }).bindTooltip(mk.label).addTo(g));
+        const dot = L.circleMarker(mk.at, { radius: mk.kind === "aid" ? (mk.id != null ? 7 : 5) : 6, color: "#0b0f14", weight: 2, fillColor: color, fillOpacity: 1 }).bindTooltip(mk.label).addTo(g);
+        if (mk.id != null && sel.current) dot.on("click", (ev) => { L.DomEvent.stopPropagation(ev); sel.current?.(mk.id!); });
+        dots.push(dot);
       }
       const b = g.getBounds();
-      if (b.isValid()) map.current!.fitBounds(b, { padding: [18, 18], maxZoom: 15, animate: false });
-      else map.current!.setView([45.9, 6.8], 9);
+      if (fitKey === undefined || fitted.current !== fitKey) {
+        fitted.current = fitKey ?? null;
+        if (b.isValid()) map.current!.fitBounds(b, { padding: [18, 18], maxZoom: 15, animate: !animate });
+        else map.current!.setView([46.6, 2.4], 5);
+      }
       if (animate) {
         // Le tracé n’est mis en place qu’après le recadrage : on mesure à l’image suivante.
         const paths = drawnLines.map((l) => l.getElement() as SVGPathElement | undefined).filter((e): e is SVGPathElement => !!e);
@@ -102,7 +114,7 @@ export default function TrackMap({ lines, markers = NO_MARKERS, height = 320, on
         })));
       }
     })();
-  }, [lines, markers, ready]);
+  }, [lines, markers, ready, fitKey]);
 
   return (
     <div className="tmap" style={{ height }}>

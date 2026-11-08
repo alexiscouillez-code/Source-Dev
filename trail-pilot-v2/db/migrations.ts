@@ -116,4 +116,15 @@ export const MIGRATIONS: { tag: string; statements: string[] }[] = [
       `CREATE INDEX IF NOT EXISTS coach_messages_user ON coach_messages(user_id, at)`,
     ],
   },
+  {
+    tag: "005_terrains",
+    statements: [
+      // Terrains d’entraînement enregistrés (boucles, côtes, pistes…)
+      `CREATE TABLE IF NOT EXISTS terrains (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL, name TEXT NOT NULL, note TEXT, lat REAL NOT NULL, lon REAL NOT NULL, data TEXT NOT NULL,
+        created_at INTEGER NOT NULL)`,
+      `CREATE INDEX IF NOT EXISTS terrains_user ON terrains(user_id, created_at)`,
+    ],
+  },
 ];
