@@ -31,7 +31,7 @@ export function startCountUps(root: HTMLElement) {
     node.nodeValue = last;
     const step = (t: number) => {
       if (node.nodeValue !== last) return; // React a mis la valeur à jour : on s’efface
-      const k = Math.min(1, (t - t0) / dur);
+      const k = Math.max(0, Math.min(1, (t - t0) / dur)); // l’horodatage du rafraîchissement peut précéder t0
       last = k >= 1 ? final! : fmt(target * (1 - Math.pow(1 - k, 3)));
       node.nodeValue = last;
       if (k < 1) requestAnimationFrame(step);

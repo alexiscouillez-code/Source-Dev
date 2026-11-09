@@ -27,7 +27,7 @@ export default function Progress() {
           <div key={m.month} title={`${monthShort(m.month)} : ${fmt(m[metric])}`}>
             <span className="mb-v">{m[metric] ? fmt(m[metric]).replace(" km", "").replace(" m", "") : ""}</span>
             <i key={metric} style={{ ["--h" as string]: `${(m[metric] / max) * 100}%`, ["--d" as string]: `${i * 35}ms` }} />
-            <small>{monthShort(m.month)}</small>
+            <small><span className="mfull">{monthShort(m.month)}</span><span className="m1">{monthShort(m.month).charAt(0).toUpperCase()}</span></small>
           </div>
         ))}
       </div>
