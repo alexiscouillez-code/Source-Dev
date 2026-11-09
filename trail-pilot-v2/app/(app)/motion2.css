@@ -89,14 +89,24 @@
 .vo2-watch b { font-variant-numeric: tabular-nums; }
 
 .tour { position: fixed; inset: 0; z-index: 950; pointer-events: none; }
-.tour::before { content: ""; position: absolute; inset: 0; background: rgba(5, 8, 12, .55); pointer-events: auto; }
-.tour-spot { position: fixed; border-radius: 16px; box-shadow: 0 0 0 2px var(--ember), 0 0 0 9999px rgba(5, 8, 12, .35); transition: left .45s var(--ease), top .45s var(--ease), width .45s var(--ease), height .45s var(--ease); }
-.tour-card { position: fixed; width: 320px; max-width: calc(100vw - 24px); pointer-events: auto; display: grid; gap: 8px; padding: 16px; border-radius: 18px; background: var(--ink-2); border: 1px solid var(--line); box-shadow: 0 30px 80px rgba(0, 0, 0, .5); color: var(--snow); }
-.tour-card b { font-size: 17px; }
-.tour-card p { margin: 0; font-size: 14px; line-height: 1.5; color: var(--soft); }
-.tour-dots { display: flex; gap: 5px; }
-.tour-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--line); transition: background .3s, transform .3s; }
-.tour-dots i.on { background: var(--ember); transform: scale(1.3); }
+.tour::before { content: ""; position: absolute; inset: 0; background: rgba(5, 8, 12, .6); pointer-events: auto; }
+.tour.has-spot::before { background: transparent; }
+/* Le halo est un trou dans le voile : l’onglet reste net et lumineux. */
+.tour-spot { position: fixed; border-radius: 16px; pointer-events: none; box-shadow: 0 0 0 2px var(--ember), 0 0 0 9999px rgba(5, 8, 12, .62); transition: left .4s var(--ease), top .4s var(--ease), width .4s var(--ease), height .4s var(--ease); }
+.tour-card { position: fixed; pointer-events: auto; display: grid; gap: 8px; padding: 16px 16px 14px; border-radius: 18px; background: var(--ink-2); border: 1px solid var(--line); box-shadow: 0 24px 70px rgba(0, 0, 0, .45); color: var(--snow); transition: left .4s var(--ease), top .4s var(--ease); }
+.tour-card::after { content: ""; position: absolute; width: 14px; height: 14px; background: inherit; border: inherit; border-width: 0 0 1px 1px; transform: rotate(45deg); }
+.tour-card.at-below::after { top: -8px; left: calc(var(--arrow) - 7px); transform: rotate(135deg); }
+.tour-card.at-above::after { bottom: -8px; left: calc(var(--arrow) - 7px); transform: rotate(-45deg); }
+.tour-card.at-side::after { left: -8px; top: calc(var(--arrow) - 7px); transform: rotate(45deg); }
+.tour-card .eyebrow { font-size: 10.5px; }
+.tour-card b { font-size: 17px; line-height: 1.25; }
+.tour-card p { margin: 0; font-size: 14px; line-height: 1.5; color: var(--soft); text-wrap: pretty; }
+.tour-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 4px; }
+.tour-btns { display: flex; align-items: center; gap: 14px; }
+.tour-dots { display: flex; gap: 6px; }
+.tour-dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--line); transition: background .3s, transform .3s, width .3s; }
+.tour-dots i.done { background: color-mix(in srgb, var(--ember) 45%, var(--line)); }
+.tour-dots i.on { background: var(--ember); width: 18px; border-radius: 4px; }
 
 .terr-progress { height: 4px; border-radius: 4px; background: var(--line); overflow: hidden; }
 .terr-progress i { display: block; height: 100%; background: linear-gradient(90deg, var(--ember), var(--ember-2, #ffb38a)); border-radius: inherit; transition: width .5s var(--ease); }
@@ -180,11 +190,13 @@
   /* Visite guidée */
   .tour::before { animation: fadein .3s ease both; }
   .tour-card { animation: tour-in .45s cubic-bezier(.2, 1.3, .4, 1) both; }
-  .tour-card.above { animation-name: tour-in-up; }
+  .tour-card.at-above { animation-name: tour-in-up; }
+  .tour-card.at-side { animation-name: tour-in-side; }
   @keyframes tour-in { from { opacity: 0; transform: translateY(-10px) scale(.96); } }
   @keyframes tour-in-up { from { opacity: 0; transform: translateY(10px) scale(.96); } }
-  .tour-spot { animation: spot 1.8s ease-in-out infinite; }
-  @keyframes spot { 50% { box-shadow: 0 0 0 4px var(--ember), 0 0 0 9999px rgba(5, 8, 12, .35); } }
+  @keyframes tour-in-side { from { opacity: 0; transform: translateX(-10px) scale(.96); } }
+  .tour-spot::after { content: ""; position: absolute; inset: -2px; border-radius: inherit; border: 2px solid var(--ember); animation: spot-ring 1.8s ease-out infinite; }
+  @keyframes spot-ring { from { opacity: .8; transform: scale(1); } to { opacity: 0; transform: scale(1.18); } }
 
   /* Micro-interactions */
   .btn, .iconbtn, .seg button, .terr-kinds button { transition: transform .18s var(--ease), background .2s, color .2s, border-color .2s, box-shadow .2s; }
