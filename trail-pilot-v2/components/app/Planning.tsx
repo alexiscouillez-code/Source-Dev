@@ -1,9 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
+import { buzz, withTransition } from "./motion";
+import { downloadWorkout } from "./workout";
 import type { Ctx } from "./AppShell";
 import { api, dayLabel, dayNum, fmtDur, fmtKm, fmtNum, localToday, PRESET_KEY, shortDay, type PlanSession } from "./client";
-import { IconCheck, IconSkip, IconTerrain, IconUndo } from "./icons";
+import { IconCheck, IconSkip, IconTerrain, IconUndo, IconWatch } from "./icons";
 import { StatusChip } from "./Today";
 import { SessionTarget } from "./Targets";
 import type { Targets } from "./client";
@@ -50,7 +53,8 @@ export default function Planning({ me, refresh, toast, go }: Ctx) {
   const [busy, setBusy] = useState(false);
   const [wx, setWx] = useState<WeatherAdjust | null>(null);
 
-  const load = useCallback(async () => { setV(await api<View>("/api/plan")); }, []);
+  // Avec `morph`, la liste se réorganise en transition de vue : chaque séance glisse vers sa nouvelle place.
+  const load = useCallback(async (morph = false) => { const d = await api<View>("/api/plan"); if (morph) withTransition(() => flushSync(() => setV(d))); else setV(d); }, []);
   useEffect(() => { load().catch((e) => toast(e.message)); }, [load, toast]);
 
   async function recalc() {
@@ -60,8 +64,18 @@ export default function Planning({ me, refresh, toast, go }: Ctx) {
     finally { setBusy(false); }
   }
   async function setStatus(s: Session, status: string) {
-    try { await api(`/api/plan/${s.id}`, { method: "PATCH", body: { status } }); await Promise.all([load(), refresh()]); }
+    try { if (status === "done") buzz(18); await api(`/api/plan/${s.id}`, { method: "PATCH", body: { status } }); await Promise.all([load(true), refresh()]); }
     catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }
+  }
+  // Glisser-déposer : la séance prend le jour visé ; celle qui s’y trouvait (si elle est déplaçable) prend l’ancien jour.
+  async function move(a: Session, b: Session) {
+    try {
+      await api(`/api/plan/${a.id}`, { method: "PATCH", body: { date: b.date } });
+      if (movable(b, v!.today)) await api(`/api/plan/${b.id}`, { method: "PATCH", body: { date: a.date } });
+      buzz([10, 40, 10]);
+      await Promise.all([load(true), refresh()]);
+      toast(`${a.title} déplacée au ${dayLabel(b.date, { weekday: "long", day: "numeric", month: "long" })}.`);
+    } catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }
   }
   const saved = async (msg: string) => { setEditing(false); await Promise.all([load(), refresh()]); toast(msg); };
 
@@ -76,7 +90,7 @@ export default function Planning({ me, refresh, toast, go }: Ctx) {
           <section className="card" style={{ marginTop: 14 }}>
             <div className="card-head"><h2>En attendant : entretien</h2><button className="btn ghost sm" onClick={recalc} disabled={busy}>Recalculer</button></div>
             <p className="muted small" style={{ margin: 0 }}>Sans course choisie, Trail Pilot te propose 3 semaines pour garder ta forme, à partir de ce que tu fais en ce moment.</p>
-            <WeekList sessions={v.sessions} weeks={[]} today={me.today} doneByWeek={v.doneByWeek} onStatus={setStatus} targets={me.targets} onWhere={whereTo} />
+            <WeekList sessions={v.sessions} weeks={[]} today={me.today} doneByWeek={v.doneByWeek} onStatus={setStatus} targets={me.targets} onWhere={whereTo} onMove={move} />
           </section>
         )}
         {!editing && <SideRaces races={v.races} today={v.today} mainDate={null} toast={toast} onChanged={async () => { await Promise.all([load(), refresh()]); }} />}
@@ -109,7 +123,7 @@ export default function Planning({ me, refresh, toast, go }: Ctx) {
         </section>
       </div>
       <section className="card" style={{ marginTop: 14, paddingTop: 4 }}>
-        <WeekList sessions={v.sessions} weeks={p.weeks} today={v.today} doneByWeek={v.doneByWeek} onStatus={setStatus} targets={me.targets} onWhere={whereTo} />
+        <WeekList sessions={v.sessions} weeks={p.weeks} today={v.today} doneByWeek={v.doneByWeek} onStatus={setStatus} targets={me.targets} onWhere={whereTo} onMove={move} />
       </section>
       <p className="muted small" style={{ marginTop: 12, maxWidth: "75ch" }}>
         Le plan part de ta charge réelle (séances des 4 dernières semaines, fatigue et forme de fond) et se recalcule chaque lundi.
@@ -225,7 +239,50 @@ function WeekChart({ weeks, done, today }: { weeks: PlanWeek[]; done: Record<str
 }
 
 // ---------- Liste des semaines ----------
-function WeekList({ sessions, weeks, today, doneByWeek, onStatus, targets, onWhere }: { sessions: Session[]; weeks: PlanWeek[]; today: string; doneByWeek: Record<string, number>; onStatus: (s: Session, st: string) => void; targets?: Targets; onWhere: (s: Session) => void }) {
+const movable = (s: Session, today: string) => s.template !== "race" && s.date >= today && (s.status === "planned" || s.status === "adapted");
+
+/** Maintenir une séance (ou la saisir à la souris) puis la lâcher sur un autre jour. */
+function useDragMove(sessions: Session[], today: string, onMove: (a: Session, b: Session) => void) {
+  const st = useRef<{ s: Session; li: HTMLElement; ghost: HTMLElement | null; x0: number; y0: number; timer: number; target: HTMLElement | null } | null>(null);
+  useEffect(() => () => { if (st.current) { clearTimeout(st.current.timer); st.current.ghost?.remove(); } }, []);
+  return (s: Session) => (e: React.PointerEvent<HTMLElement>) => {
+    if (!movable(s, today) || e.button > 0) return;
+    const li = (e.currentTarget as HTMLElement).closest("li") as HTMLElement;
+    const cleanup = () => {
+      const c = st.current; if (!c) return;
+      clearTimeout(c.timer); c.li.classList.remove("drag-src"); c.target?.classList.remove("drop-on");
+      if (c.ghost) { const g = c.ghost; g.classList.add("drag-drop"); setTimeout(() => g.remove(), 260); }
+      st.current = null;
+      window.removeEventListener("pointermove", onMoveEv); window.removeEventListener("pointerup", onUp); window.removeEventListener("pointercancel", cleanup);
+    };
+    const begin = () => {
+      const c = st.current; if (!c) return;
+      const r = c.li.getBoundingClientRect(), g = c.li.cloneNode(true) as HTMLElement;
+      g.classList.add("drag-ghost"); g.removeAttribute("data-sid"); Object.assign(g.style, { viewTransitionName: "none",  left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px` });
+      document.body.appendChild(g); c.ghost = g; c.li.classList.add("drag-src"); buzz(10);
+    };
+    const onMoveEv = (ev: PointerEvent) => {
+      const c = st.current; if (!c) return;
+      if (!c.ghost) { if (Math.hypot(ev.clientX - c.x0, ev.clientY - c.y0) > 8) cleanup(); return; }
+      ev.preventDefault();
+      c.ghost.style.transform = `translate(${(ev.clientX - c.x0) * 0.15}px, ${ev.clientY - c.y0}px) rotate(-1.5deg) scale(1.03)`;
+      const over = (document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null)?.closest<HTMLElement>("li[data-sid]") ?? null;
+      const ok = over && over !== c.li && over.dataset.date! >= today ? over : null;
+      if (ok !== c.target) { c.target?.classList.remove("drop-on"); ok?.classList.add("drop-on"); c.target = ok; if (ok) buzz(6); }
+    };
+    const onUp = () => {
+      const c = st.current; if (!c) return;
+      const tgt = c.target ? sessions.find((x) => String(x.id) === c.target!.dataset.sid) : null;
+      cleanup();
+      if (tgt && tgt.date !== s.date) onMove(s, tgt);
+    };
+    st.current = { s, li, ghost: null, x0: e.clientX, y0: e.clientY, timer: window.setTimeout(begin, e.pointerType === "mouse" ? 150 : 380), target: null };
+    window.addEventListener("pointermove", onMoveEv, { passive: false }); window.addEventListener("pointerup", onUp); window.addEventListener("pointercancel", cleanup);
+  };
+}
+
+function WeekList({ sessions, weeks, today, doneByWeek, onStatus, targets, onWhere, onMove }: { sessions: Session[]; weeks: PlanWeek[]; today: string; doneByWeek: Record<string, number>; onStatus: (s: Session, st: string) => void; targets?: Targets; onWhere: (s: Session) => void; onMove: (a: Session, b: Session) => void }) {
+  const drag = useDragMove(sessions, today, onMove);
   const cur = monday(today);
   const groups = useMemo(() => {
     const m = new Map<string, Session[]>();
@@ -235,6 +292,7 @@ function WeekList({ sessions, weeks, today, doneByWeek, onStatus, targets, onWhe
   const [open, setOpen] = useState<Set<string>>(() => new Set([cur, groups.find(([k]) => k > cur)?.[0] ?? ""]));
   const [detail, setDetail] = useState<number | null>(null);
   const toggle = (k: string) => setOpen((o) => { const n = new Set(o); if (n.has(k)) n.delete(k); else n.add(k); return n; });
+  const openDetail = (id: number) => withTransition(() => flushSync(() => setDetail(detail === id ? null : id)));
 
   return (
     <div>
@@ -244,8 +302,12 @@ function WeekList({ sessions, weeks, today, doneByWeek, onStatus, targets, onWhe
         const gain = meta?.gainM ?? list.reduce((t, s) => t + (s.gain_m ?? 0), 0);
         const isOpen = open.has(wk);
         const n = weeks.findIndex((w) => w.monday === wk);
+        // Avancement de la semaine : séances faites sur séances prévues (hors courses et séances sautées).
+        const counted = list.filter((s) => s.template !== "race" && s.status !== "skipped");
+        const done = counted.filter((s) => s.status === "done").length;
+        const complete = counted.length > 0 && done === counted.length;
         return (
-          <div key={wk} className={`wk ${wk === cur ? "is-cur" : ""} ${wk < cur ? "is-past" : ""}`}>
+          <div key={wk} className={`wk ${wk === cur ? "is-cur" : ""} ${wk < cur ? "is-past" : ""} ${complete ? "is-complete" : ""}`}>
             <button className="week-head" onClick={() => toggle(wk)} aria-expanded={isOpen}>
               <span className="wk-dot" style={{ background: PHASE_COLOR[meta?.phase ?? list[0].phase] ?? "var(--chart-bar-2)" }} />
               <span style={{ minWidth: 0 }}>
@@ -254,13 +316,19 @@ function WeekList({ sessions, weeks, today, doneByWeek, onStatus, targets, onWhe
               </span>
               <span className="small mono muted wk-sum">{fmtDur(minutes)}{gain ? ` · ${fmtNum(gain)} m` : ""}{doneByWeek[wk] ? ` · fait ${fmtDur(doneByWeek[wk])}` : ""}</span>
               <span className={`chev ${isOpen ? "on" : ""}`} aria-hidden="true">›</span>
+              {counted.length > 0 && wk <= cur && (
+                <span className="wk-prog" role="img" aria-label={`${done} séance${done > 1 ? "s" : ""} faite${done > 1 ? "s" : ""} sur ${counted.length}`}>
+                  <i style={{ ["--p" as string]: done / counted.length }} />
+                  {complete && <span className="wk-done">Semaine bouclée<span className="burst" aria-hidden="true">{Array.from({ length: 8 }, (_, k) => <i key={k} style={{ ["--a" as string]: `${k * 45}deg` }} />)}</span></span>}
+                </span>
+              )}
             </button>
             {isOpen && (
               <ul className="list">
                 {list.map((s) => (
-                  <li key={s.id} className={`item ${s.date === today ? "today" : ""} is-${s.status} ${s.template === "race" ? "is-race" : ""}`}>
-                    <div className="date"><small>{shortDay(s.date)}</small><b>{dayNum(s.date)}</b></div>
-                    <button onClick={() => setDetail(detail === s.id ? null : s.id)} style={{ all: "unset", cursor: "pointer", minWidth: 0 }} aria-expanded={detail === s.id}>
+                  <li key={s.id} data-sid={s.id} data-date={s.date} style={{ viewTransitionName: `sess-${s.id}` }} className={`item ${s.date === today ? "today" : ""} is-${s.status} ${s.template === "race" ? "is-race" : ""} ${movable(s, today) ? "is-movable" : ""}`}>
+                    <div className="date" onPointerDown={drag(s)} title={movable(s, today) ? "Maintiens pour déplacer la séance" : undefined}><small>{shortDay(s.date)}</small><b>{dayNum(s.date)}</b></div>
+                    <button onClick={() => openDetail(s.id)} style={{ all: "unset", cursor: "pointer", minWidth: 0 }} aria-expanded={detail === s.id}>
                       <div className="t">{s.template === "race" ? "⚑ " : ""}{s.title}</div>
                       <div className="s">
                         {fmtDur(s.duration_min)}{s.gain_m ? ` · ${fmtNum(s.gain_m)} m D+` : ""}{s.template !== "race" ? ` · effort ${s.rpe_target}/10` : ""}
@@ -279,7 +347,7 @@ function WeekList({ sessions, weeks, today, doneByWeek, onStatus, targets, onWhe
                         <button className="iconbtn" title="Rétablir" aria-label="Rétablir la séance" onClick={() => onStatus(s, "planned")}><IconUndo /></button>
                       )}
                     </div>
-                    {detail === s.id && <div className="details"><SessionTarget targets={targets} template={s.template} rpe={s.rpe_target} /><p style={{ margin: 0 }}>{s.description}</p>{s.template !== "race" && s.date >= today && <button className="btn ghost sm where" onClick={() => onWhere(s)}><IconTerrain />Où la faire ?</button>}</div>}
+                    {detail === s.id && <div className="details"><SessionTarget targets={targets} template={s.template} rpe={s.rpe_target} /><p style={{ margin: 0 }}>{s.description}</p>{s.template !== "race" && s.date >= today && <div className="row" style={{ gap: 8 }}><button className="btn ghost sm where" onClick={() => onWhere(s)}><IconTerrain />Où la faire ?</button>{s.template !== "strength" && <button className="btn ghost sm where" onClick={() => downloadWorkout(s, targets)}><IconWatch />Sur ma montre</button>}</div>}</div>}
                   </li>
                 ))}
               </ul>

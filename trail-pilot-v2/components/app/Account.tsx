@@ -51,12 +51,12 @@ function RaceCard({ me, go }: Pick<Ctx, "me" | "go">) {
 
 function ProfileCard({ me, refresh, toast }: P) {
   const p = me.profile;
-  const [f, setF] = useState({ name: me.user.name ?? "", level: p.level, daysPerWeek: p.days_per_week, longDay: p.long_day, maxWeeklyMinutes: p.max_weekly_minutes?.toString() ?? "", hrMax: p.hr_max?.toString() ?? "", hrRest: p.hr_rest?.toString() ?? "" });
+  const [f, setF] = useState({ name: me.user.name ?? "", level: p.level, daysPerWeek: p.days_per_week, longDay: p.long_day, maxWeeklyMinutes: p.max_weekly_minutes?.toString() ?? "", hrMax: p.hr_max?.toString() ?? "", hrRest: p.hr_rest?.toString() ?? "", vo2Watch: p.vo2_watch?.toString().replace(".", ",") ?? "" });
   const { busy, err, run } = useSubmit(toast);
   return (
     <section className="card">
       <div className="card-head"><h2>Profil d’entraînement</h2></div>
-      <form className="form" onSubmit={(e) => { e.preventDefault(); run(async () => { await api("/api/profile", { method: "PUT", body: f }); await refresh(); }, "Profil enregistré, planning recalculé."); }}>
+      <form className="form" onSubmit={(e) => { e.preventDefault(); run(async () => { await api("/api/profile", { method: "PUT", body: { ...f, vo2Watch: f.vo2Watch.replace(",", ".") } }); await refresh(); }, "Profil enregistré, planning recalculé."); }}>
         <div className="fields">
           <label className="field">Prénom<input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} maxLength={80} /></label>
           <label className="field">Niveau
@@ -72,6 +72,7 @@ function ProfileCard({ me, refresh, toast }: P) {
           </label>
           <label className="field">FC max<input inputMode="numeric" value={f.hrMax} onChange={(e) => setF({ ...f, hrMax: e.target.value })} placeholder="188" /><small>Pour estimer l’effort sans ressenti</small></label>
           <label className="field">FC repos<input inputMode="numeric" value={f.hrRest} onChange={(e) => setF({ ...f, hrRest: e.target.value })} placeholder="50" /></label>
+          <label className="field">VO2max de ta montre<input inputMode="decimal" value={f.vo2Watch} onChange={(e) => setF({ ...f, vo2Watch: e.target.value })} placeholder="Facultatif" /><small>Si renseignée, elle sert à calculer tes allures</small></label>
         </div>
         <label className="field">Temps max par semaine (min)<input inputMode="numeric" value={f.maxWeeklyMinutes} onChange={(e) => setF({ ...f, maxWeeklyMinutes: e.target.value })} placeholder="Sans limite" /></label>
         {err && <p className="note err">{err}</p>}

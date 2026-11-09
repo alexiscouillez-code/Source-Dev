@@ -111,3 +111,16 @@ export function simplifyProfile(points: RoutePoint[]): RoutePoint[] {
   if (out[out.length - 1][0] !== last[0]) out.push([Math.round(last[0] * 1000) / 1000, Math.round(last[1])]);
   return out;
 }
+
+/** Heure de passage estimée (min, fourchette) à un kilomètre donné, interpolée dans les sections. */
+export function passageAt(strat: Strategy, km: number) {
+  let t0 = { low: 0, high: 0 }, k0 = 0;
+  for (const sec of strat.sections) {
+    if (km <= sec.to) {
+      const f = sec.to > k0 ? (km - k0) / (sec.to - k0) : 1;
+      return { low: t0.low + (sec.arrival.low - t0.low) * f, high: t0.high + (sec.arrival.high - t0.high) * f };
+    }
+    t0 = sec.arrival; k0 = sec.to;
+  }
+  return t0;
+}

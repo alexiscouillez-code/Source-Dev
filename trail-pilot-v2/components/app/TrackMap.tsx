@@ -15,12 +15,16 @@ const LAYERS = {
 /** Carte des tracés GPS : sorties ou parcours de course, avec fond relief ou plan. */
 const NO_MARKERS: MapMarker[] = [];
 
-export default function TrackMap({ lines, markers = NO_MARKERS, height = 320, onSelect, onPick, fitKey, label }: {
+export default function TrackMap({ lines, markers = NO_MARKERS, height = 320, onSelect, onPick, fitKey, focus, hover, label }: {
   lines: MapLine[]; markers?: MapMarker[]; height?: number; onSelect?: (id: number) => void; label: string;
   /** Clic sur la carte (hors tracé) : choisit un point. */
   onPick?: (lat: number, lon: number) => void;
   /** Si fourni, la carte ne se recadre que lorsque cette clé change. */
   fitKey?: string;
+  /** Tracé (id) vers lequel la carte « vole » quand il change. */
+  focus?: number | null;
+  /** Point mis en évidence (survol du profil d’altitude). */
+  hover?: LatLon | null;
 }) {
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<import("leaflet").Map | null>(null);
@@ -31,6 +35,8 @@ export default function TrackMap({ lines, markers = NO_MARKERS, height = 320, on
   const sel = useRef(onSelect); sel.current = onSelect;
   const pick = useRef(onPick); pick.current = onPick;
   const fitted = useRef<string | null>(null);
+  const focused = useRef<number | null | undefined>(undefined);
+  const hoverDot = useRef<import("leaflet").CircleMarker | null>(null);
   const drawn = useRef(false);
 
   // Création de la carte (une fois).
@@ -79,7 +85,8 @@ export default function TrackMap({ lines, markers = NO_MARKERS, height = 320, on
         let pts: LatLon[] = [];
         try { pts = decodePolyline(l.poly); } catch { continue; }
         if (pts.length < 2) continue;
-        const pl = L.polyline(pts, { color: l.highlight || !many ? ember : "#3b82f6", weight: l.highlight || !many ? 4 : 2.5, opacity: l.highlight || !many ? 0.95 : 0.55, lineJoin: "round" });
+        const pl = L.polyline(pts, { color: l.highlight || !many ? ember : "#3b82f6", weight: l.highlight || !many ? 4 : 2.5, opacity: l.highlight || !many ? 0.95 : 0.55, lineJoin: "round", className: l.highlight && many ? "tm-sel" : undefined });
+        (pl as unknown as { _tpId?: number })._tpId = l.id;
         if (l.label) pl.bindTooltip(l.label, { sticky: true });
         if (l.id != null && sel.current) pl.on("click", (ev) => { L.DomEvent.stopPropagation(ev); sel.current?.(l.id!); });
         pl.addTo(g);
@@ -92,7 +99,14 @@ export default function TrackMap({ lines, markers = NO_MARKERS, height = 320, on
         dots.push(dot);
       }
       const b = g.getBounds();
-      if (fitKey === undefined || fitted.current !== fitKey) {
+      const refit = fitKey === undefined || fitted.current !== fitKey;
+      // La carte vole vers le tracé choisi (sans recadrage complet).
+      if (!refit && focus != null && focus !== focused.current && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        const target = drawnLines.find((x) => (x as unknown as { _tpId?: number })._tpId === focus);
+        if (target) map.current!.flyToBounds(target.getBounds(), { padding: [30, 30], maxZoom: 16, duration: 0.9 });
+      }
+      focused.current = focus;
+      if (refit) {
         fitted.current = fitKey ?? null;
         if (b.isValid()) map.current!.fitBounds(b, { padding: [18, 18], maxZoom: 15, animate: !animate });
         else map.current!.setView([46.6, 2.4], 5);
@@ -114,7 +128,18 @@ export default function TrackMap({ lines, markers = NO_MARKERS, height = 320, on
         })));
       }
     })();
-  }, [lines, markers, ready, fitKey]);
+  }, [lines, markers, ready, fitKey, focus]);
+
+  // Point lié au survol du profil d’altitude.
+  useEffect(() => {
+    if (!ready) return;
+    (async () => {
+      const L = (await import("leaflet")).default;
+      if (!hover) { hoverDot.current?.remove(); hoverDot.current = null; return; }
+      if (!hoverDot.current) hoverDot.current = L.circleMarker(hover, { radius: 7, color: "#fff", weight: 3, fillColor: "#ff6a2b", fillOpacity: 1, className: "tm-hover" }).addTo(map.current!);
+      else hoverDot.current.setLatLng(hover);
+    })();
+  }, [hover, ready]);
 
   return (
     <div className="tmap" style={{ height }}>

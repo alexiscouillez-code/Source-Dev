@@ -6,8 +6,8 @@ export function Logo() {
     <Link className="logo" href="/" aria-label="Trail Pilot, accueil">
       <svg viewBox="0 0 512 512" aria-hidden="true">
         <rect width="512" height="512" rx="112" fill="#1b2631" />
-        <path d="M96 372 C170 360 196 300 236 300 C280 300 280 222 320 196" fill="none" stroke="#ff6a2b" strokeWidth="30" strokeLinecap="round" />
-        <circle cx="320" cy="196" r="30" fill="#f4efe6" />
+        <path className="logo-trail" pathLength={1} d="M96 372 C170 360 196 300 236 300 C280 300 280 222 320 196" fill="none" stroke="#ff6a2b" strokeWidth="30" strokeLinecap="round" />
+        <circle className="logo-dot" cx="320" cy="196" r="30" fill="#f4efe6" />
       </svg>
       <span>TRAIL PILOT</span>
     </Link>

@@ -7,6 +7,7 @@ import { SessionTarget } from "./Targets";
 import { ZONES } from "@/lib/engine/legs";
 import Onboarding from "./Onboarding";
 import Coach from "./Coach";
+import WeekCard from "./WeekCard";
 import { api, dayLabel, dayNum, fmtDur, fmtKm, fmtNum, shortDay, SPORT_LABEL, VERDICT, type Me, type PlanSession } from "./client";
 
 export default function Today({ me, refresh, go, toast }: Ctx) {
@@ -67,6 +68,13 @@ export default function Today({ me, refresh, go, toast }: Ctx) {
         </section>
       </div>
 
+      {me.goal?.daysToGoal === 0 && (
+        <div className="banner raceday-banner" style={{ marginTop: 14 }}>
+          <div><b>C’est le jour J</b><div className="small muted">Ouvre le mode jour de course : chrono, prochain ravito, rappels pour manger et boire.</div></div>
+          <button className="btn sm" onClick={() => go("plan")}>Mode jour de course</button>
+        </div>
+      )}
+      <WeekCard today={me.today} toast={toast} />
       <div className="grid g4" style={{ marginTop: 14 }}>
         <Kpi label="Forme de fond" value={fmtNum(me.load.ctl)} hint="Charge moyenne sur 6 semaines" info={EXPLAIN.ctl} />
         <Kpi label="Fatigue" value={fmtNum(me.load.atl)} hint="Charge moyenne sur 7 jours" info={EXPLAIN.atl} />
@@ -120,7 +128,7 @@ export function StatusChip({ status }: { status: string }) {
     planned: ["Prévu", ""], adapted: ["Adapté", "lite"], done: ["Fait", "ok"], skipped: ["Sautée", "dim"], missed: ["Manquée", "dim"],
   };
   const [label, cls] = map[status] ?? [status, ""];
-  return <span className={`chip ${cls}`}>{label}</span>;
+  return <span className={`chip ${cls}`}>{status === "done" && <svg className="tick" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3.2 3L13 4.5" pathLength={1} /></svg>}{label}</span>;
 }
 
 export function SessionBlock({ s, targets }: { s: PlanSession; targets?: Me["targets"] }) {
@@ -148,11 +156,28 @@ function DecisionCard({ me, onEdit }: { me: Me; onEdit: () => void }) {
   return (
     <section className="card verdict" style={{ ["--accent" as string]: v.color }} aria-live="polite">
       <div className="row between"><span className="eyebrow">Décision pour demain</span><button className="link small" onClick={onEdit}>Modifier mon check-in</button></div>
-      <div className="verdict-big">{v.label}</div>
+      <div className="verdict-row">
+        <div className="verdict-big verdict-stamp" key={d.verdict}>{v.label}</div>
+        <FormGauge score={d.score} />
+      </div>
       <div className="meter" role="img" aria-label={`Forme ressentie ${d.score} sur 100`}><i style={{ width: `${d.score}%` }} /></div>
       <p style={{ margin: 0, fontSize: 18 }}>{v.line}</p>
       <ul className="reasons">{d.reasons.map((r) => <li key={r}>{r}</li>)}</ul>
     </section>
+  );
+}
+
+/** Jauge de forme : l’arc se remplit jusqu’au score du check-in. */
+function FormGauge({ score }: { score: number }) {
+  const r = 34, c = Math.PI * r; // demi-cercle
+  return (
+    <div className="gauge" role="img" aria-label={`Forme du jour ${score} sur 100`}>
+      <svg viewBox="0 0 84 48" aria-hidden="true">
+        <path d="M8 44 A34 34 0 0 1 76 44" className="g-bg" />
+        <path d="M8 44 A34 34 0 0 1 76 44" className="g-val" style={{ strokeDasharray: c, ["--off" as string]: `${c * (1 - score / 100)}`, strokeDashoffset: c * (1 - score / 100) }} />
+      </svg>
+      <b className="num-up">{score}</b><small>forme</small>
+    </div>
   );
 }
 

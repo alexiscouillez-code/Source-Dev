@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { motionOk } from "./motion";
+import RaceDay from "./RaceDay";
 import dynamic from "next/dynamic";
 import { api, fmtDur, fmtKm, fmtNum } from "./client";
-import { buildStrategy, type RaceRoute, type WeatherAdjust } from "@/lib/engine/strategy";
+import { buildStrategy, passageAt, type RaceRoute, type Strategy, type WeatherAdjust } from "@/lib/engine/strategy";
 import { decodePolyline } from "@/lib/polyline";
 import type { MapMarker } from "./TrackMap";
 
@@ -20,6 +22,7 @@ export default function RaceStrategy({ route, estimate, onChanged, toast, weathe
   const [busy, setBusy] = useState(false);
   const [editAid, setEditAid] = useState(false);
   const [aidText, setAidText] = useState("");
+  const [raceDay, setRaceDay] = useState(false);
   const strat = useMemo(() => (route ? buildStrategy(route, estimate, weather) : null), [route, estimate, weather]);
   const map = useMemo(() => {
     if (!route?.line) return null;
@@ -92,6 +95,7 @@ export default function RaceStrategy({ route, estimate, onChanged, toast, weathe
           <span className="p">Nutrition : repères usuels en endurance (<em>{strat.perHour.carbs[0]}-{strat.perHour.carbs[1]} g de glucides</em>, <em>{strat.perHour.water[0]}-{strat.perHour.water[1]} ml d’eau</em> et {strat.perHour.sodium[0]}-{strat.perHour.sodium[1]} mg de sodium par heure). À tester à l’entraînement et à ajuster selon la chaleur.</span>
         </InfoTip></h2>
         <div className="row" style={{ gap: 6 }}>
+          <button className="btn sm" onClick={() => setRaceDay(true)}>Mode jour de course</button>
           {input}
           <button className="btn ghost sm" disabled={busy} onClick={() => { setEditAid(!editAid); setAidText(route.aid.map((a) => `${String(a.km).replace(".", ",")}${a.name ? ` ${a.name}` : ""}`).join("; ")); }}>Ravitos</button>
           <button className="btn ghost sm" disabled={busy} onClick={() => fileRef.current?.click()}>Changer de tracé</button>
@@ -101,7 +105,7 @@ export default function RaceStrategy({ route, estimate, onChanged, toast, weathe
 
       {map && <TrackMap lines={map.lines} markers={map.markers} height={320} label={`Carte du parcours : ${fmtKm(route.distanceKm)} km`} />}
       {!map && <p className="muted small" style={{ margin: 0 }}>Réimporte le GPX du parcours pour voir le tracé sur la carte.</p>}
-      <Profile route={route} aid={aidKms} />
+      <Profile route={route} aid={aidKms} strat={strat} />
 
       {editAid && (
         <form className="aid-form" onSubmit={saveAid}>
@@ -131,12 +135,17 @@ export default function RaceStrategy({ route, estimate, onChanged, toast, weathe
           </div>
         ))}
       </div>
+      {raceDay && <RaceDay route={route} strat={strat} onClose={() => setRaceDay(false)} />}
       <p className="muted small" style={{ margin: 0 }}>Un gel ou une barre apporte en général 20 à 30 g de glucides. Teste ta stratégie lors de ta sortie test et de tes sorties longues : rien de nouveau le jour J.</p>
     </section>
   );
 }
 
-function Profile({ route, aid }: { route: RaceRoute; aid: number[] }) {
+/**
+ * Profil de la course. Un petit coureur le parcourt à l’ouverture ; en survolant ou en faisant glisser le doigt,
+ * il indique l’altitude, l’heure de passage estimée et le prochain ravitaillement.
+ */
+function Profile({ route, aid, strat }: { route: RaceRoute; aid: number[]; strat: Strategy }) {
   const W = 720, H = 170, P = { l: 36, r: 8, t: 12, b: 22 };
   const pts = route.points;
   const max = Math.max(...pts.map((p) => p[1])), min = Math.min(...pts.map((p) => p[1]));
@@ -145,15 +154,69 @@ function Profile({ route, aid }: { route: RaceRoute; aid: number[] }) {
   const y = (e: number) => P.t + (1 - (e - lo) / Math.max(1, hi - lo)) * (H - P.t - P.b);
   const step = Math.max(1, Math.floor(pts.length / 900));
   const line = pts.filter((_, i) => i % step === 0 || i === pts.length - 1).map((p, i) => `${i ? "L" : "M"}${x(p[0]).toFixed(1)} ${y(p[1]).toFixed(1)}`).join(" ");
-  const ele = (k: number) => { let best = pts[0]; for (const p of pts) { if (Math.abs(p[0] - k) < Math.abs(best[0] - k)) best = p; } return best[1]; };
+  const ele = (k: number) => {
+    let i = pts.findIndex((p) => p[0] >= k);
+    if (i <= 0) return pts[Math.max(0, i)][1];
+    const a = pts[i - 1], b = pts[i], f = b[0] > a[0] ? (k - a[0]) / (b[0] - a[0]) : 0;
+    return a[1] + (b[1] - a[1]) * f;
+  };
   const kmTicks = Array.from({ length: 6 }, (_, i) => Math.round((route.distanceKm * i) / 5));
+  const svg = useRef<SVGSVGElement>(null);
+  const [km, setKm] = useState<number | null>(null);
+  const [intro, setIntro] = useState(false);
+  // Le coureur parcourt le profil une fois à l’ouverture.
+  useEffect(() => {
+    if (!motionOk()) return;
+    let raf = 0, t0 = 0;
+    const io = new IntersectionObserver(([e]) => {
+      if (!e.isIntersecting) return;
+      io.disconnect(); setIntro(true);
+      const tick = (t: number) => {
+        t0 ||= t;
+        const k = Math.min(1, (t - t0) / 2600), eased = 1 - Math.pow(1 - k, 2.2);
+        setKm(eased * route.distanceKm);
+        if (k < 1) raf = requestAnimationFrame(tick); else { setTimeout(() => { setKm(null); setIntro(false); }, 700); }
+      };
+      raf = requestAnimationFrame(tick);
+    }, { threshold: 0.6 });
+    if (svg.current) io.observe(svg.current);
+    return () => { io.disconnect(); cancelAnimationFrame(raf); };
+  }, [route.distanceKm]);
+  const pick = (e: React.PointerEvent<SVGSVGElement>) => {
+    const r = svg.current!.getBoundingClientRect();
+    const px = ((e.clientX - r.left) / r.width) * W;
+    setIntro(false);
+    setKm(Math.max(0, Math.min(route.distanceKm, ((px - P.l) / (W - P.l - P.r)) * route.distanceKm)));
+  };
+  const info = km == null ? null : (() => {
+    const t = passageAt(strat, km), next = route.aid.find((a) => a.km > km + 0.05);
+    return { e: ele(km), t, next };
+  })();
+  const fmtKmDec = (k: number) => String(Math.round(k * 10) / 10).replace(".", ",");
   return (
-    <svg className="chart profile" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Profil de la course : ${fmtKm(route.distanceKm)} km, ${fmtNum(route.gainM)} m de D+`}>
-      {[lo, (lo + hi) / 2, hi].map((t) => <g key={t}><line x1={P.l} x2={W - P.r} y1={y(t)} y2={y(t)} style={{ stroke: "var(--line)" }} /><text x={P.l - 6} y={y(t) + 3} textAnchor="end">{Math.round(t)}</text></g>)}
-      <path d={`${line} L${x(route.distanceKm)} ${H - P.b} L${x(0)} ${H - P.b} Z`} style={{ fill: "color-mix(in srgb, var(--ember) 16%, transparent)" }} />
-      <path d={line} fill="none" style={{ stroke: "var(--ember)" }} strokeWidth={1.8} strokeLinejoin="round" />
-      {aid.map((k) => <g key={k}><line x1={x(k)} x2={x(k)} y1={y(ele(k))} y2={H - P.b} style={{ stroke: "var(--snow)" }} strokeDasharray="2 3" /><circle cx={x(k)} cy={y(ele(k))} r={3.5} style={{ fill: "var(--snow)" }} /></g>)}
-      {kmTicks.map((k, i) => <text key={i} x={x(k)} y={H - 6} textAnchor={i === 0 ? "start" : i === 5 ? "end" : "middle"}>{k} km</text>)}
-    </svg>
+    <div className="profile-wrap">
+      <svg ref={svg} className="chart profile" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Profil de la course : ${fmtKm(route.distanceKm)} km, ${fmtNum(route.gainM)} m de D+`}
+        onPointerMove={pick} onPointerDown={pick} onPointerLeave={() => { if (!intro) setKm(null); }} style={{ touchAction: "pan-y" }}>
+        {[lo, (lo + hi) / 2, hi].map((t) => <g key={t}><line x1={P.l} x2={W - P.r} y1={y(t)} y2={y(t)} style={{ stroke: "var(--line)" }} /><text x={P.l - 6} y={y(t) + 3} textAnchor="end">{Math.round(t)}</text></g>)}
+        <path d={`${line} L${x(route.distanceKm)} ${H - P.b} L${x(0)} ${H - P.b} Z`} style={{ fill: "color-mix(in srgb, var(--ember) 16%, transparent)" }} />
+        <path d={line} fill="none" className="profile-line" style={{ stroke: "var(--ember)" }} strokeWidth={1.8} strokeLinejoin="round" pathLength={1} />
+        {aid.map((k) => <g key={k}><line x1={x(k)} x2={x(k)} y1={y(ele(k))} y2={H - P.b} style={{ stroke: "var(--snow)" }} strokeDasharray="2 3" /><circle cx={x(k)} cy={y(ele(k))} r={3.5} style={{ fill: "var(--snow)" }} /></g>)}
+        {kmTicks.map((k, i) => <text key={i} x={x(k)} y={H - 6} textAnchor={i === 0 ? "start" : i === 5 ? "end" : "middle"}>{k} km</text>)}
+        {km != null && info && (
+          <g className="runner" style={{ transform: `translate(${x(km)}px, ${y(info.e)}px)` }}>
+            <line x1={0} x2={0} y1={0} y2={H - P.b - y(info.e)} className="runner-stem" />
+            <circle r={9} className="runner-halo" />
+            <circle r={4.5} className="runner-dot" />
+          </g>
+        )}
+      </svg>
+      <div className={`profile-tip ${info ? "on" : ""}`} aria-live="polite">
+        {info ? <>
+          <b>km {fmtKmDec(km!)}</b><span>{fmtNum(Math.round(info.e))} m</span>
+          <span>passage {fmtDur(Math.round(info.t.low))}–{fmtDur(Math.round(info.t.high))}</span>
+          <span>{info.next ? `${info.next.name || "ravito"} dans ${fmtKmDec(info.next.km - km!)} km` : `arrivée dans ${fmtKmDec(route.distanceKm - km!)} km`}</span>
+        </> : <span className="muted">Glisse le long du profil pour voir altitude, passage et prochain ravito.</span>}
+      </div>
+    </div>
   );
 }

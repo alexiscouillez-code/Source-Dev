@@ -13,6 +13,7 @@ export const IconSync = () => <svg {...p}><path d="M20 11a8 8 0 00-14.5-4.5L4 8M
 export const IconPin = () => <svg {...p}><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0113 0c0 5.4-6.5 11-6.5 11z" /><circle cx="12" cy="10" r="2.4" /></svg>;
 export const IconCal = () => <svg {...p}><rect x="3.5" y="5" width="17" height="15" rx="3" /><path d="M3.5 10h17M8 3v4M16 3v4M8 14h3" /></svg>;
 export const IconTerrain = () => <svg {...p}><path d="M2.5 19.5l6.5-12 4.2 7.4 2.3-3.6 6 8.2z" /><path d="M7.2 11l1.8 1.6 1.7-1.4" /><circle cx="17.5" cy="5.5" r="1.8" /></svg>;
+export const IconWatch = () => <svg {...p}><rect x="6.5" y="6" width="11" height="12" rx="3" /><path d="M9 6l.6-3h4.8L15 6M9 18l.6 3h4.8L15 18M12 9.5V12l1.6 1.2" /></svg>;
 export const IconChat = () => <svg {...p}><path d="M4 5.5h16v10H9l-5 4z" /><path d="M8 10h8" /></svg>;
 export const Logo = () => (
   <svg viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="112" fill="#1b2631" /><path d="M96 372 C170 360 196 300 236 300 C280 300 280 222 320 196" fill="none" stroke="#ff6a2b" strokeWidth="30" strokeLinecap="round" /><circle cx="320" cy="196" r="30" fill="#f4efe6" /></svg>

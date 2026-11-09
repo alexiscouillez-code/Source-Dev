@@ -1,9 +1,9 @@
 /* Trail Pilot : mode hors ligne et notifications (rappel du check-in du soir). */
-const VERSION = "tp-5";
+const VERSION = "tp-6";
 const STATIC = `${VERSION}-static`, PAGES = `${VERSION}-pages`, DATA = "tp-data", TILES = "tp-tiles";
 const MAX_TILES = 600;
 // Données de l’espace gardées pour la consultation hors ligne (dernière réponse reçue).
-const API_CACHED = /^\/api\/(me|plan|activities|analysis|vo2|trail-profile|xray|races|weather|coach|calendar|terrains)$/;
+const API_CACHED = /^\/api\/(me|plan|activities|analysis|vo2|trail-profile|xray|races|weather|coach|calendar|terrains|week|progress)$/;
 const TILE_HOSTS = /(^|\.)tile\.openstreetmap\.org$|(^|\.)tile\.opentopomap\.org$/;
 
 self.addEventListener("install", (event) => {

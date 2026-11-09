@@ -127,4 +127,9 @@ export const MIGRATIONS: { tag: string; statements: string[] }[] = [
       `CREATE INDEX IF NOT EXISTS terrains_user ON terrains(user_id, created_at)`,
     ],
   },
+  {
+    tag: "006_vo2_watch",
+    // VO2max affichée par la montre du coureur (facultative)
+    statements: [`ALTER TABLE profiles ADD COLUMN vo2_watch REAL`],
+  },
 ];

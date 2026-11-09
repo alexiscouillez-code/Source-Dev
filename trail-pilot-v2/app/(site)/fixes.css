@@ -65,3 +65,16 @@
 .fviz path[stroke="#26333f"] { stroke: var(--ink-3); }
 .fviz [stroke="#f4efe6"] { stroke: var(--snow); }
 .fviz [fill="#f4efe6"] { fill: var(--snow); }
+
+/* Logo qui se trace au chargement, barre de lecture liée au défilement */
+@media (prefers-reduced-motion: no-preference) {
+  .logo .logo-trail { stroke-dasharray: 1; stroke-dashoffset: 1; animation: logo-draw 1.1s .15s cubic-bezier(.65, 0, .35, 1) forwards; }
+  .logo .logo-dot { transform-box: fill-box; transform-origin: center; animation: logo-dot .5s 1.1s cubic-bezier(.2, 1.6, .4, 1) both; }
+  .logo:hover .logo-trail { animation: logo-draw 1s cubic-bezier(.65, 0, .35, 1) both; }
+  @keyframes logo-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+  @keyframes logo-dot { from { transform: scale(0); } }
+  @supports (animation-timeline: scroll()) {
+    body::before { content: ""; position: fixed; z-index: 100; inset: 0 0 auto 0; height: 3px; background: linear-gradient(90deg, #ff6a2b, #ffb38a); transform-origin: left; transform: scaleX(0); animation: read-progress linear both; animation-timeline: scroll(root); pointer-events: none; }
+    @keyframes read-progress { to { transform: scaleX(1); } }
+  }
+}

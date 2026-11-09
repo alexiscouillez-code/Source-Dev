@@ -16,6 +16,7 @@ export const PUT = withUser(async (user, req) => {
        long_day = excluded.long_day, max_weekly_minutes = excluded.max_weekly_minutes, level = excluded.level, updated_at = excluded.updated_at`,
     [user.id, hrMax, hrRest, num(b.daysPerWeek, 2, 7, "Jours par semaine"), num(b.longDay, 0, 6, "Jour de sortie longue"), num(b.maxWeeklyMinutes, 60, 1800, "Temps max par semaine", true), level, Date.now()],
   );
+  if (b.vo2Watch !== undefined) await run("UPDATE profiles SET vo2_watch = ? WHERE user_id = ?", [num(b.vo2Watch, 20, 95, "VO2max de la montre", true), user.id]);
   const name = text(b.name, 80);
   if (typeof b.name === "string") await run("UPDATE app_users SET name = ? WHERE id = ?", [name, user.id]);
   if (b.regenerate !== false) await regeneratePlan(user.id, resolveToday(typeof b.today === "string" ? b.today : null));

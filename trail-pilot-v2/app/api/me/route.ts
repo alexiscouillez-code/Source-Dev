@@ -19,8 +19,8 @@ export const GET = withUser(async (user, req) => {
   ]);
   const p = data.profile;
   const vo2 = estimateVo2(
-    history.map((r) => ({ date: r.date, sport: r.sport, durationMin: r.duration_min, distanceKm: r.distance_km, gainM: r.gain_m, avgHr: r.avg_hr, maxHr: r.max_hr, name: r.name })),
-    today, { hrMax: p.hr_max, hrRest: p.hr_rest },
+    history.map((r) => ({ date: r.date, sport: r.sport, durationMin: r.duration_min, distanceKm: r.distance_km, gainM: r.gain_m, lossM: r.loss_m, avgHr: r.avg_hr, maxHr: r.max_hr, name: r.name })),
+    today, { hrMax: p.hr_max, hrRest: p.hr_rest, watch: p.vo2_watch },
   );
   return json({
     user: { name: user.name, email: user.email, emailVerified: !!extra?.email_verified_at },
@@ -28,7 +28,7 @@ export const GET = withUser(async (user, req) => {
     push: !!process.env.VAPID_PUBLIC_KEY,
     settings: { reminder: !!extra?.reminder, healthConsent: !!extra?.health_consent_at },
     onboarding: !extra?.onboarded_at && !data.goal && !strava.connected && !(extra?.acts ?? 0),
-    targets: trainingTargets(vo2.method === "seances" ? vo2.value : null, vo2.hrMax, p.hr_rest),
+    targets: trainingTargets(vo2.paceVdot, vo2.hrMax, p.hr_rest),
     strava, ...data,
   });
 });

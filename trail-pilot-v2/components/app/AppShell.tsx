@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { api, type Me } from "./client";
 import { IconChart, IconPlan, IconRuns, IconTerrain, IconToday, IconUser, Logo } from "./icons";
 import Today from "./Today";
@@ -11,7 +12,8 @@ import Account from "./Account";
 import XRay from "./XRay";
 import Terrains from "./Terrains";
 import ThemeToggle from "@/components/ThemeToggle";
-import { startCountUps } from "./motion";
+import { startCountUps, withTransition } from "./motion";
+import Tour from "./Tour";
 
 export type Tab = "today" | "plan" | "terrains" | "xray" | "runs" | "analysis" | "account";
 const IconXray = () => (
@@ -50,6 +52,7 @@ export default function AppShell({ user }: { user: { name: string | null; email:
   }, []);
 
   const toast = useCallback((m: string) => { setToast(m); window.setTimeout(() => setToast(null), 3600); }, []);
+  useEffect(() => { const on = (e: Event) => toast((e as CustomEvent<string>).detail); window.addEventListener("tp-toast", on); return () => window.removeEventListener("tp-toast", on); }, [toast]);
 
   // Mode hors ligne : service worker, état du réseau et date des données affichées.
   useEffect(() => {
@@ -89,7 +92,13 @@ export default function AppShell({ user }: { user: { name: string | null; email:
   useEffect(() => (mainRef.current ? startCountUps(mainRef.current) : undefined), []);
   useEffect(() => { const el = document.querySelector<HTMLElement>(".side"); return el ? startCountUps(el) : undefined; }, []);
 
-  const go = (t: Tab) => { setTab(t); window.history.replaceState(null, "", `#${t}`); window.scrollTo({ top: 0 }); };
+  // Changement d’onglet : la vue glisse dans le sens de la navigation (transition de vue native).
+  const go = (t: Tab) => {
+    window.history.replaceState(null, "", `#${t}`);
+    if (t === tab) { window.scrollTo({ top: 0, behavior: "smooth" }); return; }
+    const dir = TABS.findIndex((x) => x.id === t) > TABS.findIndex((x) => x.id === tab) ? "fwd" : "back";
+    withTransition(() => { flushSync(() => setTab(t)); window.scrollTo({ top: 0 }); }, dir);
+  };
   const ctx = me ? { me, refresh, go, toast } : null;
   const initial = (user.name ?? user.email).slice(0, 1).toUpperCase();
 
@@ -100,7 +109,7 @@ export default function AppShell({ user }: { user: { name: string | null; email:
         <nav aria-label="Sections" ref={sideNav}>
           <span className="nav-ind" aria-hidden="true" />
           {TABS.map(({ id, label, Icon }) => (
-            <button key={id} className={`navbtn ${tab === id ? "on" : ""}`} onClick={() => go(id)} aria-current={tab === id ? "page" : undefined}><Icon />{label}</button>
+            <button key={id} data-tab={id} className={`navbtn ${tab === id ? "on" : ""}`} onClick={() => go(id)} aria-current={tab === id ? "page" : undefined}><Icon />{label}</button>
           ))}
         </nav>
         {me?.goal && (
@@ -158,10 +167,11 @@ export default function AppShell({ user }: { user: { name: string | null; email:
       <nav className="tabbar" aria-label="Sections" ref={tabNav}>
         <span className="nav-ind" aria-hidden="true" />
         {TABS.map(({ id, label, Icon }) => (
-          <button key={id} className={`navbtn ${tab === id ? "on" : ""}`} onClick={() => go(id)} aria-current={tab === id ? "page" : undefined}><Icon />{label}</button>
+          <button key={id} data-tab={id} className={`navbtn ${tab === id ? "on" : ""}`} onClick={() => go(id)} aria-current={tab === id ? "page" : undefined}><Icon />{label}</button>
         ))}
       </nav>
-      {toastMsg && <div className="toast" role="status">{toastMsg}</div>}
+      {toastMsg && <div className="toast" role="status" key={toastMsg}>{toastMsg}</div>}
+      {ctx && !ctx.me.onboarding && <Tour go={go} />}
     </div>
   );
 }

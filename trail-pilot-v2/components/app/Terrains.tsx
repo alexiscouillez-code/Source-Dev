@@ -112,16 +112,36 @@ async function runSearch(p: SearchInput, progress?: (s: string) => void): Promis
     throw e;
   }
 }
+/** Point situé à la fraction `f` de la longueur du tracé (pour le survol du profil). */
+function pointAt(t: Terrain, f: number): [number, number] | null {
+  if (!t.poly) return null;
+  const pts = decodePolyline(t.poly);
+  const cum = [0];
+  for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + dist(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]));
+  const target = f * cum[cum.length - 1];
+  const i = Math.max(1, cum.findIndex((c) => c >= target));
+  const a = pts[i - 1], b = pts[i] ?? a, seg = cum[i] - cum[i - 1] || 1, k = (target - cum[i - 1]) / seg;
+  return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k];
+}
+/** Avancement affiché pendant la recherche, d’après l’étape annoncée par le worker. */
+function progressOf(step: string | null) {
+  const m = step && /(\d+)\/(\d+)/.exec(step);
+  if (m) return 8 + (Number(m[1]) / Number(m[2])) * 62;
+  if (step?.startsWith("Lecture du relief")) return 78;
+  if (step?.startsWith("Calcul")) return 88;
+  return 4;
+}
 const directions = (t: { lat: number; lon: number }) => `https://www.google.com/maps/dir/?api=1&destination=${t.lat.toFixed(6)},${t.lon.toFixed(6)}`;
 const keyOf = (t: Terrain) => `${t.kind}:${t.lat.toFixed(4)}:${t.lon.toFixed(4)}:${t.name}`;
 
-/** Petit profil d’altitude. */
-function Spark({ profile }: { profile: [number, number][] }) {
+/** Petit profil d’altitude ; le survol (ou le doigt) déplace un point sur la carte. */
+function Spark({ profile, onHover }: { profile: [number, number][]; onHover?: (f: number | null) => void }) {
   const xs = profile.map((p) => p[0]), zs = profile.map((p) => p[1]);
   const x0 = xs[0], x1 = xs[xs.length - 1] || 1, z0 = Math.min(...zs), z1 = Math.max(...zs), h = Math.max(15, z1 - z0);
   const d = profile.map(([x, z], i) => `${i ? "L" : "M"}${(((x - x0) / (x1 - x0 || 1)) * 118 + 1).toFixed(1)},${(31 - ((z - z0) / h) * 28).toFixed(1)}`).join("");
   return (
-    <svg className="terr-spark" viewBox="0 0 120 32" aria-hidden="true" preserveAspectRatio="none">
+    <svg className="terr-spark" viewBox="0 0 120 32" aria-hidden="true" preserveAspectRatio="none"
+      onPointerMove={(e) => { const r = e.currentTarget.getBoundingClientRect(); onHover?.(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width))); }} onPointerLeave={() => onHover?.(null)}>
       <path d={`${d}L119,32L1,32Z`} className="a" /><path d={d} className="l" />
     </svg>
   );
@@ -137,8 +157,8 @@ function Facts({ t }: { t: Terrain }) {
   return <div className="terr-facts">{f.map((x) => <span key={x} className="chip">{x}</span>)}{t.tags.map((x) => <span key={x} className="chip dim">{x}</span>)}</div>;
 }
 
-function Card({ domId, t, on, onSelect, saved, onSave, onDelete, onEdit }: {
-  domId: string; t: Terrain | Saved; on: boolean; onSelect: () => void; saved?: boolean; onSave?: () => void; onDelete?: () => void; onEdit?: (name: string, note: string) => Promise<void>;
+function Card({ domId, t, on, onSelect, saved, onSave, onDelete, onEdit, onHover }: {
+  domId: string; t: Terrain | Saved; onHover?: (f: number | null) => void; on: boolean; onSelect: () => void; saved?: boolean; onSave?: () => void; onDelete?: () => void; onEdit?: (name: string, note: string) => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
   const s = t as Saved;
@@ -151,7 +171,7 @@ function Card({ domId, t, on, onSelect, saved, onSave, onDelete, onEdit }: {
         {t.detail && <span className="s">{t.detail}</span>}
         {s.note && <span className="s terr-note">« {s.note} »</span>}
         <Facts t={t} />
-        {t.profile && t.profile.length > 2 && <Spark profile={t.profile} />}
+        {t.profile && t.profile.length > 2 && <Spark profile={t.profile} onHover={onHover} />}
       </button>
       {editing && onEdit ? (
         <form className="form terr-edit" onSubmit={async (e) => { e.preventDefault(); await onEdit(name, note); setEditing(false); }}>
@@ -190,6 +210,8 @@ export default function Terrains({ me, toast }: Ctx) {
   const [mine, setMine] = useState<Terrain[]>([]);
   const [sel, setSel] = useState(0);
   const [fitKey, setFitKey] = useState("init");
+  const [hover, setHover] = useState<[number, number] | null>(null);
+  const [focusId, setFocusId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     try { const r = await api<{ saved: Saved[]; mine: Terrain[] }>("/api/terrains"); setSaved(r.saved); setMine(r.mine); } catch { /* hors ligne sans copie */ }
@@ -243,7 +265,7 @@ export default function Terrains({ me, toast }: Ctx) {
     if (sl) Object.assign(bodyQ, { minLen: LEN[q.len].min, maxLen: LEN[q.len].max, minGrade: sl.min, maxGrade: sl.max });
     try {
       const found = await runSearch(bodyQ as unknown as SearchInput, setStep);
-      setResults(found); setSearched(q); setSel(0); setFitKey(`res-${Date.now()}`);
+      setResults(found); setSearched(q); setSel(0); setFocusId(null); setFitKey(`res-${Date.now()}`);
       if (!found.length) setErr("Rien trouvé dans ce rayon. Agrandis la zone ou change de point de départ.");
     } catch (e) { setErr(e instanceof Error ? e.message : "Erreur"); }
     finally { setBusy(false); setStep(null); }
@@ -374,19 +396,25 @@ export default function Terrains({ me, toast }: Ctx) {
             <button className="btn" onClick={search} disabled={busy}>{busy ? "Recherche en cours…" : "Chercher"}</button>
             {busy && <span className="soft small terr-wait" role="status">{step ?? "Recherche…"}</span>}
           </div>
+          {busy && <div className="terr-progress" aria-hidden="true"><i style={{ width: `${progressOf(step)}%` }} /></div>}
         </section>
       )}
 
       <section className="card" style={{ marginTop: 14 }} aria-label="Carte">
-        <TrackMap lines={lines} markers={markers} height={360} onSelect={select} onPick={pickOnMap} fitKey={fitKey} label="Carte des terrains" />
+        <TrackMap lines={lines} markers={markers} height={360} onSelect={select} onPick={pickOnMap} fitKey={fitKey} focus={focusId} hover={hover} label="Carte des terrains" />
       </section>
 
+      {view === "search" && busy && (
+        <section className="card" style={{ marginTop: 14 }} aria-hidden="true">
+          {[0, 1, 2].map((k) => <div key={k} className="skel-row"><i className="sk sk-t" /><i className="sk sk-s" /><i className="sk sk-c" /></div>)}
+        </section>
+      )}
       {view === "search" && (mineMatches.length > 0 || (results && results.length > 0)) && (
         <section className="card" style={{ marginTop: 14 }}>
           <div className="card-head"><h2>{results?.length ?? 0} terrain{(results?.length ?? 0) > 1 ? "s" : ""} trouvé{(results?.length ?? 0) > 1 ? "s" : ""}{mineMatches.length ? ` · ${mineMatches.length} de tes boucles` : ""}</h2></div>
           <ul className="list terr-list">
             {shown.map((t, i) => (
-              <Card key={t.id + i} domId={`terr-${i}`} t={t} on={i === sel} onSelect={() => setSel(i)} saved={savedKeys.has(keyOf(t))} onSave={() => save(t)} />
+              <Card key={t.id + i} domId={`terr-${i}`} t={t} on={i === sel} onSelect={() => { setSel(i); setFocusId(i); }} saved={savedKeys.has(keyOf(t))} onSave={() => save(t)} onHover={(f) => setHover(f == null ? null : pointAt(t, f))} />
             ))}
           </ul>
           <p className="muted terr-legal">Tracés calculés automatiquement à partir d’OpenStreetMap : vérifie l’accès, l’état des chemins et les conditions avant de partir. D+ estimé à partir d’un modèle de terrain. Données © contributeurs <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>, tuiles <a href="https://openfreemap.org" target="_blank" rel="noreferrer">OpenFreeMap</a> © OpenMapTiles ; altitude : <a href="https://registry.opendata.aws/terrain-tiles/" target="_blank" rel="noreferrer">Mapzen Terrain Tiles</a> (SRTM, EU-DEM, Copernicus et autres sources ouvertes).</p>

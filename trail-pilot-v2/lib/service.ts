@@ -8,7 +8,7 @@ import { withSideRaces, withStrength, type SideRace } from "./engine/extras";
 import { timeline, weeklySummary } from "./engine/timeline";
 import { HttpError } from "./api";
 
-export interface ProfileRow { hr_max: number | null; hr_rest: number | null; days_per_week: number; long_day: number; max_weekly_minutes: number | null; level: Level }
+export interface ProfileRow { hr_max: number | null; hr_rest: number | null; vo2_watch: number | null; days_per_week: number; long_day: number; max_weekly_minutes: number | null; level: Level }
 export interface GoalRow { name: string; date: string; distance_km: number | null; gain_m: number | null; plan_meta?: string | null; route?: string | null }
 export interface ActivityRow { id: number; date: string; sport: Sport; name: string | null; duration_min: number; distance_km: number | null; gain_m: number | null; loss_m: number | null; avg_hr: number | null; max_hr: number | null; rpe: number | null; source: string; strava_id: string | null }
 export interface PlanRow { id: number; date: string; template: string; title: string; sport: string; duration_min: number; gain_m: number | null; rpe_target: number; description: string; phase: string; status: string; activity_id: number | null; locked: number; original: string | null }
@@ -33,8 +33,8 @@ export const toActivityLike = (a: ActivityRow): ActivityLike => ({ date: a.date,
 const toPlanned = (p: PlanRow): PlannedLike => ({ title: p.title, durationMin: p.duration_min, rpeTarget: p.rpe_target, template: p.template, sport: p.sport, description: p.description, gainM: p.gain_m });
 
 export async function loadProfile(userId: number) {
-  const p = await one<ProfileRow>("SELECT hr_max, hr_rest, days_per_week, long_day, max_weekly_minutes, level FROM profiles WHERE user_id = ?", [userId]);
-  return p ?? { hr_max: null, hr_rest: null, days_per_week: 4, long_day: 6, max_weekly_minutes: null, level: "regulier" as Level };
+  const p = await one<ProfileRow>("SELECT hr_max, hr_rest, vo2_watch, days_per_week, long_day, max_weekly_minutes, level FROM profiles WHERE user_id = ?", [userId]);
+  return p ?? { hr_max: null, hr_rest: null, vo2_watch: null, days_per_week: 4, long_day: 6, max_weekly_minutes: null, level: "regulier" as Level };
 }
 export const loadSideRaces = (userId: number) =>
   all<SideRace & { id: number }>("SELECT id, name, date, distance_km AS distanceKm, gain_m AS gainM, priority FROM side_races WHERE user_id = ? ORDER BY date", [userId]);

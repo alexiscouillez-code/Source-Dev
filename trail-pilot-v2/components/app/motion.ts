@@ -55,3 +55,25 @@ export function startCountUps(root: HTMLElement) {
   scan();
   return () => { mo.disconnect(); cancelAnimationFrame(raf); };
 }
+
+/** Vrai si l’appareil accepte les animations. */
+export const motionOk = () => typeof window !== "undefined" && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+type VTDoc = Document & { startViewTransition?: (cb: () => void | Promise<void>) => { finished: Promise<void>; ready?: Promise<void>; updateCallbackDone?: Promise<void> } };
+/**
+ * Applique un changement d’affichage dans une transition de vue (morphing natif du navigateur) quand c’est possible.
+ * `update` doit modifier le DOM de façon synchrone (flushSync) : la capture « après » est prise à sa fin.
+ */
+export function withTransition(update: () => void, kind?: string) {
+  const d = document as VTDoc;
+  if (!d.startViewTransition || !motionOk()) { update(); return; }
+  if (kind) document.documentElement.dataset.vt = kind;
+  const t = d.startViewTransition(update);
+  // Une transition interrompue (nouvel état pendant l’animation) n’est pas une erreur : on l’ignore.
+  t.ready?.catch(() => {});
+  t.updateCallbackDone?.catch(() => {});
+  t.finished.catch(() => {}).finally(() => { if (document.documentElement.dataset.vt === kind) delete document.documentElement.dataset.vt; });
+}
+
+/** Petite vibration de retour (téléphones compatibles). */
+export const buzz = (ms: number | number[] = 12) => { try { if (motionOk()) navigator.vibrate?.(ms); } catch { /* non pris en charge */ } };

@@ -5,6 +5,7 @@ import type { Ctx } from "./AppShell";
 import InfoTip, { EXPLAIN } from "./InfoTip";
 import { TargetsTable } from "./Targets";
 import TrailProfile from "./TrailProfile";
+import Progress from "./Progress";
 import { api, dayLabel, fmtDur, fmtNum, SPORT_LABEL } from "./client";
 
 interface Data {
@@ -61,6 +62,7 @@ export default function Analysis({ me, toast, go }: Ctx) {
         </section>
       </div>
       <Vo2Card go={go} targets={me.targets} />
+      <Progress />
     </>
   );
 }
@@ -71,6 +73,7 @@ interface Vo2 {
   months: { month: string; value: number; sessions: number }[]; since: string | null;
   uth: number | null; previous: number | null; hrMax: number | null; hrMaxSource: "profil" | "observée" | null; hrRest: number | null;
   races: { label: string; km: number; minutes: number }[]; notes: string[];
+  watch: number | null; paceVdot: number | null;
 }
 const fmtRace = (m: number) => (m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}` : `${m} min`);
 const dec = (n: number) => n.toFixed(1).replace(".", ",");
@@ -100,6 +103,9 @@ function Vo2Card({ go, targets }: Pick<Ctx, "go"> & { targets: Ctx["me"]["target
               <b className="vo2-big">{dec(v.value)}</b><span className="muted">ml/kg/min</span>
               {delta != null && delta !== 0 && <span className={`chip ${delta > 0 ? "ok" : "lite"}`}>{delta > 0 ? "+" : ""}{dec(delta)} sur 2 mois</span>}
             </div>
+            {v.watch != null && (
+              <div className="vo2-watch"><span>Ta montre</span><b>{dec(v.watch)}</b><span className="muted small">utilisée pour tes allures</span></div>
+            )}
             <p className="soft small" style={{ margin: 0 }}>Fourchette probable : {dec(v.low!)} à {dec(v.high!)}{v.uth != null && v.method === "seances" ? ` · repère par la FC seule : ${dec(v.uth)}` : ""}.</p>
             <div className="vo2-scale" role="img" aria-label={`VO2max estimée ${dec(v.value)} ml/kg/min`}>
               <i className="range" style={{ left: pos(v.low!), width: `calc(${pos(v.high!)} - ${pos(v.low!)})` }} />
@@ -114,7 +120,7 @@ function Vo2Card({ go, targets }: Pick<Ctx, "go"> & { targets: Ctx["me"]["target
             )}
           </div>
           <div>
-            <h3 style={{ marginBottom: 8 }}>Équivalences sur route plate</h3>
+            <h3 style={{ marginBottom: 8 }}>Équivalences sur route plate{v.watch != null ? " (VO2max de la montre)" : ""}</h3>
             <div className="vo2-races">
               {v.races.map((r) => <div key={r.label}><small>{r.label}</small><b>{fmtRace(r.minutes)}</b></div>)}
             </div>
@@ -124,7 +130,8 @@ function Vo2Card({ go, targets }: Pick<Ctx, "go"> & { targets: Ctx["me"]["target
       )}
       {v.value != null && <TargetsTable targets={targets} />}
       {v.value != null && v.notes.length > 0 && <ul className="reasons small">{v.notes.map((n) => <li key={n}>{n}</li>)}</ul>}
-      <p className="muted" style={{ margin: 0, fontSize: 11.5 }}>Estimation de terrain (coût de l’allure selon Daniels, réserve cardiaque selon Swain, rapport FC max / FC repos selon Uth), précise à environ 5 à 10 %. Seul un test d’effort en laboratoire mesure vraiment la VO2max.</p>
+      <p className="muted" style={{ margin: 0, fontSize: 11.5 }}>Estimation de terrain (allure ramenée au plat selon Minetti, coût de l’allure selon Daniels, réserve cardiaque selon Swain, rapport FC max / FC repos selon Uth), précise à environ 5 à 10 %. Les montres utilisent leur propre méthode et donnent souvent quelques points de plus. Seul un test d’effort en laboratoire mesure vraiment la VO2max.</p>
+      {v.watch == null && v.value != null && <p className="muted small" style={{ margin: 0 }}>Ta montre affiche une autre valeur ? Renseigne-la dans <button className="link small" onClick={() => go("account")}>ton profil</button> : elle servira à calculer tes allures.</p>}
     </section>
   );
 }

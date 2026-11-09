@@ -67,7 +67,7 @@ export default function Body3D({ intensity, selected, onSelect, view, skin }: Pr
     let height = 1.75, center = new THREE.Vector3(0, 0.88, 0);
 
     // ---------- Caméra et interaction ----------
-    let rotY = 0, target = 0, dragging = false, moved = 0, lastX = 0, auto = !reduce;
+    let rotY = 0, target = 0, dragging = false, moved = 0, lastX = 0, auto = !reduce, lastTouch = 0;
     const cam = { y: 0.95, d: 4.1, ty: 0.95, td: 4.1 };
     const placeCamera = () => { camera.position.set(0, cam.y + 0.05, cam.d); camera.lookAt(0, cam.y, 0); };
     const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
@@ -83,7 +83,7 @@ export default function Body3D({ intensity, selected, onSelect, view, skin }: Pr
       pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       renderer.domElement.setPointerCapture(e.pointerId);
       if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinch0 = Math.hypot(a.x - b.x, a.y - b.y); pinchD = cam.td; }
-      dragging = true; moved = 0; lastX = e.clientX; auto = false;
+      dragging = true; moved = 0; lastX = e.clientX; auto = false; lastTouch = performance.now();
     };
     const move = (e: PointerEvent) => {
       if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -223,6 +223,8 @@ export default function Body3D({ intensity, selected, onSelect, view, skin }: Pr
     const loop = (now: number) => {
       raf = requestAnimationFrame(loop);
       if (!visible) return;
+      // Rotation lente au repos, qui reprend quelques secondes après la dernière manipulation.
+      if (!auto && !reduce && !dragging && !current.s && lastTouch && now - lastTouch > 7000) auto = true;
       if (auto) target += 0.003;
       rotY += (target - rotY) * 0.1;
       pivot.rotation.y = rotY;
@@ -251,6 +253,11 @@ export default function Body3D({ intensity, selected, onSelect, view, skin }: Pr
         }
       }
       if (current.s) { const p = 0.45 + Math.sin((now - t0) / 260) * 0.15; const mm = zoneMats.get(current.s); if (mm) mm.emissive.copy(mm.color).multiplyScalar(p); }
+      else if (!introAt && !reduce) {
+        // Les zones les plus chargées « respirent » doucement.
+        const breath = 0.5 + 0.5 * Math.sin((now - t0) / 700);
+        for (const [z, mm] of zoneMats) { const v = current.i[z] ?? 0; if (v >= 0.7) mm.emissive.copy(mm.color).multiplyScalar(0.12 + (v - 0.35) * 0.35 + breath * 0.22 * (v - 0.6)); }
+      }
       renderer.render(scene, camera);
     };
     placeCamera();

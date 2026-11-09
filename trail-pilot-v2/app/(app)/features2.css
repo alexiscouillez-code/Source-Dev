@@ -94,3 +94,8 @@
   .offline-bar { animation: offline-in .5s var(--ease) both; }
   @keyframes offline-in { from { opacity: 0; transform: translateY(-10px); } }
 }
+
+/* VO2max de la montre */
+.vo2-watch { display: flex; align-items: baseline; gap: 8px; padding: 8px 12px; border-radius: 12px; background: var(--ink-2); border: 1px solid var(--line); width: fit-content; }
+.vo2-watch > span:first-child { font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
+.vo2-watch b { font-size: 20px; }

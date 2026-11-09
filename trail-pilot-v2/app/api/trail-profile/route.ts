@@ -9,10 +9,10 @@ export const GET = withUser(async (user, req) => {
   const today = resolveToday(new URL(req.url).searchParams.get("today"));
   const [rows, profile, goal] = await Promise.all([loadActivities(user.id, "0000-01-01"), loadProfile(user.id), loadGoal(user.id)]);
   const vo2 = estimateVo2(
-    rows.map((r) => ({ date: r.date, sport: r.sport, durationMin: r.duration_min, distanceKm: r.distance_km, gainM: r.gain_m, avgHr: r.avg_hr, maxHr: r.max_hr, name: r.name })),
-    today, { hrMax: profile.hr_max, hrRest: profile.hr_rest },
+    rows.map((r) => ({ date: r.date, sport: r.sport, durationMin: r.duration_min, distanceKm: r.distance_km, gainM: r.gain_m, lossM: r.loss_m, avgHr: r.avg_hr, maxHr: r.max_hr, name: r.name })),
+    today, { hrMax: profile.hr_max, hrRest: profile.hr_rest, watch: profile.vo2_watch },
   );
-  const vdot = vo2.method === "seances" ? vo2.value : null;
+  const vdot = vo2.paceVdot;
   const i = trainingTargets(vdot, vo2.hrMax, profile.hr_rest).paces.find((p) => p.key === "I");
   const meta = goal && goal.date > today ? readPlanMeta(goal) : null;
   let lossPerGain = 1;
