@@ -25,7 +25,7 @@
 .terr-main { all: unset; cursor: pointer; display: grid; gap: 5px; min-width: 0; }
 .terr-main:focus-visible { outline: 2px solid var(--ember); outline-offset: 4px; border-radius: 8px; }
 .terr-main .t { white-space: normal; }
-.terr-kind { font-family: var(--mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--ember); }
+.terr-kind { font-family: var(--mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--ember-t, var(--ember)); }
 .terr-note { font-style: italic; }
 .terr-facts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
 .terr-spark { width: 100%; max-width: 360px; height: 34px; margin-top: 4px; }

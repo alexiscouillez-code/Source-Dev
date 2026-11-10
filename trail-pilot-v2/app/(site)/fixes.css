@@ -31,7 +31,7 @@
 :root[data-theme="light"] {
   --ink: #f4f1ec; --ink-2: #ffffff; --ink-3: #ebe6de; --line: #e2dbd0;
   --snow: #141a21; --soft: #3c4650; --mute: #5f6973;
-  --ember: #e4561c; --ember-2: #f26b2e;
+  --ember: #e4561c; --ember-2: #f26b2e; --ember-t: #c2410c;
   --ok: #17935b; --lite: #b07f00; --rest: #2b6cd4;
   color-scheme: light;
 }
@@ -39,11 +39,13 @@
 :root[data-theme="light"] :is(.hero, .band, .final, .phone, .auth-media, .nav:not(.scrolled)) {
   --ink: #0b0f14; --ink-2: #121a23; --ink-3: #1b2631; --line: #26333f;
   --snow: #f4efe6; --soft: #c9d0d6; --mute: #8d99a5;
-  --ok: #5fd39a; --lite: #f5c451; --rest: #7fb6ff; --ember: #ff6a2b;
+  --ok: #5fd39a; --lite: #f5c451; --rest: #7fb6ff; --ember: #ff6a2b; --ember-t: #ff6a2b;
   color: var(--snow);
 }
 :root[data-theme="light"] .hero .btn:not(.btn-ghost), :root[data-theme="light"] .final .btn, :root[data-theme="light"] .nav:not(.scrolled) .btn { color: #0b0f14; }
-:root[data-theme="light"] .btn:not(.btn-ghost) { color: #fff; }
+:root[data-theme="light"] .btn:not(.btn-ghost) { color: #0b0f14; }
+:root[data-theme="light"] .btn:not(.btn-ghost):hover { color: #fff; }
+:root[data-theme="light"] :is(.hero, .final, .nav:not(.scrolled):not(.nav-plain)) .btn:not(.btn-ghost):hover { color: #0b0f14; }
 :root[data-theme="light"] .btn:not(.btn-ghost)::after { background: #141a21; }
 :root[data-theme="light"] :is(.hero, .final, .nav:not(.scrolled)) .btn:not(.btn-ghost)::after { background: #f4efe6; }
 :root[data-theme="light"] .fcard:hover { border-color: #cfc6b8; box-shadow: 0 20px 40px -24px #141a2133; }
@@ -80,10 +82,13 @@
 }
 
 /* Pages légales : pas de photo sous la barre, elle suit donc le thème clair (sinon logo clair sur fond clair). */
-:root[data-theme="light"] .nav.nav-plain:not(.scrolled) { --ink: #f4f1ec; --ink-2: #ffffff; --ink-3: #ebe6de; --line: #e2dbd0; --snow: #141a21; --soft: #3c4650; --mute: #5f6973; --ember: #e4561c; color: var(--snow); }
-:root[data-theme="light"] .nav.nav-plain:not(.scrolled) .btn { color: #fff; }
+:root[data-theme="light"] .nav.nav-plain:not(.scrolled) { --ink: #f4f1ec; --ink-2: #ffffff; --ink-3: #ebe6de; --line: #e2dbd0; --snow: #141a21; --soft: #3c4650; --mute: #5f6973; --ember: #e4561c; --ember-t: #c2410c; color: var(--snow); }
+:root[data-theme="light"] .nav.nav-plain:not(.scrolled) .btn { color: #0b0f14; }
+:root[data-theme="light"] .nav.nav-plain:not(.scrolled) .btn:hover { color: #fff; }
 :root[data-theme="light"] .nav.nav-plain:not(.scrolled) .btn:not(.btn-ghost)::after { background: #141a21; }
 /* Barre du haut sur téléphone : rien ne passe sur deux lignes */
 .nav .logo span, .nav .btn { white-space: nowrap; }
 @media (max-width: 480px) { .nav { padding-inline: 14px; } .nav .logo { gap: 8px; font-size: 14px; letter-spacing: .04em; } .nav-right { gap: 8px; } .nav .btn { padding: 9px 13px; font-size: 14px; } }
 @media (max-width: 360px) { .nav .logo span { display: none; } }
+.auth-link { position: relative; }
+.auth-link::after { content: ""; position: absolute; inset: -11px -8px; }

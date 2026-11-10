@@ -50,7 +50,7 @@ export default function Home() {
 
             <div className="features">
               <article className="fcard reveal" data-io>
-                <span className="mono" style={{ color: "var(--ember)" }}>01 · Planifier</span>
+                <span className="mono" style={{ color: "var(--ember-t, var(--ember))" }}>01 · Planifier</span>
                 <h3>Ta course en ligne de mire.</h3>
                 <p>Renseigne ton objectif : un planning sur trois semaines, la phase de prépa et l’affûtage s’ajustent tout seuls.</p>
                 <div className="fviz">
@@ -71,7 +71,7 @@ export default function Home() {
               </article>
 
               <article className="fcard reveal" data-io style={{ ["--d" as string]: "120ms" }}>
-                <span className="mono" style={{ color: "var(--ember)" }}>02 · Importer</span>
+                <span className="mono" style={{ color: "var(--ember-t, var(--ember))" }}>02 · Importer</span>
                 <h3>Strava, ou ta trace GPX.</h3>
                 <p>Connecte Strava : chaque sortie arrive toute seule dans ton journal. Une trace GPX ? Distance et dénivelé calculés en un instant.</p>
                 <div className="fviz">
@@ -89,7 +89,7 @@ export default function Home() {
               </article>
 
               <article className="fcard reveal" data-io style={{ ["--d" as string]: "240ms" }}>
-                <span className="mono" style={{ color: "var(--ember)" }}>03 · Comprendre</span>
+                <span className="mono" style={{ color: "var(--ember-t, var(--ember))" }}>03 · Comprendre</span>
                 <h3>Ta charge, lisible.</h3>
                 <p>Durée, ressenti, fréquence cardiaque et dénivelé. Forme, fatigue et fraîcheur : tu vois venir le pic avant qu’il te tombe dessus.</p>
                 <div className="fviz">

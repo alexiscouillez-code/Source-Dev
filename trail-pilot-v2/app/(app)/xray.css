@@ -31,7 +31,7 @@
 .zlist { list-style: none; margin: 0; padding: 0; display: grid; }
 .zlist button { all: unset; box-sizing: border-box; cursor: pointer; width: 100%; display: grid; grid-template-columns: 12px 1fr auto auto; gap: 12px; align-items: center; padding: 11px 4px; border-bottom: 1px solid var(--line); }
 .zlist li:last-child button { border-bottom: 0; }
-.zlist button:hover .zname { color: var(--ember); }
+.zlist button:hover .zname { color: var(--ember-t, var(--ember)); }
 .zlist button:focus-visible { outline: 2px solid var(--ember); border-radius: 10px; }
 .zdot { width: 12px; height: 12px; border-radius: 50%; box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 0%, transparent); }
 .zname { font-weight: 650; transition: color .2s; }
@@ -42,7 +42,7 @@
 /* ---------- VO2max ---------- */
 .vo2-grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 24px; }
 @media (max-width: 800px) { .vo2-grid { grid-template-columns: 1fr; } }
-.vo2-big { font-family: var(--mono); font-size: 56px; font-weight: 600; letter-spacing: -.04em; line-height: 1; color: var(--ember); }
+.vo2-big { font-family: var(--mono); font-size: 56px; font-weight: 600; letter-spacing: -.04em; line-height: 1; color: var(--ember-t, var(--ember)); }
 .vo2-scale { position: relative; height: 34px; margin-top: 4px; }
 .vo2-scale::before { content: ""; position: absolute; left: 0; right: 0; top: 6px; height: 8px; border-radius: 6px; background: linear-gradient(90deg, var(--rest), var(--ok), var(--lite), var(--ember)); opacity: .35; }
 .vo2-scale .range { position: absolute; top: 6px; height: 8px; border-radius: 6px; background: var(--ember); opacity: .55; }

@@ -3,7 +3,7 @@
 :root[data-theme="light"] {
   --ink: #f4f1ec; --ink-2: #ffffff; --ink-3: #ebe6de; --ink-4: #d8d1c6; --line: #e2dbd0;
   --snow: #141a21; --soft: #3c4650; --mute: #68727d;
-  --ember: #e4561c; --ember-2: #f26b2e;
+  --ember: #e4561c; --ember-2: #f26b2e; --ember-t: #c2410c;
   --ok: #17935b; --lite: #b07f00; --rest: #2b6cd4; --danger: #c43b2a;
   --chart-grid: #141a2112; --chart-zero: #141a2133; --chart-bar: #e3ddd3; --chart-bar-2: #d6cec2; --err-bg: #fde6dc; --err-fg: #8a2a12;
   color-scheme: light;
@@ -15,6 +15,11 @@
 .note.err { background: var(--err-bg); color: var(--err-fg); }
 .btn, .picks label.on { color: #fff; }
 :root:not([data-theme="light"]) .btn:not(.ghost):not(.danger):not(.strava), :root:not([data-theme="light"]) .picks label.on { color: var(--ink); }
+/* Thème clair : texte sombre sur l’orange (blanc sur orange n’est pas assez lisible), orange foncé pour le texte (--ember-t) */
+:root[data-theme="light"] .btn:not(.ghost):not(.danger):not(.strava), :root[data-theme="light"] .picks label.on, :root[data-theme="light"] .terr-kinds button.on, :root[data-theme="light"] .onb-steps span.on i, :root[data-theme="light"] .bubble.user { color: #0b0f14; }
+/* Liens-boutons : zone de toucher élargie sans changer la mise en page */
+button.link { position: relative; }
+button.link::after { content: ""; position: absolute; inset: -11px -8px; }
 
 .theme-toggle { display: inline-grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--line); background: var(--ink-2); color: var(--soft); cursor: pointer; transition: color .2s, border-color .2s, transform .3s var(--ease); flex: none; }
 .theme-toggle:hover { color: var(--snow); border-color: var(--mute); }
@@ -52,12 +57,12 @@
 .wk-focus { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wk-dot { width: 10px; height: 10px; border-radius: 3px; }
 .wk.is-past .week-head { opacity: .6; }
-.wk.is-cur .week-head b { color: var(--ember); }
+.wk.is-cur .week-head b { color: var(--ember-t, var(--ember)); }
 .chev { color: var(--mute); font-size: 20px; transition: transform .25s var(--ease); }
 .chev.on { transform: rotate(90deg); }
 .wk .list { padding-bottom: 8px; }
 .item.is-race { background: linear-gradient(90deg, color-mix(in srgb, var(--ember) 16%, transparent), transparent 70%); border-radius: 12px; }
-.item.is-race .t { color: var(--ember); }
+.item.is-race .t { color: var(--ember-t, var(--ember)); }
 @media (max-width: 600px) { .week-head { grid-template-columns: 10px 1fr 16px; } .wk-sum { grid-column: 2; grid-row: 2; } .chev { grid-column: 3; grid-row: 1; } }
 
 .race-form { gap: 16px; }
