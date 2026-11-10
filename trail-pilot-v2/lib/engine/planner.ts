@@ -369,9 +369,11 @@ function make(t: Template, date: string, minutes: number, phase: string, gain: n
     case "climb":
       return { date, template: t, phase, sport: "trail", title: "Montées longues", durationMin: d, rpeTarget: 6, gainM: g ?? 500,
         description: "Échauffement 15 min, puis 3 × 10 à 15 min de montée continue à l’effort de course (6/10), bâtons si tu cours avec. Descentes souples et relâchées entre les blocs." };
-    case "tempo":
+    case "tempo": {
+      const { n, block } = tempoBlocks(d);
       return { date, template: t, phase, sport: "course", title: "Tempo contrôlé", durationMin: d, rpeTarget: 6, gainM: null,
-        description: "15 min facile, puis 3 × 8 min à allure soutenue mais maîtrisée (6/10), 3 min de trot entre. 10 min de retour au calme." };
+        description: `15 min facile, puis ${n} × ${block} min à allure soutenue mais maîtrisée (6/10), 3 min de trot entre. 10 min de retour au calme.` };
+    }
     case "downhill":
       return { date, template: t, phase, sport: "trail", title: "Montée + descente technique", durationMin: d, rpeTarget: 5, gainM: g ?? 400,
         description: "Monte à effort contrôlé, puis travaille la descente : haut du corps relâché, regard loin, appuis courts et rapides. C’est la descente qui casse les cuisses en course." };
@@ -412,4 +414,11 @@ export function phaseFor(daysToGoal: number | null): string {
   if (daysToGoal <= 42) return "Spécifique";
   if (daysToGoal <= 84) return "Développement";
   return "Fondation";
+}
+
+/** Découpage d’un tempo : blocs de 6 à 12 min au seuil, 3 min de trot entre, 25 min d’échauffement et retour au calme. */
+export function tempoBlocks(durationMin: number): { n: number; block: number } {
+  const main = Math.max(10, durationMin - 25);
+  const n = Math.max(2, Math.min(5, Math.round((main + 3) / 11)));
+  return { n, block: Math.max(5, Math.round((main - 3 * (n - 1)) / n)) };
 }

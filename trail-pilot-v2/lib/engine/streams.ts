@@ -7,7 +7,8 @@
  *  - `win`   : fenêtres d’effort stable [allure ajustée à la pente (m/min), FC, minute] → VO2max ;
  *  - `gap`   : allure moyenne ajustée à la pente, en mouvement (m/min) ;
  *  - `dec`   : découplage cardiaque (%) : perte d’efficacité entre la première et la seconde moitié ;
- *  - `loss`  : dénivelé négatif réel ; `moving` : secondes en mouvement.
+ *  - `loss`  : dénivelé négatif réel ; `moving` : secondes en mouvement ;
+ *  - `best`  : meilleurs efforts de la sortie (1, 5 et 10 km en secondes, meilleure montée sur 10 min en m/h).
  *
  * Ce sont des indicateurs d’entraînement, pas des mesures de laboratoire.
  */
@@ -19,7 +20,8 @@ export interface Streams {
   altitude?: (number | null)[];
   distance?: (number | null)[]; // m
 }
-export interface Analysis { v: 1; hist: number[]; win: [number, number, number][]; gap: number | null; dec: number | null; loss: number | null; moving: number }
+export interface Best { k1: number | null; k5: number | null; k10: number | null; vam: number | null }
+export interface Analysis { v: 1; hist: number[]; win: [number, number, number][]; gap: number | null; dec: number | null; loss: number | null; moving: number; best?: Best }
 
 export const HIST_MIN = 60, HIST_STEP = 5, HIST_BINS = 32;
 const WIN = 120, STEP = 30, WARMUP = 480, MAX_WIN = 48;
@@ -105,7 +107,42 @@ export function analyze(s: Streams): Analysis | null {
     const e1 = mean(gapS, 0, h) / mean(hrS, 0, h), e2 = mean(gapS, h, m) / mean(hrS, h, m);
     if (e1 > 0) dec = Math.round(((e1 - e2) / e1) * 1000) / 10;
   }
-  return { v: 1, hist: hist.map((x) => Math.round(x)), win: kept, gap, dec, loss: s.altitude ? lossOf(s.altitude) : null, moving: Math.round(moving) };
+  return { v: 1, hist: hist.map((x) => Math.round(x)), win: kept, gap, dec, loss: s.altitude ? lossOf(s.altitude) : null, moving: Math.round(moving), best: bestsOf(s) };
+}
+
+/** Temps le plus court (s) pour couvrir `meters` d’un seul tenant, pauses comprises (comme les records Strava). */
+function bestFor(time: number[], dist: (number | null)[], meters: number) {
+  const t: number[] = [], d: number[] = [];
+  for (let i = 0; i < time.length; i++) { const v = num(dist[i]); if (v != null && (!d.length || v >= d[d.length - 1])) { t.push(time[i]); d.push(v); } }
+  let best: number | null = null, a = 0;
+  for (let b = 1; b < d.length; b++) {
+    if (d[b] - d[0] < meters) continue;
+    // a = départ le plus tardif qui couvre encore la distance
+    while (a + 1 < b && d[b] - d[a + 1] >= meters) a++;
+    // on retire la distance en trop au départ, au prorata de la vitesse du premier segment
+    const extra = d[b] - d[a] - meters, seg = d[a + 1] - d[a];
+    const tt = t[b] - t[a] - (seg > 0 ? (extra / seg) * (t[a + 1] - t[a]) : 0);
+    if (tt > 0 && (best == null || tt < best)) best = tt;
+  }
+  return best != null ? Math.round(best) : null;
+}
+/** Meilleure vitesse ascensionnelle sur 10 minutes (m/h), D+ lissé à 3 m. */
+function bestVam(time: number[], alt: (number | null)[]) {
+  const up: number[] = []; let ref: number | null = null, acc = 0;
+  for (const v of alt) { const a = num(v); if (a != null) { if (ref == null) ref = a; else if (a >= ref + 3) { acc += a - ref; ref = a; } else if (a <= ref - 3) ref = a; } up.push(acc); }
+  let best = 0, a = 0;
+  for (let b = 0; b < time.length; b++) {
+    while (a < b && time[b] - time[a] > 600) a++;
+    if (time[b] - time[a] >= 590) best = Math.max(best, ((up[b] - up[a]) / (time[b] - time[a])) * 3600);
+  }
+  return best >= 200 ? Math.round(best) : null;
+}
+function bestsOf(s: Streams): Best | undefined {
+  const k = (m: number) => (s.distance ? bestFor(s.time, s.distance, m) : null);
+  // Bornes de vraisemblance : un record mondial ou un GPS qui saute ne doivent pas devenir ton record.
+  const ok = (sec: number | null, m: number) => (sec != null && sec >= (m / 1000) * 150 ? sec : null);
+  const b = { k1: ok(k(1000), 1000), k5: ok(k(5000), 5000), k10: ok(k(10000), 10000), vam: s.altitude ? bestVam(s.time, s.altitude) : null };
+  return b.k1 || b.k5 || b.k10 || b.vam ? { ...b, vam: b.vam != null && b.vam <= 2500 ? b.vam : null } : undefined;
 }
 
 // ---------- Lecture du résumé avec la physiologie du coureur ----------
@@ -115,7 +152,7 @@ export function zoneBounds(p: Physio): number[] | null {
   if (!p.hrMax) return null;
   return p.hrRest && p.hrRest < p.hrMax
     ? [0.6, 0.7, 0.8, 0.9].map((f) => p.hrRest! + f * (p.hrMax! - p.hrRest!))
-    : [0.7, 0.8, 0.87, 0.93].map((f) => f * p.hrMax!);
+    : [0.6, 0.7, 0.8, 0.9].map((f) => (f + 0.1 * (1 - f)) * p.hrMax!); // mêmes bornes que les zones affichées (engine/paces)
 }
 /** Minutes passées dans chacune des 5 zones cardiaques. */
 export function zoneMinutes(hist: number[] | null | undefined, p: Physio): number[] | null {
@@ -168,5 +205,9 @@ export function cleanAnalysis(x: unknown): Analysis | null {
   return {
     v: 1, hist: a.hist.map(Math.round), win: a.win.map((w) => [w[0], w[1], w[2]] as [number, number, number]),
     gap: ok(a.gap, 30, 600) ? a.gap : null, dec: ok(a.dec, -60, 60) ? a.dec : null, loss: ok(a.loss, 0, 30000) ? a.loss : null, moving: ok(a.moving, 0, 400000) ? Math.round(a.moving) : 0,
+    best: a.best && typeof a.best === "object" ? {
+      k1: ok(a.best.k1, 150, 3600) ? Math.round(a.best.k1!) : null, k5: ok(a.best.k5, 750, 18000) ? Math.round(a.best.k5!) : null,
+      k10: ok(a.best.k10, 1500, 36000) ? Math.round(a.best.k10!) : null, vam: ok(a.best.vam, 200, 2500) ? Math.round(a.best.vam!) : null,
+    } : undefined,
   };
 }

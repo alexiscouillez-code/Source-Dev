@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import type { Ctx } from "./AppShell";
-import { api, dayLabel, dayNum, fmtDur, fmtKm, fmtNum, localToday, shortDay, SPORT_LABEL, type Activity } from "./client";
+import { api, dayLabel, dayNum, fmtDur, fmtKm, fmtNum, localToday, shortDay, SPORT_LABEL, type Activity, type Me } from "./client";
 import { IconPin, IconPlus, IconSync, IconTrash } from "./icons";
 import { parseActivityFile } from "@/lib/activity-file";
 
@@ -27,7 +27,7 @@ function Insight({ a }: { a: Activity }) {
       )}
       <div className="insight-facts">
         {i.gap != null && <span title="Allure ajustée à la pente : l’allure à plat qui aurait coûté le même effort">Allure ajustée <b>{paceOf(i.gap)}</b> /km</span>}
-        {i.dec != null && <span className={i.dec > 8 ? "warn" : ""} title="Découplage cardiaque : perte d’efficacité entre la première et la seconde moitié. Sous 5 %, ton endurance tient la durée.">Découplage <b>{i.dec > 0 ? "+" : ""}{String(i.dec).replace(".", ",")} %</b></span>}
+        {i.dec != null && <span className={i.dec > 8 ? "warn" : ""} title="Découplage cardiaque : perte d’efficacité entre la première et la seconde moitié de la sortie. Sous 5 %, ton endurance tient la durée ; au-delà de 8 %, elle lâche.">Tenue de l’endurance <b>{i.dec > 0 ? "+" : ""}{String(i.dec).replace(".", ",")} %</b></span>}
         {i.vo2 != null && <span title="VO2max estimée sur les passages d’effort stable de cette sortie">VO2max <b>{String(i.vo2).replace(".", ",")}</b></span>}
       </div>
     </div>
@@ -83,6 +83,7 @@ export default function Sessions({ me, refresh, toast }: Ctx) {
           <button className="btn sm" onClick={() => setSheet({ source: "manual" })}><IconPlus />Ajouter</button>
         </div>
       </header>
+      {me.strava.connected && <Freshness s={me.strava} />}
 
       {!me.strava.connected && me.strava.configured && (
         <div className="banner" style={{ marginBottom: 14 }}>
@@ -111,7 +112,7 @@ export default function Sessions({ me, refresh, toast }: Ctx) {
                   <div className="s">
                     {SPORT_LABEL[a.sport]} · {fmtDur(a.duration_min)}{a.distance_km ? ` · ${fmtKm(a.distance_km)} km` : ""}{a.gain_m ? ` · ${fmtNum(a.gain_m)} m D+` : ""}{a.avg_hr ? ` · ${Math.round(a.avg_hr)} bpm` : ""}
                   </div>
-                  <div className="s" title={`Effort ${a.effort}/10 d’après ${EFFORT_SOURCE[a.effortSource]}`}>Charge <b className="mono" style={{ color: "var(--snow)" }}>{a.load}</b> UA · effort {String(a.effort).replace(".", ",")}/10 ({a.effortSource}){a.source === "strava" ? " · Strava" : a.source === "gpx" ? " · GPX" : a.source === "fichier" ? " · fichier montre" : ""}</div>
+                  <div className="s" title={`Effort ${a.effort}/10 d’après ${EFFORT_SOURCE[a.effortSource]}`}>Charge <b className="mono" style={{ color: "var(--snow)" }}>{a.load}</b> · effort {String(a.effort).replace(".", ",")}/10 ({a.effortSource}){a.source === "strava" ? " · Strava" : a.source === "gpx" ? " · GPX" : a.source === "fichier" ? " · fichier montre" : ""}</div>
                   <Insight a={a} />
                 </div>
                 <div className="item-actions">
@@ -177,3 +178,16 @@ function SessionSheet({ initial, onClose, onSaved }: { initial: Partial<Draft>; 
     </div>
   );
 }
+
+/** Fraîcheur des données : dernière synchro Strava et part des sorties analysées seconde par seconde. */
+function Freshness({ s }: { s: Me["strava"] }) {
+  const ago = (t: number) => { const m = Math.round((Date.now() - t) / 60000); return m < 2 ? "à l’instant" : m < 60 ? `il y a ${m} min` : m < 48 * 60 ? `il y a ${Math.round(m / 60)} h` : `il y a ${Math.round(m / 1440)} jours`; };
+  const a = s.analyzed;
+  return (
+    <p className={`fresh${s.lastError ? " err" : ""}`}>
+      {s.lastError ? `Dernière synchro en erreur : ${s.lastError}` : s.lastSyncAt ? `Strava synchronisé ${ago(s.lastSyncAt)}` : "Strava pas encore synchronisé"}
+      {a && a.total > 0 && <> · <b>{a.done}</b> sortie{a.done > 1 ? "s" : ""} analysée{a.done > 1 ? "s" : ""} seconde par seconde sur {a.total}{a.done < a.total ? " (le reste arrive aux prochaines synchros)" : ""}</>}
+    </p>
+  );
+}
+

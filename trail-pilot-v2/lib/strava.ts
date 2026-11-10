@@ -230,6 +230,11 @@ export async function unlink(userId: number) {
 export async function stravaStatus(userId: number) {
   const link = await one<{ athlete_name: string | null; last_sync_at: number | null; last_error: string | null }>(
     "SELECT athlete_name, last_sync_at, last_error FROM strava_links WHERE user_id = ?", [userId]);
-  return { configured: !!stravaConfig(), connected: !!link, athleteName: link?.athlete_name ?? null, lastSyncAt: link?.last_sync_at ?? null, lastError: link?.last_error ?? null };
+  // Fraîcheur des données : combien de sorties à pied avec cardio sont analysées seconde par seconde.
+  const c = link ? await one<{ total: number; done: number }>(
+    `SELECT COUNT(*) AS total, SUM(CASE WHEN stream_state = 1 THEN 1 ELSE 0 END) AS done FROM activities
+      WHERE user_id = ? AND strava_id IS NOT NULL AND avg_hr IS NOT NULL AND sport IN ('course', 'trail', 'rando') AND duration_min >= 15`, [userId]) : null;
+  return { configured: !!stravaConfig(), connected: !!link, athleteName: link?.athlete_name ?? null, lastSyncAt: link?.last_sync_at ?? null, lastError: link?.last_error ?? null,
+    analyzed: c ? { done: c.done ?? 0, total: c.total ?? 0 } : null };
 }
 export { all };

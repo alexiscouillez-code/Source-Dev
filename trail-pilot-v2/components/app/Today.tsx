@@ -8,11 +8,12 @@ import { ZONES } from "@/lib/engine/legs";
 import Onboarding from "./Onboarding";
 import Coach from "./Coach";
 import WeekCard from "./WeekCard";
-import { api, dayLabel, dayNum, fmtDur, fmtKm, fmtNum, shortDay, SPORT_LABEL, VERDICT, type Me, type PlanSession } from "./client";
+import { api, dayLabel, fmtDur, fmtNum, SPORT_LABEL, VERDICT, type Me, type PlanSession } from "./client";
 
 export default function Today({ me, refresh, go, toast }: Ctx) {
   const [editing, setEditing] = useState(!me.checkin);
   const [busy, setBusy] = useState(false);
+  const [ask, setAsk] = useState(false);
   const firstName = me.user.name?.split(" ")[0];
   const hour = new Date().getHours();
   const hello = hour < 5 ? "Bonsoir" : hour < 18 ? "Bonjour" : "Bonsoir";
@@ -74,53 +75,41 @@ export default function Today({ me, refresh, go, toast }: Ctx) {
           <button className="btn sm" onClick={() => go("plan")}>Mode jour de course</button>
         </div>
       )}
+      <FormCard me={me} go={go} onAsk={() => setAsk((x) => !x)} asking={ask} />
+      {ask && <Coach toast={toast} />}
       <WeekCard today={me.today} toast={toast} />
-      <div className="grid g4" style={{ marginTop: 14 }}>
-        <Kpi label="Forme de fond" value={fmtNum(me.load.ctl)} hint="Charge moyenne sur 6 semaines" info={EXPLAIN.ctl} />
-        <Kpi label="Fatigue" value={fmtNum(me.load.atl)} hint="Charge moyenne sur 7 jours" info={EXPLAIN.atl} />
-        <Kpi label="Fraîcheur" value={(me.load.form > 0 ? "+" : "") + fmtNum(me.load.form)} hint={me.load.form >= 0 ? "Tu as de la réserve" : "Fatigue en cours d’assimilation"} info={EXPLAIN.form} />
-        <Kpi label="Ratio 7 j / 6 sem" value={me.load.ratio != null ? me.load.ratio.toFixed(2).replace(".", ",") : "—"} hint={!me.load.calibrated ? `Calibrage : ${me.load.historyDays} j / 28` : me.load.ratio == null ? "—" : me.load.ratio > 1.3 ? "Montée rapide de la charge" : me.load.ratio < 0.8 ? "Charge en baisse" : "Progression maîtrisée"} info={EXPLAIN.ratio} />
-      </div>
-
-      <Coach toast={toast} />
-
-      <div className="grid g2" style={{ marginTop: 14 }}>
-        <section className="card" aria-labelledby="week-title">
-          <div className="card-head"><h2 id="week-title">7 prochains jours</h2></div>
-          {me.upcoming.length ? (
-            <ul className="list">
-              {me.upcoming.map((s) => (
-                <li key={s.id} className={`item ${s.date === me.today ? "today" : ""} is-${s.status}`}>
-                  <div className="date"><small>{shortDay(s.date)}</small><b>{dayNum(s.date)}</b></div>
-                  <div style={{ minWidth: 0 }}><div className="t">{s.title}</div><div className="s">{fmtDur(s.duration_min)}{s.gain_m ? ` · ${s.gain_m} m D+` : ""} · effort {s.rpe_target}/10</div></div>
-                  <StatusChip status={s.status} />
-                </li>
-              ))}
-            </ul>
-          ) : <p className="empty">Rien de prévu cette semaine.</p>}
-        </section>
-
-        <section className="card" aria-labelledby="recent-title">
-          <div className="card-head"><h2 id="recent-title">Dernières séances</h2><button className="link small" onClick={() => go("runs")}>Voir tout</button></div>
-          {me.recent.length ? (
-            <ul className="list">
-              {me.recent.map((a) => (
-                <li key={a.id} className="item">
-                  <div className="date"><small>{shortDay(a.date)}</small><b>{dayNum(a.date)}</b></div>
-                  <div style={{ minWidth: 0 }}><div className="t">{a.name ?? SPORT_LABEL[a.sport]}</div><div className="s">{fmtDur(a.duration_min)}{a.distance_km ? ` · ${fmtKm(a.distance_km)} km` : ""}{a.gain_m ? ` · ${fmtNum(a.gain_m)} m D+` : ""}</div></div>
-                  <span className="chip">{a.load} UA</span>
-                </li>
-              ))}
-            </ul>
-          ) : <p className="empty">Aucune séance enregistrée. {me.strava.connected ? "Lance une synchro Strava depuis l’onglet Séances." : "Connecte Strava ou ajoute une séance."}</p>}
-        </section>
-      </div>
     </>
   );
 }
 
-function Kpi({ label, value, hint, info }: { label: string; value: string; hint: string; info?: React.ReactNode }) {
-  return <div className="kpi"><small>{label}{info && <InfoTip title={label}>{info}</InfoTip>}</small><b>{value}</b><span>{hint}</span></div>;
+/**
+ * Troisième bloc : où en est ma forme, en une phrase, avec trois repères.
+ * Le détail (courbes, zones, records) est dans Analyse.
+ */
+function FormCard({ me, go, onAsk, asking }: { me: Me; go: Ctx["go"]; onAsk: () => void; asking: boolean }) {
+  const l = me.load, f = l.form;
+  const line = !l.calibrated ? `Calibrage en cours (${l.historyDays} jours sur 28) : les repères se fiabilisent au fil des séances.`
+    : f <= -25 ? "Fatigue marquée : la charge récente dépasse nettement ce que tu as l’habitude d’encaisser."
+    : f <= -10 ? "Tu assimiles une charge en hausse : c’est là que tu progresses, garde les jours faciles faciles."
+    : f < 5 ? "Charge bien absorbée : tu es dans le rythme."
+    : "Tu as de la réserve : bon moment pour une séance clé ou une course.";
+  const pace = l.ratio == null ? "—" : l.ratio > 1.3 ? "trop rapide" : l.ratio < 0.8 ? "en retrait" : "maîtrisé";
+  return (
+    <section className="card form-card" style={{ marginTop: 14 }} aria-labelledby="form-title">
+      <div className="card-head">
+        <div><span className="eyebrow">Ma forme</span><h2 id="form-title" style={{ marginTop: 4 }}>{line}</h2></div>
+      </div>
+      <dl className="form-facts">
+        <div><dt>Fraîcheur<InfoTip title="Fraîcheur">{EXPLAIN.form}</InfoTip></dt><dd>{(f > 0 ? "+" : "") + fmtNum(f)}</dd></div>
+        <div><dt>Rythme de progression<InfoTip title="Rythme de progression">{EXPLAIN.ratio}</InfoTip></dt><dd>{pace}</dd></div>
+        <div><dt>Charge sur 7 jours</dt><dd>{fmtNum(l.load7 ?? 0)}</dd></div>
+      </dl>
+      <div className="row" style={{ gap: 8 }}>
+        <button className="btn ghost sm" onClick={() => go("analysis")}>Voir l’analyse</button>
+        <button className="btn ghost sm" onClick={onAsk} aria-expanded={asking}>{asking ? "Fermer le coach" : "Poser une question au coach"}</button>
+      </div>
+    </section>
+  );
 }
 
 export function StatusChip({ status }: { status: string }) {
@@ -143,7 +132,7 @@ export function SessionBlock({ s, targets }: { s: PlanSession; targets?: Me["tar
         {s.gain_m ? <div><b>{s.gain_m} m</b><small>D+ visé</small></div> : null}
         <div><b>{SPORT_LABEL[s.sport] ?? s.sport}</b><small>Activité</small></div>
       </div>
-      <SessionTarget targets={targets} template={s.template} rpe={s.rpe_target} />
+      <SessionTarget targets={targets} template={s.template} rpe={s.rpe_target} duration={s.duration_min} title={s.title} />
       <p className="soft small" style={{ margin: 0 }}>{s.description}</p>
       {original && <p className="muted small" style={{ margin: 0 }}>Prévu initialement : {original.title}, {fmtDur(original.durationMin)}.</p>}
     </div>
@@ -204,7 +193,7 @@ function CheckinCard({ me, onDone, onCancel }: { me: Me; onDone: (msg: string) =
       // Un court temps d’analyse : la décision se lit mieux quand elle arrive.
       const [r] = await Promise.all([
         api<{ decision: { verdict: keyof typeof VERDICT } }>("/api/checkins", { method: "POST", body: { ...v, painZones: v.pain > 0 && consent ? zones : [], healthConsent: consent && !me.settings.healthConsent, sleepH: w.sleepH, rhr: consent ? w.rhr : "", hrv: consent ? w.hrv : "" } }),
-        new Promise((ok) => setTimeout(ok, window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 1100)),
+        new Promise((ok) => setTimeout(ok, window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : analyzeDelay())),
       ]);
       await onDone(`Décision pour demain : ${VERDICT[r.decision.verdict].label}.`);
     } catch (e2) { setErr(e2 instanceof Error ? e2.message : "Erreur"); setBusy(false); }
@@ -275,3 +264,9 @@ function CheckinCard({ me, onDone, onCancel }: { me: Me; onDone: (msg: string) =
     </section>
   );
 }
+
+/** Le temps d’analyse du check-in : mis en scène les premières fois, puis court pour ne pas faire attendre chaque soir. */
+function analyzeDelay() {
+  try { const n = Number(localStorage.getItem("tp-ci-count") || 0) + 1; localStorage.setItem("tp-ci-count", String(n)); return n <= 3 ? 1100 : 450; } catch { return 700; }
+}
+

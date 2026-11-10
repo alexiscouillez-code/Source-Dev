@@ -5,7 +5,7 @@ import { flushSync } from "react-dom";
 import { buzz, withTransition } from "./motion";
 import { downloadWorkout } from "./workout";
 import type { Ctx } from "./AppShell";
-import { api, dayLabel, dayNum, fmtDur, fmtKm, fmtNum, localToday, PRESET_KEY, shortDay, type PlanSession } from "./client";
+import { api, dayLabel, dayNum, fmtDur, fmtKm, fmtNum, localToday, PRESET_KEY, shortDay, type PlanSession, type Absence, type Review } from "./client";
 import { IconCheck, IconSkip, IconTerrain, IconUndo, IconWatch } from "./icons";
 import Flap from "./Flap";
 import { StatusChip } from "./Today";
@@ -29,7 +29,7 @@ interface RacePlan {
   diagnosis?: { causes: string[]; fixes: string[] };
 }
 type Session = PlanSession;
-interface View { today: string; goal: { name: string; date: string; distance_km: number | null; gain_m: number | null; route?: RaceRoute | null } | null; plan: RacePlan | null; sessions: Session[]; doneByWeek: Record<string, number>; races: SideRaceRow[] }
+interface View { today: string; goal: { name: string; date: string; distance_km: number | null; gain_m: number | null; route?: RaceRoute | null } | null; plan: RacePlan | null; sessions: Session[]; doneByWeek: Record<string, number>; races: SideRaceRow[]; absence?: Absence | null }
 
 const VERDICT: Record<Verdict, { label: string; color: string }> = {
   solide: { label: "Objectif solide", color: "var(--ok)" },
@@ -84,6 +84,7 @@ export default function Planning({ me, refresh, toast, go }: Ctx) {
       toast(`${a.title} déplacée au ${dayLabel(b.date, { weekday: "long", day: "numeric", month: "long" })}.`);
     } catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }
   }
+  const [away, setAway] = useState(false);
   const saved = async (msg: string) => { setEditing(false); await Promise.all([load(), refresh()]); toast(msg); };
 
   if (!v) return <><Head /><div className="skeleton" /></>;
@@ -95,7 +96,9 @@ export default function Planning({ me, refresh, toast, go }: Ctx) {
         <RaceForm goal={v.goal} today={v.today} onSaved={saved} onCancel={editing ? () => setEditing(false) : undefined} />
         {!v.goal && v.sessions.length > 0 && (
           <section className="card" style={{ marginTop: 14 }}>
-            <div className="card-head"><h2>En attendant : entretien</h2><button className="btn ghost sm" onClick={recalc} disabled={busy}>Recalculer</button></div>
+            <div className="card-head"><h2>En attendant : entretien</h2><div className="row"><button className="btn ghost sm" onClick={() => setAway(true)}>Imprévu</button><button className="btn ghost sm" onClick={recalc} disabled={busy}>Recalculer</button></div></div>
+            <AbsenceBanner a={v.absence ?? null} today={v.today} onEdit={() => setAway(true)} onCancel={async () => { try { await api(`/api/absence?today=${v.today}`, { method: "DELETE" }); await Promise.all([load(), refresh()]); toast("Imprévu annulé."); } catch (e) { toast(e instanceof Error ? e.message : "Erreur"); } }} />
+            {away && <AbsenceSheet a={v.absence ?? null} today={v.today} onClose={() => setAway(false)} onSaved={async (msg) => { setAway(false); await Promise.all([load(), refresh()]); toast(msg); }} />}
             <p className="muted small" style={{ margin: 0 }}>Sans course choisie, Trail Pilot te propose 3 semaines pour garder ta forme, à partir de ce que tu fais en ce moment.</p>
             <WeekList sessions={v.sessions} weeks={[]} today={me.today} doneByWeek={v.doneByWeek} onStatus={setStatus} targets={me.targets} onWhere={whereTo} onMove={move} />
           </section>
@@ -110,10 +113,13 @@ export default function Planning({ me, refresh, toast, go }: Ctx) {
     <>
       <Head sub={`${p.weeks.length} semaines · recalculé chaque lundi`} action={
         <div className="row">
+          <button className="btn ghost sm" onClick={() => setAway(true)}>Imprévu</button>
           <button className="btn ghost sm" onClick={recalc} disabled={busy}>{busy ? "Calcul…" : "Recalculer avec ma forme"}</button>
           <button className="btn ghost sm" onClick={() => setEditing(true)}>Changer de course</button>
         </div>
       } />
+      <AbsenceBanner a={v.absence ?? null} today={v.today} onEdit={() => setAway(true)} onCancel={async () => { try { await api(`/api/absence?today=${v.today}`, { method: "DELETE" }); await Promise.all([load(), refresh()]); toast("Imprévu annulé : ton plan reprend son cours."); } catch (e) { toast(e instanceof Error ? e.message : "Erreur"); } }} />
+      {away && <AbsenceSheet a={v.absence ?? null} today={v.today} onClose={() => setAway(false)} onSaved={async (msg) => { setAway(false); await Promise.all([load(), refresh()]); toast(msg); }} />}
       <RaceHeader p={p} />
       <RaceWeather key={v.goal.route?.uploadedAt ?? 0} toast={toast} onAdjust={setWx} />
       <RaceStrategy route={v.goal.route ?? null} estimate={p.estimate} weather={wx} toast={toast} onChanged={async () => { await Promise.all([load(), refresh()]); }} />
@@ -341,6 +347,7 @@ function WeekList({ sessions, weeks, today, doneByWeek, onStatus, targets, onWhe
                         {fmtDur(s.duration_min)}{s.gain_m ? ` · ${fmtNum(s.gain_m)} m D+` : ""}{s.template !== "race" ? ` · effort ${s.rpe_target}/10` : ""}
                         {s.status === "done" && s.a_duration ? ` — réalisé ${fmtDur(s.a_duration)}${s.a_distance ? `, ${fmtKm(s.a_distance)} km` : ""}` : ""}
                       </div>
+                      {s.review && <ReviewLine r={s.review} />}
                     </button>
                     <div className="item-actions">
                       {s.template !== "race" && <StatusChip status={s.status} />}
@@ -354,7 +361,7 @@ function WeekList({ sessions, weeks, today, doneByWeek, onStatus, targets, onWhe
                         <button className="iconbtn" title="Rétablir" aria-label="Rétablir la séance" onClick={() => onStatus(s, "planned")}><IconUndo /></button>
                       )}
                     </div>
-                    {detail === s.id && <div className="details"><SessionTarget targets={targets} template={s.template} rpe={s.rpe_target} /><p style={{ margin: 0 }}>{s.description}</p>{s.template !== "race" && s.date >= today && <div className="row" style={{ gap: 8 }}><button className="btn ghost sm where" onClick={() => onWhere(s)}><IconTerrain />Où la faire ?</button>{s.template !== "strength" && <button className="btn ghost sm where" onClick={() => downloadWorkout(s, targets)}><IconWatch />Sur ma montre</button>}</div>}</div>}
+                    {detail === s.id && <div className="details"><SessionTarget targets={targets} template={s.template} rpe={s.rpe_target} duration={s.duration_min} title={s.title} /><p style={{ margin: 0 }}>{s.description}</p>{s.template !== "race" && s.date >= today && <div className="row" style={{ gap: 8 }}><button className="btn ghost sm where" onClick={() => onWhere(s)}><IconTerrain />Où la faire ?</button>{s.template !== "strength" && <button className="btn ghost sm where" onClick={() => downloadWorkout(s, targets)}><IconWatch />Sur ma montre</button>}</div>}</div>}
                   </li>
                 ))}
               </ul>
@@ -453,3 +460,70 @@ function flyCheck(id: number): Promise<void> {
     setTimeout(() => bar.parentElement?.classList.remove("is-hit"), 900);
   }).catch(() => dot.remove());
 }
+
+/** Prévu / réalisé, en une ligne : verdict, durée et part du temps dans la zone visée. */
+function ReviewLine({ r }: { r: Review }) {
+  const tone = r.verdict === "tenue" ? "ok" : r.verdict === "intense" ? "bad" : "lite";
+  return (
+    <div className={`review r-${tone}`}>
+      <b>{r.label}</b>
+      <span>durée {r.dur} %{r.gain != null ? ` · D+ ${r.gain} %` : ""}</span>
+      {r.inZone != null && (
+        <i className="review-bar" role="img" aria-label={`${r.below} % sous la zone, ${r.inZone} % dans la zone, ${r.above} % au-dessus`}>
+          <i className="rb-below" style={{ flexGrow: r.below ?? 0 }} /><i className="rb-in" style={{ flexGrow: r.inZone }} /><i className="rb-above" style={{ flexGrow: r.above ?? 0 }} />
+        </i>
+      )}
+    </div>
+  );
+}
+
+const ABS_LABEL: Record<Absence["kind"], string> = { malade: "Malade", blesse: "Blessé", deplacement: "En déplacement" };
+const ABS_HOW: Record<Absence["kind"], string> = {
+  malade: "Pas de séance pendant la période, puis 7 jours de reprise : volume réduit d’un tiers, sans intensité.",
+  blesse: "Pas de séance pendant la période, puis 10 jours de reprise en endurance seule, moitié du volume. Si la douleur persiste, consulte.",
+  deplacement: "Un footing court, si possible, à la place de chaque séance. Rien à rattraper au retour.",
+};
+
+function AbsenceBanner({ a, today, onEdit, onCancel }: { a: Absence | null; today: string; onEdit: () => void; onCancel: () => void }) {
+  if (!a) return null;
+  const range = `${dayLabel(a.start, { day: "numeric", month: "short" })} → ${dayLabel(a.end, { day: "numeric", month: "short" })}`;
+  return (
+    <div className="banner absence" style={{ marginBottom: 14 }}>
+      <div><b>Imprévu : {ABS_LABEL[a.kind].toLowerCase()} · {range}</b><div className="small muted">{a.end < today ? "Période terminée, la reprise progressive est en cours. " : ""}{ABS_HOW[a.kind]}</div></div>
+      <div className="row"><button className="btn ghost sm" onClick={onEdit}>Modifier</button><button className="btn ghost sm" onClick={onCancel}>Annuler</button></div>
+    </div>
+  );
+}
+
+function AbsenceSheet({ a, today, onClose, onSaved }: { a: Absence | null; today: string; onClose: () => void; onSaved: (msg: string) => Promise<void> }) {
+  const [kind, setKind] = useState<Absence["kind"]>(a?.kind ?? "malade");
+  const [start, setStart] = useState(a?.start ?? today);
+  const [end, setEnd] = useState(a?.end ?? addDaysClient(today, 3));
+  const [busy, setBusy] = useState(false), [err, setErr] = useState<string | null>(null);
+  async function submit(e: React.FormEvent) {
+    e.preventDefault(); setBusy(true); setErr(null);
+    try { await api("/api/absence", { method: "POST", body: { kind, start, end, today } }); await onSaved("Plan réorganisé autour de ton imprévu."); }
+    catch (e2) { setErr(e2 instanceof Error ? e2.message : "Erreur"); setBusy(false); }
+  }
+  return (
+    <div className="sheet-back" role="dialog" aria-modal="true" aria-labelledby="abs-title" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <form className="sheet form" onSubmit={submit}>
+        <div className="card-head"><h2 id="abs-title">Un imprévu ?</h2><button type="button" className="link small" onClick={onClose}>Fermer</button></div>
+        <div className="picks" role="radiogroup" aria-label="Motif">
+          {(Object.keys(ABS_LABEL) as Absence["kind"][]).map((k) => (
+            <label key={k} className={kind === k ? "on" : ""}><input type="radio" name="kind" value={k} checked={kind === k} onChange={() => setKind(k)} />{ABS_LABEL[k]}</label>
+          ))}
+        </div>
+        <p className="muted small" style={{ margin: 0 }}>{ABS_HOW[kind]}</p>
+        <div className="fields">
+          <label className="field">Du<input type="date" value={start} onChange={(e) => setStart(e.target.value)} required /></label>
+          <label className="field">Au (inclus)<input type="date" value={end} min={start} onChange={(e) => setEnd(e.target.value)} required /></label>
+        </div>
+        {err && <p className="err" role="alert">{err}</p>}
+        <button className="btn" type="submit" disabled={busy}>{busy ? "Réorganisation…" : "Réorganiser mon plan"}</button>
+      </form>
+    </div>
+  );
+}
+const addDaysClient = (d: string, n: number) => { const x = new Date(`${d}T12:00:00Z`); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+

@@ -3,6 +3,7 @@ import { all, one } from "@/db/client";
 import { addDays } from "./engine/dates";
 import { decodePolyline } from "./polyline";
 import { dist } from "./terrain/graph";
+import { parseAnalysis } from "./engine/streams";
 
 /** Progression : volume mois par mois, records personnels et chronos sur les boucles courues plusieurs fois. */
 export interface Progress {
@@ -18,8 +19,8 @@ const fr = (n: number, d = 0) => n.toLocaleString("fr-FR", { maximumFractionDigi
 export async function progress(userId: number, today: string): Promise<Progress> {
   const since = addDays(today, -366).slice(0, 7) + "-01";
   const [rows, all12, sides, goal] = await Promise.all([
-    all<{ id: number; date: string; name: string | null; sport: string; duration_min: number; distance_km: number | null; gain_m: number | null; track: string | null }>(
-      "SELECT id, date, name, sport, duration_min, distance_km, gain_m, track FROM activities WHERE user_id = ? ORDER BY date", [userId]),
+    all<{ id: number; date: string; name: string | null; sport: string; duration_min: number; distance_km: number | null; gain_m: number | null; track: string | null; analysis: string | null }>(
+      "SELECT id, date, name, sport, duration_min, distance_km, gain_m, track, analysis FROM activities WHERE user_id = ? ORDER BY date", [userId]),
     all<{ month: string; minutes: number; km: number; gain: number; count: number }>(
       "SELECT substr(date, 1, 7) AS month, ROUND(SUM(duration_min)) AS minutes, ROUND(SUM(COALESCE(distance_km, 0)), 1) AS km, ROUND(SUM(COALESCE(gain_m, 0))) AS gain, COUNT(*) AS count FROM activities WHERE user_id = ? AND date >= ? GROUP BY month ORDER BY month",
       [userId, since]),
@@ -44,6 +45,16 @@ export async function progress(userId: number, today: string): Promise<Progress>
   if (climb) records.push({ label: "Plus gros D+", value: `${fr(climb.gain_m!)} m`, date: climb.date, name: climb.name });
   const fast10 = top(runs.filter((r) => r.distance_km && r.distance_km >= 9.8 && (r.gain_m ?? 0) / (r.distance_km * 1000) < 0.02), (r) => (r.distance_km! / r.duration_min));
   if (fast10) { const p = fast10.duration_min / fast10.distance_km!; records.push({ label: "Allure la plus rapide (≥ 10 km, plat)", value: `${Math.floor(p)}:${String(Math.round((p % 1) * 60)).padStart(2, "0")} /km`, date: fast10.date, name: fast10.name }); }
+  // Meilleurs efforts tirés de l’analyse seconde par seconde (le meilleur 1 km peut se trouver au milieu d’une sortie longue).
+  const mmss = (s: number) => (s >= 3600 ? `${Math.floor(s / 3600)} h ${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`);
+  const bests: Record<"k1" | "k5" | "k10" | "vam", { v: number; date: string; name: string | null } | null> = { k1: null, k5: null, k10: null, vam: null };
+  for (const r of runs) {
+    const b = parseAnalysis(r.analysis)?.best; if (!b) continue;
+    for (const k of ["k1", "k5", "k10"] as const) { const v = b[k]; if (v != null && (!bests[k] || v < bests[k]!.v)) bests[k] = { v, date: r.date, name: r.name }; }
+    if (b.vam != null && (!bests.vam || b.vam > bests.vam.v)) bests.vam = { v: b.vam, date: r.date, name: r.name };
+  }
+  for (const [k, label] of [["k1", "Meilleur 1 km"], ["k5", "Meilleur 5 km"], ["k10", "Meilleur 10 km"]] as const) { const b = bests[k]; if (b) records.push({ label, value: mmss(b.v), date: b.date, name: b.name }); }
+  if (bests.vam) records.push({ label: "Meilleure montée (10 min)", value: `${fr(bests.vam.v)} m/h`, date: bests.vam.date, name: bests.vam.name });
   const bestMonth = top(all12, (m) => m.km);
   if (bestMonth && bestMonth.km > 0) records.push({ label: "Plus gros mois", value: `${fr(bestMonth.km, 0)} km · ${fr(bestMonth.gain)} m D+`, date: `${bestMonth.month}-01`, name: null });
 

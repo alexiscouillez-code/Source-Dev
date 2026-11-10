@@ -138,4 +138,15 @@ export const MIGRATIONS: { tag: string; statements: string[] }[] = [
     // stream_state : NULL = à analyser, 1 = fait, 2 = flux indisponibles.
     statements: [`ALTER TABLE activities ADD COLUMN analysis TEXT`, `ALTER TABLE activities ADD COLUMN stream_state INTEGER`],
   },
+  {
+    tag: "008_absences_best",
+    statements: [
+      // Mode imprévu : maladie, blessure ou déplacement (une période active par personne).
+      `CREATE TABLE IF NOT EXISTS absences (
+        user_id INTEGER PRIMARY KEY REFERENCES app_users(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL, start_date TEXT NOT NULL, end_date TEXT NOT NULL, created_at INTEGER NOT NULL)`,
+      // Les sorties Strava déjà analysées sans meilleurs efforts sont repassées à la prochaine synchro.
+      `UPDATE activities SET stream_state = NULL WHERE stream_state = 1 AND strava_id IS NOT NULL AND analysis NOT LIKE '%"best"%'`,
+    ],
+  },
 ];

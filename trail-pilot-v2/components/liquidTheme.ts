@@ -19,7 +19,7 @@ export const THEME_EVENT = "tp-theme";
 
 const KEY = "trail-pilot-theme";
 const INK = "#0b0f14";       // fond du thème sombre (gouttes)
-const DURATION = 2600;       // versement complet, en ms
+const DURATION = 1700;       // versement complet, en ms (assez long pour se lire, assez court pour ne pas attendre)
 const IMPACT = 0.16;         // part de l’animation consacrée à la chute du filet
 const N = 72;                // points de la surface
 const STREAM = 7;            // largeur du filet, en px

@@ -6,6 +6,7 @@
  * Sur une montre Garmin : copier le fichier dans le dossier GARMIN/NewFiles (câble USB).
  */
 import type { PlanSession, Targets } from "./client";
+import { tempoBlocks } from "@/lib/engine/planner";
 
 // ---------- Écriture FIT ----------
 const CRC = [0x0000, 0xcc01, 0xd801, 0x1400, 0xf001, 0x3c00, 0x2800, 0xe401, 0xa001, 0x6c00, 0x7800, 0xb401, 0x5000, 0x9c01, 0x8801, 0x4400];
@@ -53,15 +54,22 @@ class Fit {
 
 // ---------- Séance structurée ----------
 type Intensity = 0 | 1 | 2 | 3 | 4; // actif, repos, échauffement, retour au calme, récupération
-interface Step { name: string; min?: number; open?: boolean; zone?: [number, number]; intensity: Intensity; notes?: string; repeat?: { from: number; times: number } }
+export interface Step { name: string; min?: number; open?: boolean; zone?: [number, number]; intensity: Intensity; notes?: string; repeat?: { from: number; times: number }; pace?: "E" | "T" | "I" }
 
-function stepsFor(s: Pick<PlanSession, "template" | "duration_min" | "title">): Step[] {
+export function stepsFor(s: Pick<PlanSession, "template" | "duration_min" | "title">): Step[] {
+  return withPace(baseSteps(s));
+}
+/** Allure de référence de chaque étape sur le plat : seuil, VMA ou endurance (les côtes et descentes se courent au cardio). */
+function withPace(steps: Step[]): Step[] {
+  return steps.map((x) => ({ ...x, pace: x.name === "Seuil" ? "T" : x.name === "Accélération" ? "I" : x.name === "Endurance" || x.name === "Sortie longue" ? "E" : undefined }));
+}
+function baseSteps(s: Pick<PlanSession, "template" | "duration_min" | "title">): Step[] {
   const d = Math.max(10, s.duration_min);
   const warm = (min = 15): Step => ({ name: "Échauffement", min, zone: [1, 2], intensity: 2 });
   const cool = (min = 10): Step => ({ name: "Retour au calme", min, zone: [1, 2], intensity: 3 });
   const reps = (each: number, lo = 3, hi = 12) => Math.max(lo, Math.min(hi, Math.floor((d - 25) / each)));
   switch (s.template) {
-    case "tempo": { const main = Math.max(10, d - 25); return [warm(), { name: "Seuil", min: main, zone: [4, 4], intensity: 0, notes: "Blocs au seuil, effort soutenu mais contrôlé" }, cool()]; }
+    case "tempo": { const { n, block } = tempoBlocks(d); return [warm(), { name: "Seuil", min: block, zone: [4, 4], intensity: 0, notes: "Soutenu mais contrôlé" }, { name: "Trot", min: 3, zone: [1, 2], intensity: 4 }, { name: "Répéter", intensity: 0, repeat: { from: 1, times: n } }, cool()]; }
     case "hills": { const n = reps(2.5); return [warm(), { name: "Côte vive", min: 1, zone: [4, 5], intensity: 0, notes: "Montée à effort vif" }, { name: "Descente trot", min: 1.5, zone: [1, 2], intensity: 4 }, { name: "Répéter", intensity: 0, repeat: { from: 1, times: n } }, cool()]; }
     case "climb": { const n = Math.max(2, Math.min(5, Math.floor((d - 25) / 12))); return [warm(), { name: "Montée longue", min: 8, zone: [3, 4], intensity: 0, notes: "Effort régulier, marche si besoin" }, { name: "Redescente", min: 4, zone: [1, 2], intensity: 4 }, { name: "Répéter", intensity: 0, repeat: { from: 1, times: n } }, cool()]; }
     case "downhill": { const n = reps(7, 2, 8); return [warm(), { name: "Descente", min: 3, zone: [2, 3], intensity: 0, notes: "Pas courts, regard loin, relâché" }, { name: "Remontée facile", min: 4, zone: [1, 2], intensity: 4 }, { name: "Répéter", intensity: 0, repeat: { from: 1, times: n } }, cool()]; }

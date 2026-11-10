@@ -27,11 +27,11 @@ export default function Analysis({ me, toast, go }: Ctx) {
   return (
     <>
       <Head />
+      <h2 className="q-head" id="q-forme"><span>1</span>Suis-je en forme ?</h2>
       {d.intensity && d.recovery && <GraphCards d={d} />}
-      <TrailProfile go={go} />
       {!s.calibrated && <p className="note" style={{ marginBottom: 14 }}>Calibrage en cours : {s.historyDays} jours d’historique sur 28. Les indicateurs se fiabilisent au fil des séances.</p>}
       <section className="card">
-        <div className="card-head"><h2 className="tip-label">Forme, fatigue et fraîcheur<InfoTip title="Forme, fatigue et fraîcheur"><span className="p"><em>Forme de fond</em> (trait épais) : ta charge moyenne sur 6 semaines, ton endurance.</span><span className="p"><em>Fatigue</em> (orange) : ta charge moyenne sur 7 jours.</span><span className="p"><em>Fraîcheur</em> (vert) : la différence entre les deux. Au-dessus de zéro, tu as de la réserve ; très en dessous plusieurs jours, il faut alléger.</span><span className="p">Les barres grises montrent la charge de chaque jour.</span></InfoTip></h2><span className="chip">120 jours</span></div>
+        <div className="card-head"><h2 className="tip-label">Forme, fatigue et fraîcheur<InfoTip title="Forme, fatigue et fraîcheur"><span className="p"><em>Forme de fond</em> (trait épais) : ta charge moyenne sur 6 semaines, ton niveau d’entraînement. <em>Fatigue</em> : ta charge des 7 derniers jours. <em>Fraîcheur</em> : la différence entre les deux.</span></InfoTip></h2></div>
         <FitnessChart points={d.points} />
         <div className="legend">
           <span><i style={{ background: "var(--snow)" }} />Forme de fond (6 sem.)</span>
@@ -39,35 +39,60 @@ export default function Analysis({ me, toast, go }: Ctx) {
           <span><i style={{ background: "var(--ok)" }} />Fraîcheur</span>
           <span><i style={{ background: "var(--ink-4)", height: 8 }} />Charge du jour</span>
         </div>
-        <p className="muted small" style={{ margin: 0 }}>La forme de fond monte lentement quand tu t’entraînes régulièrement. La fatigue réagit vite. Quand la fraîcheur est très négative plusieurs jours, il est temps d’alléger.</p>
+        <p className="muted small" style={{ margin: 0 }}>
+          {s.monotony != null && s.monotony > 2 ? "Tes séances se ressemblent beaucoup cette semaine : alterne jours faciles et jours durs, c’est ce qui fait progresser. " : ""}
+          {sportTotal ? `Sur 4 semaines : ${Object.entries(d.sports).sort((x, y) => y[1] - x[1]).map(([k, v]) => `${SPORT_LABEL[k] ?? k} ${Math.round((v / sportTotal) * 100)} %`).join(", ")}.` : ""}
+        </p>
       </section>
 
-      <div className="grid g2" style={{ marginTop: 14 }}>
-        <section className="card">
-          <div className="card-head"><h2>Volume par semaine</h2><span className="chip">12 sem.</span></div>
-          <WeekBars weeks={d.weeks} />
-        </section>
-        <section className="card">
-          <div className="card-head"><h2>Repères</h2></div>
-          <dl className="grid" style={{ gridTemplateColumns: "1fr 1fr", margin: 0, gap: 10 }}>
-            <Stat k="Ratio 7 j / 6 sem." v={s.ratio != null ? s.ratio.toFixed(2).replace(".", ",") : "—"} h="Entre 0,8 et 1,3 : progression maîtrisée" info={EXPLAIN.ratio} />
-            <Stat k="Monotonie" v={s.monotony != null ? s.monotony.toFixed(1).replace(".", ",") : "—"} h="Au-delà de 2 : varie davantage les séances" info={EXPLAIN.monotony} />
-            <Stat k="Forme de fond" v={fmtNum(s.ctl)} h="UA par jour, moyenne 42 j" info={EXPLAIN.ctl} />
-            <Stat k="Fatigue" v={fmtNum(s.atl)} h="UA par jour, moyenne 7 j" info={EXPLAIN.atl} />
-          </dl>
-          <hr className="sep" />
-          <h3>Répartition sur 4 semaines</h3>
-          {sportTotal ? Object.entries(d.sports).sort((a, b) => b[1] - a[1]).map(([k, v]) => (
-            <div key={k} style={{ display: "grid", gap: 4 }}>
-              <div className="row between small"><span>{SPORT_LABEL[k] ?? k}</span><span className="mono muted">{fmtDur(v)} · {Math.round((v / sportTotal) * 100)} %</span></div>
-              <div className="meter"><i style={{ width: `${(v / sportTotal) * 100}%`, background: k === "trail" ? "var(--ember)" : k === "course" ? "var(--ember-2)" : "var(--soft)" }} /></div>
-            </div>
-          )) : <p className="muted small" style={{ margin: 0 }}>Pas de séance sur les 4 dernières semaines.</p>}
-        </section>
-      </div>
+      <h2 className="q-head" id="q-progres"><span>2</span>Est-ce que je progresse ?</h2>
       <Vo2Card go={go} targets={me.targets} />
       <Progress />
+
+      <h2 className="q-head" id="q-pret"><span>3</span>Suis-je prêt pour ma course ?</h2>
+      <Readiness go={go} />
+      <TrailProfile go={go} />
     </>
+  );
+}
+
+/** « Si la course était aujourd’hui » : temps estimé sur ta course, semaine après semaine. */
+function Readiness({ go }: Pick<Ctx, "go">) {
+  const [r, setR] = useState<{ goal: { name: string; date: string; km: number; gain: number; assumed: boolean } | null; points: { date: string; vo2: number; minutes: number }[]; current: number | null; target: { low: number; high: number } | null; watch: boolean } | null>(null);
+  const [hi, setHi] = useState<number | null>(null);
+  useEffect(() => { api<NonNullable<typeof r>>("/api/readiness").then(setR).catch(() => setR(null)); }, []);
+  if (!r) return null;
+  if (!r.goal) return <section className="card"><div className="empty">Choisis ta course dans Planning : tu verras ici le temps que tu ferais si elle avait lieu aujourd’hui, et son évolution semaine après semaine.<div><button className="btn ghost sm" onClick={() => go("plan")}>Choisir ma course</button></div></div></section>;
+  const pts = r.points;
+  const fmt = (m: number) => `${Math.floor(m / 60)} h ${String(Math.round(m % 60)).padStart(2, "0")}`;
+  const first = pts[0], last = pts[pts.length - 1];
+  const gain = first && last ? first.minutes - last.minutes : 0;
+  const lo = Math.min(...pts.map((p) => p.minutes)), hiV = Math.max(...pts.map((p) => p.minutes)), span = Math.max(5, hiV - lo);
+  const X = (i: number) => (pts.length > 1 ? (i / (pts.length - 1)) * 300 : 150), Y = (m: number) => 10 + ((m - lo) / span) * 70; // plus rapide = plus haut
+  const line = pts.map((p, i) => `${i ? "L" : "M"}${X(i).toFixed(1)} ${Y(p.minutes).toFixed(1)}`).join(" ");
+  const h = hi != null ? pts[hi] : null;
+  return (
+    <section className="card ready" aria-labelledby="ready-title">
+      <div className="card-head">
+        <div><span className="eyebrow">{r.goal.name} · {fmtNum(r.goal.km)} km · {fmtNum(r.goal.gain)} m D+</span><h2 id="ready-title" style={{ marginTop: 4 }}>Si la course était aujourd’hui</h2></div>
+        {pts.length >= 2 && Math.abs(gain) >= 2 && <span className={`chip ${gain > 0 ? "ok" : "lite"}`}>{gain > 0 ? `${fmt(gain).replace(/^0 h /, "")} gagnées` : `${fmt(-gain).replace(/^0 h /, "")} perdues`} en {pts.length - 1} sem.</span>}
+      </div>
+      {r.current == null ? (
+        <div className="empty">Il faut une VO2max pour estimer ton temps : renseigne celle de ta montre dans Compte, ou importe des sorties avec cardio.<div><button className="btn ghost sm" onClick={() => go("account")}>Compléter mon profil</button></div></div>
+      ) : (
+        <>
+          <div className="ready-now"><b>{fmt(r.current)}</b><span className="muted small">avec ta forme du jour{r.target ? ` · objectif du plan au jour J : ${fmt(r.target.low)} – ${fmt(r.target.high)}` : ""}</span></div>
+          {pts.length >= 2 && (
+            <div className="gc-plot ready-plot" onPointerMove={(e) => { const b = e.currentTarget.getBoundingClientRect(); setHi(Math.max(0, Math.min(pts.length - 1, Math.round(((e.clientX - b.left) / b.width) * (pts.length - 1))))); }} onPointerLeave={(e) => { if (e.pointerType === "mouse") setHi(null); }} onPointerDown={(e) => { const b = e.currentTarget.getBoundingClientRect(); setHi(Math.max(0, Math.min(pts.length - 1, Math.round(((e.clientX - b.left) / b.width) * (pts.length - 1))))); }}>
+              <svg viewBox="0 0 300 90" preserveAspectRatio="none" aria-hidden="true"><path className="gc-area" d={`${line} L300 90 L0 90 Z`} /><path className="gc-line" d={line} pathLength={1} vectorEffect="non-scaling-stroke" /></svg>
+              {pts.map((p, i) => <i key={p.date} className={`gc-dot${hi === i ? " on" : ""}${i === pts.length - 1 ? " now" : ""}`} style={{ left: `${(X(i) / 300) * 100}%`, top: `${(Y(p.minutes) / 90) * 100}%` }} />)}
+              {h && <div className="gc-tip" style={{ left: `${Math.max(14, Math.min(86, (X(hi!) / 300) * 100))}%` }}><b>{fmt(h.minutes)}</b>VO2max {String(h.vo2).replace(".", ",")}<small>sem. du {dayLabel(h.date, { day: "numeric", month: "short" })}</small></div>}
+            </div>
+          )}
+          <p className="muted small" style={{ margin: 0 }}>Ta capacité du jour sur ce parcours, d’après l’évolution de ta VO2max{r.watch ? " (calée sur ta montre)" : ""}. La préparation (sortie longue, D+, affûtage) ajoute ce que ce chiffre ne voit pas : il sert à suivre la tendance, pas à fixer ton allure de course.{r.goal.assumed ? " Distance et D+ supposés : complète-les dans Planning." : ""}</p>
+        </>
+      )}
+    </section>
   );
 }
 
@@ -163,9 +188,6 @@ function Vo2History({ months }: { months: Vo2["months"] }) {
 
 const Head = () => <header className="head"><div><span className="eyebrow">Moteur de charge</span><h1>Analyse</h1></div></header>;
 
-function Stat({ k, v, h, info }: { k: string; v: string; h: string; info?: React.ReactNode }) {
-  return <div className="kpi" style={{ padding: 12 }}><small>{k}{info && <InfoTip title={k}>{info}</InfoTip>}</small><b style={{ fontSize: 22 }}>{v}</b><span>{h}</span></div>;
-}
 
 function FitnessChart({ points }: { points: Data["points"] }) {
   const [hover, setHover] = useState<number | null>(null);
@@ -202,25 +224,3 @@ function FitnessChart({ points }: { points: Data["points"] }) {
   );
 }
 
-function WeekBars({ weeks }: { weeks: Data["weeks"] }) {
-  const W = 360, H = 180, P = { l: 4, r: 4, t: 18, b: 22 };
-  const max = Math.max(60, ...weeks.map((w) => w.minutes));
-  const bw = (W - P.l - P.r) / weeks.length;
-  const last = weeks[weeks.length - 1];
-  return (
-    <>
-      <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Minutes d’entraînement par semaine">
-        {weeks.map((w, i) => {
-          const h = (w.minutes / max) * (H - P.t - P.b);
-          return (
-            <g key={w.week}>
-              <rect x={P.l + i * bw + 3} width={bw - 6} y={H - P.b - h} height={Math.max(h, 1)} rx={3} fill={i === weeks.length - 1 ? "var(--ember)" : "#2c3b4a"}><title>{`${dayLabel(w.week, { day: "numeric", month: "short" })} : ${fmtDur(w.minutes)}, ${w.km} km, ${w.gain} m D+`}</title></rect>
-              {i % 3 === 0 && <text x={P.l + i * bw + bw / 2} y={H - 6} textAnchor="middle">{dayLabel(w.week, { day: "numeric", month: "short" })}</text>}
-            </g>
-          );
-        })}
-      </svg>
-      <div className="row small muted"><span>Cette semaine :</span><b className="mono" style={{ color: "var(--snow)" }}>{fmtDur(last?.minutes ?? 0)}</b><span>· {last?.km ?? 0} km · {fmtNum(last?.gain ?? 0)} m D+ · {last?.sessions ?? 0} séance(s)</span></div>
-    </>
-  );
-}

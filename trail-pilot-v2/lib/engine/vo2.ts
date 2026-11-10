@@ -1,4 +1,4 @@
-import { diffDays } from "./dates";
+import { addDays as addDaysIso, diffDays } from "./dates";
 import type { Sport } from "./load";
 import { windowsVo2 } from "./streams";
 
@@ -40,6 +40,8 @@ export interface Vo2Estimate {
   notes: string[];
   /** VO2max indiquée par ta montre (profil), et valeur retenue pour calculer tes allures. */
   watch: number | null; paceVdot: number | null;
+  /** Évolution semaine par semaine sur 12 semaines (calée sur la montre si elle est renseignée). */
+  weekly: { date: string; value: number }[];
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -173,7 +175,7 @@ export function estimateVo2(runs: Vo2Run[], today: string, profile: { hrMax: num
   const uth = hrMax && hrRest ? r1(clamp(15.3 * (hrMax / hrRest), 25, 90)) : null;
 
   const watch = profile.watch ?? null;
-  const empty: Vo2Estimate = { value: null, low: null, high: null, method: null, sessions: [], used: 0, months: [], since: null, uth, previous: null, hrMax, hrMaxSource, hrRest, races: watch ? racesFor(watch) : [], notes, watch, paceVdot: watch };
+  const empty: Vo2Estimate = { value: null, low: null, high: null, method: null, sessions: [], used: 0, months: [], since: null, uth, previous: null, hrMax, hrMaxSource, hrRest, races: watch ? racesFor(watch) : [], notes, watch, paceVdot: watch, weekly: [] };
   if (!hrMax) {
     notes.push("Renseigne ta FC max dans ton profil (ou importe des sorties Strava avec cardio) pour estimer ta VO2max.");
     if (uth == null) return empty;
@@ -201,6 +203,13 @@ export function estimateVo2(runs: Vo2Run[], today: string, profile: { hrMax: num
   if (method === "frequence") notes.push("Estimation par les seules fréquences cardiaques (FC max / FC repos) : un repère, qui sous-estime souvent les coureurs entraînés. Importe des sorties avec cardio pour un calcul plus juste.");
   if (watch) notes.push(`Ta montre indique ${String(watch).replace(".", ",")} : c’est cette valeur qui sert à calculer tes allures. L’estimation Trail Pilot (${String(value).replace(".", ",")}) reste affichée pour comparaison ; un écart de quelques points entre deux méthodes est normal.`);
   const paceVdot = watch ?? (method === "seances" ? value : null);
+  // Tendance : même calcul, tel qu’il était chaque semaine. Avec une montre, la courbe est décalée pour finir sur sa valeur.
+  const shift = watch != null && cur != null ? watch - cur : 0;
+  const weekly: Vo2Estimate["weekly"] = [];
+  for (let k = 12; k >= 0; k--) {
+    const e = estimateAt(all, k * 7);
+    if (e != null) weekly.push({ date: addDaysIso(today, -k * 7), value: r1(e + shift) });
+  }
   const races = racesFor(watch ?? value!);
   // Les séances affichées : les meilleures des 3 derniers mois, sinon les plus récentes.
   const recent = all.filter((s) => s.age < 90);
@@ -209,6 +218,6 @@ export function estimateVo2(runs: Vo2Run[], today: string, profile: { hrMax: num
     value, low, high, method, sessions: shown, used: all.length,
     months: byMonth(all).map(({ month, value: v, sessions }) => ({ month, value: r1(v), sessions })),
     since: all.length ? all[all.length - 1].date : null,
-    uth, previous, hrMax, hrMaxSource, hrRest, races, notes, watch, paceVdot,
+    uth, previous, hrMax, hrMaxSource, hrRest, races, notes, watch, paceVdot, weekly,
   };
 }

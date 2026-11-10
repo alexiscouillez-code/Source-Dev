@@ -64,7 +64,7 @@ export default function InfoTip({ title, children }: { title: string; children: 
   );
 }
 
-const UA = "La charge s’exprime en UA (unités arbitraires) : durée × intensité de l’effort (une minute de fractionné pèse environ 2,5 fois une minute de footing), plus le coût des impacts et du dénivelé, la descente comptant davantage. Quand la sortie est analysée seconde par seconde, l’intensité vient du temps passé dans chaque zone cardiaque.";
+const UA = "La charge s’exprime en UA (unités arbitraires) : durée × intensité de l’effort (une heure de fractionné pèse environ deux fois une heure de footing), plus le coût des impacts et du dénivelé, la descente comptant davantage. Quand la sortie est analysée seconde par seconde, l’intensité vient du temps passé dans chaque zone cardiaque.";
 
 /** Explications partagées des indicateurs de charge. */
 export const EXPLAIN = {

@@ -55,7 +55,9 @@ export const VERDICT = {
   rest: { label: "Récup", color: "var(--rest)", line: "Le repos fait partie de l’entraînement." },
 } as const;
 
-export interface PlanSession { id: number; date: string; template: string; title: string; sport: string; duration_min: number; gain_m: number | null; rpe_target: number; description: string; phase: string; status: string; activity_id: number | null; locked: number; original: string | null; a_duration?: number | null; a_distance?: number | null; a_gain?: number | null; a_name?: string | null }
+export interface PlanSession { id: number; date: string; template: string; title: string; sport: string; duration_min: number; gain_m: number | null; rpe_target: number; description: string; phase: string; status: string; activity_id: number | null; locked: number; original: string | null; a_duration?: number | null; a_distance?: number | null; a_gain?: number | null; a_name?: string | null; review?: Review | null }
+export interface Review { dur: number; gain: number | null; inZone: number | null; above: number | null; below: number | null; verdict: "tenue" | "courte" | "longue" | "intense" | "facile"; label: string }
+export interface Absence { kind: "malade" | "blesse" | "deplacement"; start: string; end: string }
 export interface Activity { id: number; date: string; sport: string; name: string | null; duration_min: number; distance_km: number | null; gain_m: number | null; loss_m: number | null; avg_hr: number | null; rpe: number | null; source: string; load: number; effort: number; effortSource: "ressenti" | "zones" | "fc" | "estimé"; insight?: { zones: number[] | null; gap: number | null; dec: number | null; vo2: number | null } | null; track?: string | null }
 export interface Targets {
   vdot: number | null; method: "reserve" | "max" | null;
@@ -67,7 +69,7 @@ export interface Me {
   mail: boolean; push: boolean; onboarding: boolean;
   settings: { reminder: boolean; healthConsent: boolean };
   targets: Targets;
-  strava: { configured: boolean; connected: boolean; athleteName: string | null; lastSyncAt: number | null; lastError: string | null };
+  strava: { configured: boolean; connected: boolean; athleteName: string | null; lastSyncAt: number | null; lastError: string | null; analyzed?: { done: number; total: number } | null };
   today: string;
   profile: { hr_max: number | null; hr_rest: number | null; vo2_watch: number | null; days_per_week: number; long_day: number; max_weekly_minutes: number | null; level: "debutant" | "regulier" | "confirme" };
   goal: { name: string; date: string; distance_km: number | null; gain_m: number | null; daysToGoal: number | null; phase: string } | null;

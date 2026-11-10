@@ -148,7 +148,7 @@ function LoadCard({ points, ratio, calibrated }: { points: GraphData["points"]; 
   const low = calibrated && ratio != null && ratio < 0.8;
   const h = hov.i != null ? points[hov.i] : null;
   return (
-    <Card kicker="Charge · 14 jours" title={<><b className="gc-big">{ratio != null ? ratio.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}</b> ratio 7 j / 6 sem.</>} alert={alert}
+    <Card kicker="Charge · 14 jours" title={<><b className="gc-big">{ratio != null ? ratio.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}</b> rythme de progression</>} alert={alert}
       status={!calibrated ? "Calibrage" : alert ? "Pic de charge" : low ? "En retrait" : "Maîtrisée"}
       back={<><p>La charge de chaque jour (durée × intensité). Le ratio compare tes 7 derniers jours à ta moyenne sur 6 semaines.</p><p><b>Repère :</b> entre 0,8 et 1,3 tu progresses sans te mettre en danger. Au-dessus de 1,3, tu en fais nettement plus que ce que ton corps a l’habitude d’encaisser : allège deux ou trois jours.</p></>}>
       {!points.some((p) => p.load) ? <Empty>Aucune charge enregistrée sur 14 jours.</Empty> : (
@@ -158,7 +158,7 @@ function LoadCard({ points, ratio, calibrated }: { points: GraphData["points"]; 
               <i style={{ height: `${Math.max(p.load ? 4 : 1.5, (p.load / max) * 100)}%`, ["--d" as string]: `${i * 30}ms` }} />
             </button>
           ))}
-          {h && <Tip x={((hov.i! + 0.5) / points.length) * 100}><b>{fmtNum(h.load)} UA</b><small>{dayLabel(h.date, { weekday: "short", day: "numeric", month: "short" })}</small></Tip>}
+          {h && <Tip x={((hov.i! + 0.5) / points.length) * 100}><b>Charge {fmtNum(h.load)}</b><small>{dayLabel(h.date, { weekday: "short", day: "numeric", month: "short" })}</small></Tip>}
         </div>
       )}
       <div className="gc-axis"><span>il y a 14 j</span><span>aujourd’hui</span></div>

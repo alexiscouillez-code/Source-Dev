@@ -4,6 +4,8 @@ import { addDays, diffDays, mondayOf, range, todayIn } from "./engine/dates";
 import { adapt, decide, watchBaseline, type CheckIn, type PlannedLike, type Verdict, type Watch } from "./engine/decision";
 import { isFoot, sessionLoad, type ActivityLike, type Sport } from "./engine/load";
 import { parseAnalysis, windowsVo2, zoneMinutes } from "./engine/streams";
+import { reviewSession } from "./engine/review";
+import { trainingTargets } from "./engine/paces";
 import { estimateVo2, type Vo2Run } from "./engine/vo2";
 import { buildRacePlan, maintenancePlan, phaseFor, type Level, type RacePlan } from "./engine/planner";
 import { withSideRaces, withStrength, type SideRace } from "./engine/extras";
@@ -90,6 +92,8 @@ export async function regeneratePlan(userId: number, today: string) {
     items = maintenancePlan({ today, profile: pp, activities: likes });
   }
   items = withSideRaces(withStrength(items), sides, { start: addDays(today, 1), level: profile.level, ctl: tl.ctl, mainDate: goal && goal.date > today ? goal.date : null });
+  const absence = await loadAbsence(userId, today);
+  if (absence) items = applyAbsence(items, absence);
   const keep = await all<{ date: string }>("SELECT date FROM plan_sessions WHERE user_id = ? AND date > ? AND (locked = 1 OR status NOT IN ('planned', 'adapted'))", [userId, today]);
   const kept = new Set(keep.map((k) => k.date));
   const now = Date.now();
@@ -201,6 +205,49 @@ export async function ownActivity(userId: number, id: number) {
   return a;
 }
 
+// ---------- Mode imprévu ----------
+export type AbsenceKind = "malade" | "blesse" | "deplacement";
+export interface Absence { kind: AbsenceKind; start: string; end: string }
+/** Période d’imprévu en cours ou à venir (on la garde 14 jours après la fin, le temps de la reprise). */
+export async function loadAbsence(userId: number, today: string): Promise<Absence | null> {
+  const a = await one<{ kind: AbsenceKind; start_date: string; end_date: string }>("SELECT kind, start_date, end_date FROM absences WHERE user_id = ?", [userId]);
+  if (!a || addDays(a.end_date, 14) < today) return null;
+  return { kind: a.kind, start: a.start_date, end: a.end_date };
+}
+/**
+ * Réorganise le plan autour d’un imprévu :
+ *  - malade ou blessé : aucune séance pendant la période ;
+ *  - en déplacement : un footing court, si possible, à la place de chaque séance ;
+ *  - reprise : 7 jours après une maladie (volume −30 %, pas d’intensité), 10 jours après une blessure
+ *    (endurance seule, moitié du volume, sortie longue plafonnée à 45 min).
+ * Le reste du plan se recalcule ensuite sur la charge réelle, qui aura baissé.
+ */
+export function applyAbsence<T extends { date: string; template: string; title: string; sport: string; durationMin: number; gainM: number | null; rpeTarget: number; description: string; phase: string }>(items: T[], a: Absence): T[] {
+  const back = addDays(a.end, a.kind === "blesse" ? 10 : a.kind === "malade" ? 7 : 0);
+  const out: T[] = [];
+  for (const i of items) {
+    if (i.template === "race") { out.push(i); continue; }
+    if (i.date >= a.start && i.date <= a.end) {
+      if (a.kind === "deplacement" && i.template !== "strength") out.push({ ...i, template: "easy", title: "Footing si possible", sport: "course", durationMin: Math.min(35, i.durationMin), gainM: null, rpeTarget: 3, description: "En déplacement : 25 à 35 min faciles si tu trouves le temps, sinon rien. Ce n’est pas une séance à rattraper." });
+      continue;
+    }
+    if (i.date > a.end && i.date <= back) {
+      if (a.kind === "malade") {
+        const easy = i.template !== "long" && i.template !== "b2b" && i.template !== "easy";
+        out.push({ ...i, template: easy ? "easy" : i.template, title: easy ? "Reprise : endurance" : i.title, durationMin: Math.max(25, Math.round((i.durationMin * 0.7) / 5) * 5), gainM: i.gainM ? Math.round(i.gainM * 0.6) : null, rpeTarget: Math.min(i.rpeTarget, 4),
+          description: `Reprise après la maladie : tout en aisance respiratoire, sans intensité. ${easy ? "La séance prévue est remplacée par de l’endurance." : i.description}` });
+      } else if (a.kind === "blesse") {
+        if (i.template === "strength") { out.push(i); continue; }
+        out.push({ ...i, template: "easy", title: "Reprise progressive", sport: i.sport === "velo" ? i.sport : "course", durationMin: Math.max(20, Math.min(45, Math.round((i.durationMin * 0.5) / 5) * 5)), gainM: null, rpeTarget: 3,
+          description: "Reprise après blessure : terrain plat et souple, sans douleur. Si la douleur revient pendant ou le lendemain, arrête et refais un point ; si elle persiste, consulte un professionnel de santé." });
+      } else out.push(i);
+      continue;
+    }
+    out.push(i);
+  }
+  return out;
+}
+
 /** Le plan suit la charge réelle : il se recalcule automatiquement chaque nouvelle semaine. */
 export async function planView(userId: number, today: string) {
   await reconcile(userId, today);
@@ -213,9 +260,12 @@ export async function planView(userId: number, today: string) {
   }
   const from = addDays(mondayOf(today), -7);
   const to = goal && goal.date > today ? goal.date : addDays(today, 21);
+  const prof = await loadProfile(userId);
+  const physio = { hrMax: prof.hr_max, hrRest: prof.hr_rest };
+  const targets = trainingTargets(null, prof.hr_max, prof.hr_rest);
   const [sessions, done, races] = await Promise.all([
-    all<PlanRow & { a_duration: number | null; a_distance: number | null; a_gain: number | null; a_name: string | null }>(
-      `SELECT p.*, a.duration_min AS a_duration, a.distance_km AS a_distance, a.gain_m AS a_gain, a.name AS a_name
+    all<PlanRow & { a_duration: number | null; a_distance: number | null; a_gain: number | null; a_name: string | null; a_analysis: string | null }>(
+      `SELECT p.*, a.duration_min AS a_duration, a.distance_km AS a_distance, a.gain_m AS a_gain, a.name AS a_name, a.analysis AS a_analysis
        FROM plan_sessions p LEFT JOIN activities a ON a.id = p.activity_id
        WHERE p.user_id = ? AND p.date BETWEEN ? AND ? ORDER BY p.date`, [userId, from, to]),
     all<{ date: string; duration_min: number; sport: Sport }>("SELECT date, duration_min, sport FROM activities WHERE user_id = ? AND date >= ? AND date <= ?",
@@ -228,6 +278,11 @@ export async function planView(userId: number, today: string) {
     today,
     goal: goal ? { name: goal.name, date: goal.date, distance_km: goal.distance_km, gain_m: goal.gain_m, route: (() => { try { return goal.route ? JSON.parse(goal.route) : null; } catch { return null; } })() } : null,
     plan: goal && goal.date > today ? meta : null,
-    sessions, doneByWeek, races,
+    // Prévu / réalisé : chaque séance faite est comparée à ce qui était prévu.
+    sessions: sessions.map(({ a_analysis, ...p }) => ({
+      ...p,
+      review: p.status === "done" && p.a_duration != null ? reviewSession(p, { duration_min: p.a_duration, gain_m: p.a_gain }, parseAnalysis(a_analysis), targets, physio) : null,
+    })),
+    doneByWeek, races, absence: await loadAbsence(userId, today),
   };
 }
