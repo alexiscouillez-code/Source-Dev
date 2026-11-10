@@ -19,6 +19,9 @@ export type Tab = "today" | "plan" | "terrains" | "xray" | "runs" | "analysis" |
 const IconXray = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 3.5c-.5 3 .2 5.5 1 8l-.6 5 1.1 4M16 3.5c.5 3-.2 5.5-1 8l.6 5-1.1 4" /><path d="M8.6 7.5h6.8M9.2 12h5.6" /></svg>
 );
+/** Sur téléphone, la barre du bas n’a que cinq onglets : X-Ray et Séances se rangent sous Analyse (sélecteur en haut de page). */
+const GROUPED: Tab[] = ["analysis", "xray", "runs"];
+
 const TABS: { id: Tab; label: string; Icon: () => React.JSX.Element }[] = [
   { id: "today", label: "Aujourd’hui", Icon: IconToday },
   { id: "plan", label: "Planning", Icon: IconPlan },
@@ -143,6 +146,13 @@ export default function AppShell({ user }: { user: { name: string | null; email:
           </div>
         </div>
         {error && !me && <p className="note err">{error} <button className="link" onClick={refresh}>Réessayer</button></p>}
+        {GROUPED.includes(tab) && (
+          <div className="subnav seg" role="tablist" aria-label="Analyse, X-Ray et séances">
+            {TABS.filter((t) => GROUPED.includes(t.id)).sort((a, b) => GROUPED.indexOf(a.id) - GROUPED.indexOf(b.id)).map(({ id, label }) => (
+              <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? "on" : ""} onClick={() => go(id)}>{label}</button>
+            ))}
+          </div>
+        )}
         {!ctx ? (
           <div className="grid g2"><div className="skeleton" /><div className="skeleton" /></div>
         ) : (
@@ -166,9 +176,10 @@ export default function AppShell({ user }: { user: { name: string | null; email:
 
       <nav className="tabbar" aria-label="Sections" ref={tabNav}>
         <span className="nav-ind" aria-hidden="true" />
-        {TABS.map(({ id, label, Icon }) => (
-          <button key={id} data-tab={id} className={`navbtn ${tab === id ? "on" : ""}`} onClick={() => go(id)} aria-current={tab === id ? "page" : undefined}><Icon />{label}</button>
-        ))}
+        {TABS.filter((t) => !GROUPED.includes(t.id) || t.id === "analysis").map(({ id, label, Icon }) => {
+          const on = tab === id || (id === "analysis" && GROUPED.includes(tab));
+          return <button key={id} data-tab={id} className={`navbtn ${on ? "on" : ""}`} onClick={() => go(id)} aria-current={on ? "page" : undefined}><Icon />{label}</button>;
+        })}
       </nav>
       {toastMsg && <div className="toast" role="status" key={toastMsg}>{toastMsg}</div>}
       {ctx && !ctx.me.onboarding && <Tour go={go} />}
