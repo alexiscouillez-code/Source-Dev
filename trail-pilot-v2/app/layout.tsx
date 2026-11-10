@@ -3,6 +3,7 @@ import { Analytics } from "@vercel/analytics/next";
 import "@fontsource-variable/bricolage-grotesque";
 import "@fontsource/jetbrains-mono/400.css";
 import "@fontsource/jetbrains-mono/600.css";
+import "./liquid.css";
 import { SITE_URL, SITE_NAME, SITE_DESC } from "@/lib/site";
 
 export const metadata: Metadata = {

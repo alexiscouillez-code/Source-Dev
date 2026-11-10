@@ -1,0 +1,49 @@
+/* ---------- Changement de thème « liquid pour » ----------
+   Le thème sombre se verse depuis le bouton : un filet d’encre tombe, éclabousse, puis le liquide monte.
+   Repose sur les transitions de vue : le navigateur garde une image de l’ancien et du nouveau thème,
+   et components/liquidTheme.ts découpe l’image sombre à chaque image (clip-path: polygon). */
+
+/* --- Interrupteur soleil / lune (couleurs fixes : il reste lisible sur les deux thèmes) --- */
+button.theme-toggle.lq-toggle {
+  position: relative; display: inline-block; flex: none; width: 56px; height: 30px; padding: 0; border-radius: 99px; cursor: pointer;
+  border: 1px solid #d8d0bf; background: #ebe4d4; color: inherit; backdrop-filter: none; transform: none;
+  transition: background .45s ease, border-color .45s ease; -webkit-tap-highlight-color: transparent;
+}
+button.theme-toggle.lq-toggle:hover { border-color: #ff6a2b; }
+button.theme-toggle.lq-toggle:active { transform: none; }
+button.theme-toggle.lq-toggle:focus-visible { outline: 2px solid #ff6a2b; outline-offset: 3px; }
+.lq-toggle .lq-knob {
+  position: absolute; top: 2px; left: 2px; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center;
+  background: #fff; box-shadow: 0 2px 6px rgba(0, 0, 0, .25);
+  transition: transform .5s cubic-bezier(.3, 1.5, .5, 1), background .45s ease;
+}
+button.theme-toggle.lq-toggle svg { position: absolute; width: 15px; height: 15px; transition: opacity .35s ease, transform .5s ease; }
+.lq-toggle .lq-sun { color: #ff6a2b; }
+.lq-toggle .lq-moon { color: #f4efe6; opacity: 0; transform: rotate(-80deg) scale(.5); }
+/* État « sombre » : data-on une fois le composant monté, sinon le thème posé avant l’affichage */
+button.theme-toggle.lq-toggle[data-on], :root:not([data-theme="light"]) button.theme-toggle.lq-toggle:not([data-ready]) { background: #1a232d; border-color: #2c3947; }
+.lq-toggle[data-on] .lq-knob, :root:not([data-theme="light"]) .lq-toggle:not([data-ready]) .lq-knob { transform: translateX(26px); background: #0b0f14; }
+.lq-toggle[data-on] .lq-sun, :root:not([data-theme="light"]) .lq-toggle:not([data-ready]) .lq-sun { opacity: 0; transform: rotate(80deg) scale(.5); }
+.lq-toggle[data-on] .lq-moon, :root:not([data-theme="light"]) .lq-toggle:not([data-ready]) .lq-moon { opacity: 1; transform: none; }
+.lq-toggle:not([data-ready]) .lq-knob, .lq-toggle:not([data-ready]) svg { transition: none; }
+
+/* --- Reflets et gouttes : calque fixe, affiché « en direct » au-dessus des deux images --- */
+.lq-fx { position: fixed; inset: 0; z-index: 2147483000; pointer-events: none; overflow: hidden; view-transition-name: lq-fx; }
+.lq-fx svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.lq-fx path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.lq-fx .lq-glow { stroke: rgba(255, 255, 255, .22); stroke-width: 7; }
+.lq-fx .lq-edge { stroke: rgba(255, 255, 255, .9); stroke-width: 1.8; }
+.lq-fx .lq-stream-edge { stroke: rgba(255, 255, 255, .5); stroke-width: 1.2; }
+.lq-drop { position: absolute; left: 0; top: 0; border-radius: 50%; will-change: transform; }
+
+/* --- Pendant le versement (html[data-lq]) --- */
+/* Un seul bloc : la page entière. Les autres transitions nommées (onglets, séances) sont suspendues. */
+html[data-lq] body *:not(.lq-live) { view-transition-name: none !important; }
+html[data-lq]::view-transition { pointer-events: none; }                       /* le bouton reste cliquable pour inverser */
+html[data-lq]::view-transition-group(*) { animation: none; }
+html[data-lq]::view-transition-old(*), html[data-lq]::view-transition-new(*) { animation: none; mix-blend-mode: normal; opacity: 1; }
+html[data-lq]::view-transition-old(root) { animation: lq-hold 40s linear; }     /* maintient la transition ouverte ; le script la referme */
+@keyframes lq-hold { from { opacity: 1; } to { opacity: 1; } }
+html[data-lq="drain"]::view-transition-old(root) { z-index: 1; }                /* en vidant, l’ancien thème (sombre) est au-dessus */
+html[data-lq]::view-transition-old(lq-toggle), html[data-lq]::view-transition-old(lq-fx) { display: none; }
+html[data-lq] .cursor { visibility: hidden; }                                    /* le curseur décoratif du site ne se mélange pas aux images */
