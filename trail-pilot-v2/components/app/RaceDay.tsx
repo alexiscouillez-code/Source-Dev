@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { fmtDur, fmtNum } from "./client";
-import { buzz } from "./motion";
+import { buzz, motionOk } from "./motion";
 import { decodePolyline } from "@/lib/polyline";
 import { passageAt, type RaceRoute, type Strategy } from "@/lib/engine/strategy";
 
@@ -106,6 +106,16 @@ export default function RaceDay({ route, strat, onClose }: { route: RaceRoute; s
   }, [elapsed, running, st.eatEvery, st.drinkEvery, perHour]);
   useEffect(() => { if (!alert) return; const t = setTimeout(() => setAlert(null), 20000); return () => clearTimeout(t); }, [alert]);
 
+  // Départ : trois secondes de décompte (3, 2, 1) avant de lancer le chrono.
+  const [count, setCount] = useState<number | null>(null);
+  useEffect(() => {
+    if (count == null) return;
+    buzz(count === 0 ? [30, 40, 60] : 20);
+    const t = setTimeout(() => { if (count === 0) { setCount(null); startStop(); } else setCount(count - 1); }, count === 0 ? 650 : 800);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [count]);
+  const pressMain = () => { if (st.start == null && motionOk()) setCount(3); else startStop(); };
   const startStop = () => update((s) => {
     const t = Date.now();
     if (s.start == null) { lastEat.current = 0; lastDrink.current = 0; return { ...s, start: t, paused: null, pauseTotal: 0, marks: [] }; }
@@ -118,6 +128,7 @@ export default function RaceDay({ route, strat, onClose }: { route: RaceRoute; s
 
   return createPortal(
     <div className="raceday" role="dialog" aria-modal="true" aria-label="Mode jour de course">
+      {count != null && <div className="rd-count" role="status" aria-live="assertive"><b key={count}>{count === 0 ? "Go !" : count}</b></div>}
       <div className="rd-top">
         <span className="eyebrow">{route.name ?? "Jour de course"}</span>
         <button className="rd-close" onClick={onClose} aria-label="Fermer le mode jour de course">×</button>
@@ -136,7 +147,7 @@ export default function RaceDay({ route, strat, onClose }: { route: RaceRoute; s
       </div>
       {alert && <button className="rd-alert" onClick={() => setAlert(null)}>{alert}<small>Toucher pour fermer</small></button>}
       <div className="rd-actions">
-        <button className={`btn ${running ? "ghost" : ""} rd-main`} onClick={startStop}>{st.start == null ? "Départ" : running ? "Pause" : "Reprendre"}</button>
+        <button className={`btn ${running ? "ghost" : ""} rd-main`} onClick={pressMain} disabled={count != null}>{st.start == null ? "Départ" : running ? "Pause" : "Reprendre"}</button>
         {st.start != null && next && <button className="btn ghost" onClick={mark}>Je suis au ravito</button>}
       </div>
       <div className="rd-foot">

@@ -212,7 +212,7 @@ function CheckinCard({ me, onDone, onCancel }: { me: Me; onDone: (msg: string) =
 
   return (
     <section className="card ci-card" aria-labelledby="ci-title" aria-busy={busy}>
-      {busy && <div className="analyzing" role="status"><span className="ring" /><b>Analyse de ta forme…</b><ul><li>Sommeil et jambes</li><li>Charge des 7 derniers jours</li><li>Séance de demain</li></ul></div>}
+      {busy && <div className="analyzing" role="status"><span className="az-core"><span className="ring" /><i style={{ ["--a" as string]: "-90deg" }}>{v.sleep}</i><i style={{ ["--a" as string]: "30deg" }}>{v.legs}</i><i style={{ ["--a" as string]: "150deg" }}>{v.motivation}</i></span><b>Analyse de ta forme…</b><ul><li>Sommeil et jambes</li><li>Charge des 7 derniers jours</li><li>Séance de demain</li></ul></div>}
       <div className="row between"><div><span className="eyebrow">10 secondes</span><h2 id="ci-title" style={{ marginTop: 4 }}>Check-in du soir</h2></div>{onCancel && <button className="link small" onClick={onCancel}>Annuler</button>}</div>
       <form className="form" onSubmit={submit}>
         {SCALES.map((s) => (

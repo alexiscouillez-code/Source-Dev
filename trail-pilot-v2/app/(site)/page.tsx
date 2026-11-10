@@ -25,6 +25,11 @@ export default function Home() {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <a className="skip" href="#contenu">Aller au contenu</a>
       <Nav />
+      {/* Lecture de la page = parcours : le profil se trace au défilement (ordinateur, navigateurs récents) */}
+      <div className="trail-progress" aria-hidden="true">
+        <div><svg width="132" height="48" viewBox="0 0 132 48"><path className="tp-bg" d="M4 40 L18 34 L28 37 L42 22 L52 28 L66 12 L78 20 L90 8 L104 24 L116 18 L128 30" /><path className="tp-line" pathLength={1} d="M4 40 L18 34 L28 37 L42 22 L52 28 L66 12 L78 20 L90 8 L104 24 L116 18 L128 30" /></svg><i /></div>
+        <small>Ton parcours</small>
+      </div>
       <MotionRoot />
 
       <main id="contenu">

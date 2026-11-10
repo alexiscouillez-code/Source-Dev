@@ -7,6 +7,7 @@ import { downloadWorkout } from "./workout";
 import type { Ctx } from "./AppShell";
 import { api, dayLabel, dayNum, fmtDur, fmtKm, fmtNum, localToday, PRESET_KEY, shortDay, type PlanSession } from "./client";
 import { IconCheck, IconSkip, IconTerrain, IconUndo, IconWatch } from "./icons";
+import Flap from "./Flap";
 import { StatusChip } from "./Today";
 import { SessionTarget } from "./Targets";
 import type { Targets } from "./client";
@@ -64,7 +65,13 @@ export default function Planning({ me, refresh, toast, go }: Ctx) {
     finally { setBusy(false); }
   }
   async function setStatus(s: Session, status: string) {
-    try { if (status === "done") buzz(18); await api(`/api/plan/${s.id}`, { method: "PATCH", body: { status } }); await Promise.all([load(true), refresh()]); }
+    try {
+      const flight = status === "done" ? flyCheck(s.id) : null;
+      if (status === "done") buzz(18);
+      await api(`/api/plan/${s.id}`, { method: "PATCH", body: { status } });
+      await flight;
+      await Promise.all([load(true), refresh()]);
+    }
     catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }
   }
   // Glisser-déposer : la séance prend le jour visé ; celle qui s’y trouvait (si elle est déplaçable) prend l’ancien jour.
@@ -147,7 +154,7 @@ function RaceHeader({ p }: { p: RacePlan }) {
           <span className="eyebrow">Ma course · {dayLabel(p.race.date, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</span>
           <h2 className="race-name">{p.race.name}</h2>
           <div className="specs">
-            <div><b>{p.race.daysTo > 0 ? `J-${p.race.daysTo}` : "Jour J"}</b><small>Compte à rebours</small></div>
+            <div><b><Flap days={p.race.daysTo} className="flap-lg" /></b><small>Compte à rebours</small></div>
             <div><b>{fmtKm(p.race.distanceKm)} km</b><small>Distance</small></div>
             <div><b>{fmtNum(p.race.gainM)} m</b><small>D+</small></div>
             <div><b>{p.race.effortKm}</b><small>Km-effort</small></div>
@@ -421,4 +428,28 @@ function RaceForm({ goal, today, onSaved, onCancel }: { goal: View["goal"]; toda
       </form>
     </section>
   );
+}
+
+/** Séance validée : une coche part de la ligne et rejoint la barre d’avancement de sa semaine, qui s’illumine. */
+function flyCheck(id: number): Promise<void> {
+  const li = document.querySelector<HTMLElement>(`li[data-sid="${id}"]`);
+  const bar = li?.closest(".wk")?.querySelector<HTMLElement>(".wk-prog > i");
+  if (!li || !bar || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return Promise.resolve();
+  const from = (li.querySelector(".item-actions") ?? li).getBoundingClientRect(), to = bar.getBoundingClientRect();
+  const x0 = from.left + from.width / 2, y0 = from.top + from.height / 2;
+  const x1 = to.left + to.width * Math.min(1, Number(getComputedStyle(bar).getPropertyValue("--p") || 0) + 0.08), y1 = to.top + to.height / 2;
+  const dot = document.createElement("i");
+  dot.className = "fly-check"; dot.textContent = "✓";
+  document.body.appendChild(dot);
+  const anim = dot.animate([
+    { transform: `translate(${x0}px, ${y0}px) scale(.4)`, opacity: 0 },
+    { transform: `translate(${x0}px, ${y0 - 26}px) scale(1.25)`, opacity: 1, offset: 0.22 },
+    { transform: `translate(${(x0 + x1) / 2}px, ${Math.min(y0, y1) - 40}px) scale(1)`, opacity: 1, offset: 0.6 },
+    { transform: `translate(${x1}px, ${y1}px) scale(.35)`, opacity: 0.9 },
+  ], { duration: 720, easing: "cubic-bezier(.4, 0, .2, 1)", fill: "forwards" });
+  return anim.finished.then(() => {
+    dot.remove();
+    bar.parentElement?.classList.add("is-hit");
+    setTimeout(() => bar.parentElement?.classList.remove("is-hit"), 900);
+  }).catch(() => dot.remove());
 }

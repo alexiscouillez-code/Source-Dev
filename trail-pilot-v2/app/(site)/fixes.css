@@ -92,3 +92,22 @@
 @media (max-width: 360px) { .nav .logo span { display: none; } }
 .auth-link { position: relative; }
 .auth-link::after { content: ""; position: absolute; inset: -11px -8px; }
+
+/* Profil de lecture : fixe en bas à droite, il se trace au défilement et un point le parcourt */
+.trail-progress { display: none; }
+@media (min-width: 1000px) and (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: scroll()) and (offset-path: path("M0 0")) {
+    body::before { display: none; }
+    .trail-progress { display: grid; gap: 4px; position: fixed; right: 22px; bottom: 22px; z-index: 40; padding: 10px 12px 8px; border-radius: 16px; background: color-mix(in srgb, #0b0f14 78%, transparent); border: 1px solid #26333f; backdrop-filter: blur(12px); box-shadow: 0 18px 40px -18px rgba(0, 0, 0, .5); animation: tp-show linear both; animation-timeline: scroll(root); animation-range: 0 320px; }
+    .trail-progress > div { position: relative; width: 132px; height: 48px; }
+    .trail-progress svg { display: block; overflow: visible; }
+    .trail-progress path { fill: none; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+    .trail-progress .tp-bg { stroke: #f4efe62e; }
+    .trail-progress .tp-line { stroke: #ff6a2b; stroke-dasharray: 1; stroke-dashoffset: 1; animation: tp-draw linear both; animation-timeline: scroll(root); }
+    .trail-progress i { position: absolute; left: 0; top: 0; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: #f4efe6; box-shadow: 0 0 0 3px #ff6a2b; offset-path: path("M4 40 L18 34 L28 37 L42 22 L52 28 L66 12 L78 20 L90 8 L104 24 L116 18 L128 30"); offset-rotate: 0deg; offset-distance: 0%; animation: tp-run linear both; animation-timeline: scroll(root); }
+    .trail-progress small { font-family: var(--mono); font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase; color: #8d99a5; }
+    @keyframes tp-draw { to { stroke-dashoffset: 0; } }
+    @keyframes tp-run { to { offset-distance: 100%; } }
+    @keyframes tp-show { from { opacity: 0; transform: translateY(16px); } }
+  }
+}

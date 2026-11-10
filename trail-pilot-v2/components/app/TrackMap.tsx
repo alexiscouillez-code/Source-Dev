@@ -37,6 +37,7 @@ export default function TrackMap({ lines, markers = NO_MARKERS, height = 320, on
   const fitted = useRef<string | null>(null);
   const focused = useRef<number | null | undefined>(undefined);
   const hoverDot = useRef<import("leaflet").CircleMarker | null>(null);
+  const tracer = useRef<import("leaflet").CircleMarker | null>(null);
   const drawn = useRef(false);
 
   // Création de la carte (une fois).
@@ -103,7 +104,34 @@ export default function TrackMap({ lines, markers = NO_MARKERS, height = 320, on
       // La carte vole vers le tracé choisi (sans recadrage complet).
       if (!refit && focus != null && focus !== focused.current && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
         const target = drawnLines.find((x) => (x as unknown as { _tpId?: number })._tpId === focus);
-        if (target) map.current!.flyToBounds(target.getBounds(), { padding: [30, 30], maxZoom: 16, duration: 0.9 });
+        if (target) {
+          const m = map.current!;
+          m.flyToBounds(target.getBounds(), { padding: [30, 30], maxZoom: 16, duration: 0.9 });
+          // Une fois la carte posée, le parcours se dessine du départ à l’arrivée, suivi par un point.
+          m.once("moveend", () => {
+            const path = (target as unknown as { _path?: SVGPathElement })._path;
+            const pts = (target.getLatLngs() as import("leaflet").LatLng[]).flat() as import("leaflet").LatLng[];
+            if (!path || pts.length < 2 || !path.isConnected) return;
+            const len = path.getTotalLength(), D = Math.min(2200, Math.max(900, len * 2.2));
+            path.animate([{ strokeDasharray: `${len} ${len}`, strokeDashoffset: len }, { strokeDasharray: `${len} ${len}`, strokeDashoffset: 0 }], { duration: D, easing: "cubic-bezier(.45, 0, .2, 1)" });
+            tracer.current?.remove();
+            const dot = L.circleMarker(pts[0], { radius: 6, color: "#fff", weight: 3, fillColor: "#ff6a2b", fillOpacity: 1, interactive: false, className: "tm-tracer" }).addTo(m);
+            tracer.current = dot;
+            // Distances cumulées : le point avance à vitesse régulière le long du tracé.
+            const cum = [0]; for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + pts[i - 1].distanceTo(pts[i]));
+            const total = cum[cum.length - 1] || 1, t0 = performance.now();
+            const ease = (k: number) => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
+            const step = (now: number) => {
+              if (tracer.current !== dot) return;
+              const k = Math.min(1, (now - t0) / D), d = ease(k) * total;
+              let i = 1; while (i < cum.length - 1 && cum[i] < d) i++;
+              const f = (d - cum[i - 1]) / Math.max(1e-6, cum[i] - cum[i - 1]);
+              dot.setLatLng([pts[i - 1].lat + (pts[i].lat - pts[i - 1].lat) * f, pts[i - 1].lng + (pts[i].lng - pts[i - 1].lng) * f]);
+              if (k < 1) requestAnimationFrame(step); else setTimeout(() => { if (tracer.current === dot) { dot.remove(); tracer.current = null; } }, 500);
+            };
+            requestAnimationFrame(step);
+          });
+        }
       }
       focused.current = focus;
       if (refit) {

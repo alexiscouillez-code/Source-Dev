@@ -12,6 +12,7 @@ import Account from "./Account";
 import XRay from "./XRay";
 import Terrains from "./Terrains";
 import ThemeToggle from "@/components/ThemeToggle";
+import Flap from "./Flap";
 import { startCountUps, withTransition } from "./motion";
 import Tour from "./Tour";
 
@@ -118,7 +119,7 @@ export default function AppShell({ user }: { user: { name: string | null; email:
         {me?.goal && (
           <button className="side-goal" onClick={() => go("plan")} style={{ textAlign: "left", cursor: "pointer", color: "inherit" }}>
             <small>{me.goal.phase}</small>
-            <b>{me.goal.daysToGoal! > 0 ? `J-${me.goal.daysToGoal}` : "Jour J"}</b>
+            <Flap days={me.goal.daysToGoal ?? 0} />
             <span>{me.goal.name}</span>
           </button>
         )}
