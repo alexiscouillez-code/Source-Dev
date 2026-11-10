@@ -132,4 +132,10 @@ export const MIGRATIONS: { tag: string; statements: string[] }[] = [
     // VO2max affichée par la montre du coureur (facultative)
     statements: [`ALTER TABLE profiles ADD COLUMN vo2_watch REAL`],
   },
+  {
+    tag: "007_activity_analysis",
+    // Résumé de l’analyse seconde par seconde (zones, fenêtres d’effort stable, allure ajustée) ;
+    // stream_state : NULL = à analyser, 1 = fait, 2 = flux indisponibles.
+    statements: [`ALTER TABLE activities ADD COLUMN analysis TEXT`, `ALTER TABLE activities ADD COLUMN stream_state INTEGER`],
+  },
 ];

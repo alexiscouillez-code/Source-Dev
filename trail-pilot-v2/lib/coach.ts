@@ -4,7 +4,7 @@ import { HttpError } from "./api";
 import { addDays } from "./engine/dates";
 import { estimateVo2 } from "./engine/vo2";
 import { fmtPace, trainingTargets } from "./engine/paces";
-import { dashboard, loadActivities, loadSideRaces, readPlanMeta, loadGoal } from "./service";
+import { dashboard, loadActivities, loadSideRaces, readPlanMeta, loadGoal, toVo2Run } from "./service";
 
 /**
  * Coach IA : répond aux questions d’entraînement en s’appuyant sur les données réelles du coureur
@@ -33,7 +33,7 @@ const h = (m: number) => `${Math.floor(m / 60)}h${String(Math.round(m % 60)).pad
 async function context(userId: number, today: string) {
   const [d, history, goal, sides] = await Promise.all([dashboard(userId, today), loadActivities(userId, "0000-01-01"), loadGoal(userId), loadSideRaces(userId)]);
   const p = d.profile;
-  const vo2 = estimateVo2(history.map((r) => ({ date: r.date, sport: r.sport, durationMin: r.duration_min, distanceKm: r.distance_km, gainM: r.gain_m, lossM: r.loss_m, avgHr: r.avg_hr, maxHr: r.max_hr })), today, { hrMax: p.hr_max, hrRest: p.hr_rest, watch: p.vo2_watch });
+  const vo2 = estimateVo2(history.map(toVo2Run), today, { hrMax: p.hr_max, hrRest: p.hr_rest, watch: p.vo2_watch });
   const t = trainingTargets(vo2.paceVdot, vo2.hrMax, p.hr_rest);
   const meta = goal && goal.date > today ? readPlanMeta(goal) : null;
   const next = await all<{ date: string; title: string; duration_min: number; gain_m: number | null; rpe_target: number; status: string }>(

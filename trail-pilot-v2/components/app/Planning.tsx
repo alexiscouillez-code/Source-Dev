@@ -21,7 +21,7 @@ interface PlanWeek { monday: string; phase: string; minutes: number; longMin: nu
 interface RacePlan {
   generatedOn: string;
   race: { name: string; date: string; distanceKm: number; gainM: number; effortKm: number; daysTo: number; assumed: boolean };
-  estimate: { low: number; high: number };
+  estimate: { low: number; high: number }; estimateFrom?: "vo2" | "niveau";
   demands: { weeklyMin: number; longMin: number; weeklyGain: number; backToBack: boolean };
   current: { weeklyMin: number; longestMin: number; weeklyGain: number; hasHistory: boolean };
   reach: { weeklyMin: number; longMin: number };
@@ -163,7 +163,7 @@ function RaceHeader({ p }: { p: RacePlan }) {
         <div className="race-time">
           <small>Temps estimé pour finir</small>
           <b>{fmtDur(p.estimate.low)} – {fmtDur(p.estimate.high)}</b>
-          <span>à ton niveau actuel</span>
+          <span>{p.estimateFrom === "vo2" ? "d’après ta VO2max" : "à ton niveau actuel"}</span>
         </div>
       </div>
       <div className="race-verdict">

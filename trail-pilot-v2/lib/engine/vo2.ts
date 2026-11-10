@@ -1,12 +1,16 @@
 import { diffDays } from "./dates";
 import type { Sport } from "./load";
+import { windowsVo2 } from "./streams";
 
 /**
  * VO2max estimée (ml/kg/min), sans test d’effort, à partir de tout l’historique de course.
  *
- * 1. À partir de tes sorties (méthode principale) : pour chaque course ou trail avec fréquence
- *    cardiaque, on ramène l’allure à une allure équivalente sur le plat (coût énergétique de la
- *    course en montée et en descente, Minetti 2002), on en tire le coût en oxygène (Daniels-Gilbert),
+ * 1. À partir de tes sorties (méthode principale).
+ *    a. Sortie analysée seconde par seconde (flux Strava ou fichier de montre) : on isole les passages
+ *       d’effort stable, on ajuste l’allure à la pente de chacun et on rapporte son coût en oxygène à la
+ *       réserve cardiaque utilisée ; la séance vaut le quartile supérieur de ces passages (engine/streams).
+ *    b. Sinon, à partir des moyennes de la sortie : allure équivalente sur le plat (Minetti 2002 sur route,
+ *       km-effort + 5 % sur sentier), on en tire le coût en oxygène (Daniels-Gilbert),
  *    puis la part de ta capacité utilisée, donnée par ta réserve cardiaque (Swain : %VO2 de réserve
  *    ≈ %FC de réserve), corrigée de la dérive cardiaque des sorties longues. Sur les efforts durs
  *    (FC moyenne ≥ 88 % de la FC max), on y ajoute la VDOT de Daniels tirée du couple temps/distance.
@@ -17,8 +21,12 @@ import type { Sport } from "./load";
  *
  * Ce sont des estimations de terrain, à ±5 à 10 %, pas une mesure de laboratoire.
  */
-export interface Vo2Run { date: string; sport: Sport; durationMin: number; distanceKm: number | null; gainM: number | null; lossM?: number | null; avgHr: number | null; maxHr?: number | null; name?: string | null }
-export interface Vo2Session { date: string; name: string | null; vo2max: number; speedKmh: number; hrPct: number }
+export interface Vo2Run {
+  date: string; sport: Sport; durationMin: number; distanceKm: number | null; gainM: number | null; lossM?: number | null; avgHr: number | null; maxHr?: number | null; name?: string | null;
+  /** Fenêtres d’effort stable de l’analyse seconde par seconde : [allure ajustée m/min, FC, minute]. */
+  win?: [number, number, number][] | null;
+}
+export interface Vo2Session { date: string; name: string | null; vo2max: number; speedKmh: number; hrPct: number; precise?: boolean }
 export interface Vo2Month { month: string; value: number; sessions: number }
 export interface Vo2Estimate {
   value: number | null; low: number | null; high: number | null;
@@ -56,9 +64,26 @@ export function flatEquivalent(distanceKm: number, gainM: number | null, lossM: 
 function sessionVo2(a: Vo2Run, hrMax: number, hrRest: number | null): number | null {
   if (a.sport !== "course" && a.sport !== "trail") return null;
   if (!a.avgHr || !a.distanceKm || a.durationMin < 20 || a.distanceKm < 3) return null;
-  const eq = flatEquivalent(a.distanceKm, a.gainM, a.lossM ?? null, a.durationMin);
-  // Au-delà de ~12 % de pente moyenne, on marche une bonne partie du temps : le modèle de course ne s’applique plus.
-  if (eq.grade > 0.12) return null;
+  // Sortie analysée seconde par seconde : on part des passages d’effort stable, pente par pente.
+  // C’est la méthode des montres ; elle ne souffre ni des pauses, ni des murs raides, ni des passages techniques.
+  const precise = windowsVo2(a.win, { hrMax, hrRest });
+  if (precise != null) {
+    const hardP = a.avgHr / hrMax >= 0.88 && a.durationMin <= 240 && (a.gainM ?? 0) / (a.distanceKm * 1000) < 0.03;
+    return hardP ? (precise + daniels((a.distanceKm * 1000) / a.durationMin) / fracOf(a.durationMin)) / 2 : precise;
+  }
+  const eq0 = flatEquivalent(a.distanceKm, a.gainM, a.lossM ?? null, a.durationMin);
+  let eq: { v: number; grade: number };
+  if (a.sport === "trail") {
+    // Sur sentier, le modèle de tapis roulant (Minetti) « rend » en descente une énergie qu’on ne récupère pas :
+    // on freine, on marche, le terrain est technique. On utilise donc la règle des traileurs, le km-effort
+    // (100 m de D+ = 1 km de plat), plus 5 % pour le terrain. C’est la même règle que pour estimer le temps de course.
+    if (eq0.grade > 0.22) return null; // au-delà, on est en alpinisme plus qu’en course
+    eq = { v: ((a.distanceKm + Math.max(0, a.gainM ?? 0) / 100) * 1000 * 1.05) / a.durationMin, grade: eq0.grade };
+  } else {
+    // Sur route, les descentes se courent : coût énergétique selon la pente, avec une petite marge pour la pente irrégulière.
+    if (eq0.grade > 0.12) return null;
+    eq = { v: eq0.v * (1 + 0.2 * eq0.grade), grade: eq0.grade };
+  }
   const v = eq.v; // m/min équivalents plat
   if (v < 110 || v > 420) return null;
   const vo2 = daniels(v);
@@ -89,7 +114,7 @@ function sessionsOf(runs: Vo2Run[], today: string, hrMax: number, hrRest: number
     if (age < 0) continue;
     const v = sessionVo2(a, hrMax, hrRest);
     if (v == null || v < 25 || v > 88) continue;
-    out.push({ date: a.date, name: a.name ?? null, vo2max: r1(v), speedKmh: r1((a.distanceKm! / a.durationMin) * 60), hrPct: Math.round((a.avgHr! / hrMax) * 100), age });
+    out.push({ date: a.date, name: a.name ?? null, vo2max: r1(v), speedKmh: r1((a.distanceKm! / a.durationMin) * 60), hrPct: Math.round((a.avgHr! / hrMax) * 100), age, precise: !!(a.win && a.win.length >= 4) || undefined });
   }
   return out.sort((x, y) => x.age - y.age);
 }
@@ -97,8 +122,11 @@ function sessionsOf(runs: Vo2Run[], today: string, hrMax: number, hrRest: number
 /** Une valeur par mois : moyenne des 2 meilleures séances du mois. */
 function byMonth(list: Dated[]) {
   const m = new Map<string, { vs: number[]; age: number }>();
+  // Dans un mois où des sorties ont été analysées seconde par seconde, elles seules comptent : elles sont plus fiables.
+  const fine = new Set(list.filter((s) => s.precise).map((s) => s.date.slice(0, 7)));
   for (const s of list) {
     const k = s.date.slice(0, 7);
+    if (fine.has(k) && !s.precise) continue;
     const e = m.get(k) ?? { vs: [], age: s.age };
     e.vs.push(s.vo2max); e.age = Math.min(e.age, s.age); m.set(k, e);
   }
@@ -111,7 +139,8 @@ function byMonth(list: Dated[]) {
 /** Estimation telle qu’elle était `offset` jours avant aujourd’hui, sur tout l’historique antérieur. */
 function estimateAt(all: Dated[], offset: number) {
   const list = all.filter((s) => s.age >= offset);
-  if (list.length < 2) return null;
+  // Deux séances au moins, sauf si l’une a été analysée seconde par seconde : elle suffit à donner une première valeur.
+  if (list.length < 2 && !list.some((s) => s.precise)) return null;
   let sw = 0, sv = 0;
   for (const m of byMonth(list)) {
     // Un mois avec une seule séance compte un peu moins qu’un mois bien renseigné.
@@ -127,7 +156,7 @@ const racesFor = (v: number) => [
 
 /** Temps de course équivalent sur route plate pour une VO2max donnée (modèle Daniels-Gilbert). */
 export function raceTime(vdot: number, km: number) {
-  let lo = 5, hi = 600;
+  let lo = 5, hi = 6000;
   for (let i = 0; i < 60; i++) {
     const t = (lo + hi) / 2;
     if (daniels((km * 1000) / t) / fracOf(t) > vdot) lo = t; else hi = t;

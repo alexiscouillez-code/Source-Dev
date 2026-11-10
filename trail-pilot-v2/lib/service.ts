@@ -3,6 +3,8 @@ import { all, libsql, one, run } from "@/db/client";
 import { addDays, diffDays, mondayOf, range, todayIn } from "./engine/dates";
 import { adapt, decide, watchBaseline, type CheckIn, type PlannedLike, type Verdict, type Watch } from "./engine/decision";
 import { isFoot, sessionLoad, type ActivityLike, type Sport } from "./engine/load";
+import { parseAnalysis, windowsVo2, zoneMinutes } from "./engine/streams";
+import { estimateVo2, type Vo2Run } from "./engine/vo2";
 import { buildRacePlan, maintenancePlan, phaseFor, type Level, type RacePlan } from "./engine/planner";
 import { withSideRaces, withStrength, type SideRace } from "./engine/extras";
 import { timeline, weeklySummary } from "./engine/timeline";
@@ -10,7 +12,7 @@ import { HttpError } from "./api";
 
 export interface ProfileRow { hr_max: number | null; hr_rest: number | null; vo2_watch: number | null; days_per_week: number; long_day: number; max_weekly_minutes: number | null; level: Level }
 export interface GoalRow { name: string; date: string; distance_km: number | null; gain_m: number | null; plan_meta?: string | null; route?: string | null }
-export interface ActivityRow { id: number; date: string; sport: Sport; name: string | null; duration_min: number; distance_km: number | null; gain_m: number | null; loss_m: number | null; avg_hr: number | null; max_hr: number | null; rpe: number | null; source: string; strava_id: string | null }
+export interface ActivityRow { id: number; date: string; sport: Sport; name: string | null; duration_min: number; distance_km: number | null; gain_m: number | null; loss_m: number | null; avg_hr: number | null; max_hr: number | null; rpe: number | null; source: string; strava_id: string | null; analysis?: string | null }
 export interface PlanRow { id: number; date: string; template: string; title: string; sport: string; duration_min: number; gain_m: number | null; rpe_target: number; description: string; phase: string; status: string; activity_id: number | null; locked: number; original: string | null }
 export interface CheckinRow { date: string; sleep: number; legs: number; motivation: number; pain: 0 | 1 | 2; note: string | null; pain_zones?: string | null; sleep_h?: number | null; rhr?: number | null; hrv?: number | null }
 
@@ -29,7 +31,8 @@ export function resolveToday(param: string | null) {
   return paris;
 }
 
-export const toActivityLike = (a: ActivityRow): ActivityLike => ({ date: a.date, sport: a.sport, durationMin: a.duration_min, distanceKm: a.distance_km, gainM: a.gain_m, lossM: a.loss_m, avgHr: a.avg_hr, rpe: a.rpe });
+export const toActivityLike = (a: ActivityRow): ActivityLike => ({ date: a.date, sport: a.sport, durationMin: a.duration_min, distanceKm: a.distance_km, gainM: a.gain_m, lossM: a.loss_m, avgHr: a.avg_hr, maxHr: a.max_hr, rpe: a.rpe, hrHist: parseAnalysis(a.analysis)?.hist ?? null });
+export const toVo2Run = (r: ActivityRow): Vo2Run => ({ date: r.date, sport: r.sport, durationMin: r.duration_min, distanceKm: r.distance_km, gainM: r.gain_m, lossM: r.loss_m, avgHr: r.avg_hr, maxHr: r.max_hr, name: r.name, win: parseAnalysis(r.analysis)?.win ?? null });
 const toPlanned = (p: PlanRow): PlannedLike => ({ title: p.title, durationMin: p.duration_min, rpeTarget: p.rpe_target, template: p.template, sport: p.sport, description: p.description, gainM: p.gain_m });
 
 export async function loadProfile(userId: number) {
@@ -41,11 +44,16 @@ export const loadSideRaces = (userId: number) =>
 export const loadGoal = (userId: number) => one<GoalRow>("SELECT name, date, distance_km, gain_m, plan_meta, route FROM goals WHERE user_id = ?", [userId]);
 export const readPlanMeta = (g: GoalRow | null | undefined): RacePlan | null => { try { return g?.plan_meta ? JSON.parse(g.plan_meta) : null; } catch { return null; } };
 export const loadActivities = (userId: number, since: string) =>
-  all<ActivityRow>("SELECT id, date, sport, name, duration_min, distance_km, gain_m, loss_m, avg_hr, max_hr, rpe, source, strava_id FROM activities WHERE user_id = ? AND date >= ? ORDER BY date DESC, id DESC", [userId, since]);
+  all<ActivityRow>("SELECT id, date, sport, name, duration_min, distance_km, gain_m, loss_m, avg_hr, max_hr, rpe, source, strava_id, analysis FROM activities WHERE user_id = ? AND date >= ? ORDER BY date DESC, id DESC", [userId, since]);
 
 export function withLoad(a: ActivityRow, physio: { hrMax: number | null; hrRest: number | null }) {
   const l = sessionLoad(toActivityLike(a), physio);
-  return { ...a, load: l.total, effort: l.rpe, effortSource: l.source };
+  // Le résumé brut ne part pas vers le navigateur : on n’envoie que ce qui s’affiche (zones, allure ajustée, découplage, VO2max de la sortie).
+  const { analysis: raw, ...row } = a;
+  const an = parseAnalysis(raw);
+  const vo2 = an ? windowsVo2(an.win, physio) : null;
+  const insight = an ? { zones: zoneMinutes(an.hist, physio)?.map((m) => Math.round(m)) ?? null, gap: an.gap, dec: an.dec, vo2: vo2 != null ? Math.round(vo2 * 10) / 10 : null } : null;
+  return { ...row, load: l.total, effort: l.rpe, effortSource: l.source, insight };
 }
 
 /** Lie les séances réalisées au planning et marque les séances manquées. */
@@ -71,7 +79,9 @@ export async function regeneratePlan(userId: number, today: string) {
   let items;
   if (goal && goal.date > today) {
     const r = buildRacePlan({ today, profile: pp, goal: { name: goal.name, date: goal.date, distanceKm: goal.distance_km, gainM: goal.gain_m }, activities: likes,
-      load: { ctl: tl.ctl, atl: tl.atl, ratio: tl.ratio, calibrated: tl.calibrated } });
+      load: { ctl: tl.ctl, atl: tl.atl, ratio: tl.ratio, calibrated: tl.calibrated },
+      // Temps de course estimé depuis la VO2max (montre, sinon sorties) plutôt que depuis le niveau déclaré.
+      vdot: estimateVo2(acts.map(toVo2Run), today, { hrMax: profile.hr_max, hrRest: profile.hr_rest, watch: profile.vo2_watch }).paceVdot });
     items = r.items;
     const upcoming = sides.filter((s) => s.date > today && s.date < goal.date);
     if (upcoming.length) r.plan.notes.push(`Course${upcoming.length > 1 ? "s" : ""} de préparation intégrée${upcoming.length > 1 ? "s" : ""} au plan : ${upcoming.map((s) => `${s.name} (${s.priority === "B" ? "objectif secondaire" : "entraînement"}, le ${new Date(`${s.date}T12:00:00Z`).toLocaleDateString("fr-FR", { day: "numeric", month: "long", timeZone: "UTC" })})`).join(", ")}. La sortie longue de ces semaines est remplacée par la course, avec allègement avant et récupération après.`);
@@ -162,10 +172,13 @@ export async function analysis(userId: number, today: string) {
   const bySport = new Map<string, number>();
   for (const a of acts.filter((x) => diffDays(x.date, today) < 28)) bySport.set(a.sport, (bySport.get(a.sport) ?? 0) + a.duration_min);
   // Cartes graphiques : minutes par niveau d’effort sur 28 jours, et score de récupération des 7 derniers check-ins.
+  // Quand la sortie a été analysée seconde par seconde, on compte le temps réel dans chaque zone cardiaque
+  // (Z1-Z2 facile, Z3 modéré, Z4-Z5 intense) ; sinon toute la séance va dans la case de son effort global.
   const intensity = { easy: 0, moderate: 0, hard: 0 };
   for (const a of acts.filter((x) => diffDays(x.date, today) < 28)) {
-    const e = withLoad(a, physio).effort;
-    intensity[e <= 4 ? "easy" : e <= 6 ? "moderate" : "hard"] += Math.round(a.duration_min);
+    const w = withLoad(a, physio);
+    if (w.insight?.zones) { const z = w.insight.zones; intensity.easy += z[0] + z[1]; intensity.moderate += z[2]; intensity.hard += z[3] + z[4]; }
+    else intensity[w.effort <= 4 ? "easy" : w.effort <= 6 ? "moderate" : "hard"] += Math.round(a.duration_min);
   }
   const checks = await all<{ date: string; sleep: number; legs: number; motivation: number; pain: number }>(
     "SELECT date, sleep, legs, motivation, pain FROM checkins WHERE user_id = ? AND date >= ? AND date <= ?", [userId, addDays(today, -6), today]);

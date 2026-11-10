@@ -1,5 +1,6 @@
 import { addDays, diffDays, mondayOf } from "./dates";
 import { isFoot, type ActivityLike } from "./load";
+import { raceTime } from "./vo2";
 
 /**
  * Plan d’entraînement pour une course choisie.
@@ -29,6 +30,8 @@ export interface RacePlan {
   generatedOn: string;
   race: { name: string; date: string; distanceKm: number; gainM: number; effortKm: number; daysTo: number; assumed: boolean };
   estimate: { low: number; high: number };
+  /** D’où vient le temps estimé : la VO2max du coureur, sinon son niveau déclaré. */
+  estimateFrom?: "vo2" | "niveau";
   demands: { weeklyMin: number; longMin: number; weeklyGain: number; backToBack: boolean };
   current: { weeklyMin: number; longestMin: number; weeklyGain: number; hasHistory: boolean };
   reach: { weeklyMin: number; longMin: number };
@@ -49,7 +52,8 @@ export const MAX_PLAN_DAYS = 400;
 const round5 = (n: number) => Math.max(20, Math.round(n / 5) * 5);
 const round50 = (n: number) => Math.round(n / 50) * 50;
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
-const isoWeek = (monday: string) => Math.floor(diffDays("2024-01-01", monday) / 7);
+const TAPER_VOLUME: Record<number, number[]> = { 1: [0.65], 2: [0.75, 0.6], 3: [0.8, 0.68, 0.55] };
+const TAPER_LONG: Record<number, number[]> = { 1: [0.55], 2: [0.7, 0.55], 3: [0.75, 0.6, 0.45] };
 
 // ---------- État de départ ----------
 const recentFoot = (acts: ActivityLike[], today: string) =>
@@ -65,7 +69,18 @@ export function recentLongest(activities: ActivityLike[], today: string) {
 const recentGain = (acts: ActivityLike[], today: string) => recentFoot(acts, today).reduce((s, a) => s + (a.gainM ?? 0), 0) / 4;
 
 // ---------- Ce que demande la course ----------
-export function raceDemands(goal: PlannerGoal, level: Level, ctl = 0) {
+/**
+ * Temps de course à partir de la VO2max : le km-effort (km + D+/100) couru comme une distance à plat
+ * (modèle Daniels), puis trois corrections de terrain : sentier (8 %), raideur du parcours (jusqu’à 6 %)
+ * et usure des longues durées (marche, ravitaillements, nuit : +4,5 % par heure au-delà de 4 h).
+ */
+export function trailTime(vdot: number, distanceKm: number, gainM: number) {
+  const effortKm = distanceKm + gainM / 100;
+  const base = raceTime(vdot, effortKm) * (1.08 + Math.min(0.06, gainM / Math.max(1, distanceKm) / 1000));
+  return base * (1 + 0.045 * Math.max(0, base / 60 - 4));
+}
+
+export function raceDemands(goal: PlannerGoal, level: Level, ctl = 0, vdot: number | null = null) {
   const assumed = !goal.distanceKm;
   const distanceKm = goal.distanceKm ?? 25;
   const gainM = goal.gainM ?? Math.round(distanceKm * 35);
@@ -73,23 +88,25 @@ export function raceDemands(goal: PlannerGoal, level: Level, ctl = 0) {
   // Plus c’est long, plus l’allure moyenne baisse (marche, ravitaillements, fatigue, nuit).
   const fitness = clamp(1.12 - ctl / 400, 0.9, 1.12);
   const pace = PACE[level] * (1 + Math.max(0, effortKm - 30) / 400) * fitness;
-  const mid = effortKm * pace;
+  // Avec une VO2max connue (montre ou sorties), le temps vient de ta capacité réelle et non du niveau déclaré.
+  const fromVo2 = vdot != null && vdot >= 28 && vdot <= 85;
+  const mid = fromVo2 ? trailTime(vdot!, distanceKm, gainM) : effortKm * pace;
   const raceMin = Math.round(mid / 5) * 5;
   const longMin = raceMin <= 180 ? Math.max(60, raceMin * 0.8) : clamp(raceMin * 0.4, 150, 330);
   const weeklyMin = clamp((150 + effortKm * 5) * VOLUME_FACTOR[level], 180, 720);
   const weeklyGain = clamp(gainM * (effortKm > 100 ? 0.8 : 1.2), 300, 6000);
   return {
     distanceKm, gainM, effortKm: Math.round(effortKm), assumed, raceMin,
-    estimate: { low: Math.round((mid * 0.92) / 5) * 5, high: Math.round((mid * 1.15) / 5) * 5 },
+    estimate: { low: Math.round((mid * (fromVo2 ? 0.94 : 0.92)) / 5) * 5, high: Math.round((mid * (fromVo2 ? 1.1 : 1.15)) / 5) * 5 }, fromVo2,
     longMin: round5(longMin), weeklyMin: round5(weeklyMin), weeklyGain: round50(weeklyGain), backToBack: raceMin > 360,
   };
 }
 
 // ---------- Plan ----------
-export function buildRacePlan(input: { today: string; profile: PlannerProfile; goal: PlannerGoal; activities: ActivityLike[]; load: LoadState }): { items: PlanItem[]; plan: RacePlan } {
+export function buildRacePlan(input: { today: string; profile: PlannerProfile; goal: PlannerGoal; activities: ActivityLike[]; load: LoadState; vdot?: number | null }): { items: PlanItem[]; plan: RacePlan } {
   const { today, profile, goal, activities, load } = input;
   const start = addDays(today, 1);
-  const d = raceDemands(goal, profile.level, load.ctl);
+  const d = raceDemands(goal, profile.level, load.ctl, input.vdot ?? null);
   const hasHistory = recentFoot(activities, today).length >= 3;
   const base = baselineWeekly(activities, today, profile.level);
   const longest = recentLongest(activities, today) || base * 0.3;
@@ -102,7 +119,8 @@ export function buildRacePlan(input: { today: string; profile: PlannerProfile; g
   const raceMonday = mondayOf(goal.date);
   const firstMonday = mondayOf(start);
   const nWeeks = Math.max(1, diffDays(firstMonday, raceMonday) / 7 + 1);
-  const taperWeeks = nWeeks <= 2 ? 0 : d.effortKm >= 80 ? 2 : 1;
+  // Affûtage : 1 semaine sur les formats courts, 2 à partir de 80 km-effort, 3 pour les ultras (130 km-effort et plus).
+  const taperWeeks = nWeeks <= 2 ? 0 : d.effortKm >= 130 && nWeeks >= 10 ? 3 : d.effortKm >= 80 ? 2 : 1;
   const buildWeeks = Math.max(0, nWeeks - 1 - taperWeeks);
   const specWeeks = buildWeeks <= 3 ? buildWeeks : Math.min(6, Math.ceil(buildWeeks * 0.35));
   const devWeeks = buildWeeks <= 3 ? 0 : Math.ceil(buildWeeks * 0.35);
@@ -125,12 +143,14 @@ export function buildRacePlan(input: { today: string; profile: PlannerProfile; g
       phase = "Semaine de course"; minutes = peakReached ? peakReached * 0.35 : level * 0.45; longMin = 0;
     } else if (w >= buildWeeks) {
       phase = "Affûtage";
-      const f = taperWeeks === 2 ? (taperIdx === 0 ? 0.75 : 0.6) : 0.65;
-      minutes = (peakReached || level) * f; longMin = (longReached || lng) * (taperIdx === 0 && taperWeeks === 2 ? 0.7 : 0.55);
+      const f = (TAPER_VOLUME[taperWeeks] ?? [0.65])[taperIdx] ?? 0.6;
+      minutes = (peakReached || level) * f; longMin = (longReached || lng) * ((TAPER_LONG[taperWeeks] ?? [0.55])[taperIdx] ?? 0.5);
     } else {
       const rem = buildWeeks - w;
       phase = rem <= specWeeks ? "Spécifique" : rem <= specWeeks + devWeeks ? "Développement" : "Fondation";
-      light = buildWeeks >= 4 && isoWeek(monday) % 4 === 3 && rem > 1;
+      // Semaine allégée toutes les 4 semaines, comptées à rebours depuis l’affûtage : 3 semaines de travail,
+      // 1 d’assimilation, et les 3 dernières avant l’affûtage sont toujours pleines. Stable d’un recalcul à l’autre.
+      light = buildWeeks >= 4 && rem % 4 === 0;
       if (!light && w > 0) { level = Math.min(peakWeekly, level * growth); lng = Math.min(d.longMin, lng * 1.1); }
       if (w === 0) lng = Math.min(d.longMin, lng * (startFactor < 1 ? 1 : 1.05));
       minutes = light ? level * 0.8 : level;
@@ -148,7 +168,7 @@ export function buildRacePlan(input: { today: string; profile: PlannerProfile; g
 
   // Sortie test : la plus grosse journée, 3 à 5 semaines avant la course, pour les formats de plus de 4 h.
   if (d.raceMin > 240 && buildWeeks >= 4) {
-    const idx = Math.max(0, buildWeeks - (taperWeeks === 2 ? 2 : 3));
+    const idx = Math.max(0, buildWeeks - (taperWeeks >= 2 ? 2 : 3));
     const wk = weeks[idx];
     if (wk && !wk.light) { wk.longMin = round5(Math.min(d.longMin, Math.max(wk.longMin, longReached) * 1.05)); wk.focus = "Sortie test : matériel, nutrition et allure de course"; longReached = Math.max(longReached, wk.longMin); }
   }
@@ -177,13 +197,13 @@ export function buildRacePlan(input: { today: string; profile: PlannerProfile; g
   if (d.backToBack) notes.push("Format long : des enchaînements de sorties sur deux jours arrivent en phase spécifique, pour habituer les jambes à courir fatiguées.");
 
   const diagnosis = verdict === "ambitieux" || verdict === "risque"
-    ? diagnose({ today, goal, profile, d, base: base * startFactor, longest, baseGain, reachWeekly, reachLong, peakGain: Math.max(...weeks.map((w) => w.gainM)), cap, growth, firstMonday, ctl: load.ctl })
+    ? diagnose({ today, goal, profile, d, base: base * startFactor, longest, baseGain, reachWeekly, reachLong, peakGain: Math.max(...weeks.map((w) => w.gainM)), cap, growth, firstMonday, ctl: load.ctl, vdot: input.vdot ?? null })
     : undefined;
 
   const plan: RacePlan = {
     generatedOn: today,
     race: { name: goal.name, date: goal.date, distanceKm: d.distanceKm, gainM: d.gainM, effortKm: d.effortKm, daysTo, assumed: d.assumed },
-    estimate: d.estimate,
+    estimate: d.estimate, estimateFrom: d.fromVo2 ? "vo2" : "niveau",
     demands: { weeklyMin: d.weeklyMin, longMin: d.longMin, weeklyGain: d.weeklyGain, backToBack: d.backToBack },
     current: { weeklyMin: round5(base), longestMin: round5(longest), weeklyGain: round50(baseGain), hasHistory },
     reach: { weeklyMin: reachWeekly, longMin: reachLong },
@@ -212,7 +232,7 @@ const frDate = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleDateString(
 function diagnose(o: {
   today: string; goal: PlannerGoal; profile: PlannerProfile; d: ReturnType<typeof raceDemands>;
   base: number; longest: number; baseGain: number; reachWeekly: number; reachLong: number; peakGain: number;
-  cap: number; growth: number; firstMonday: string; ctl: number;
+  cap: number; growth: number; firstMonday: string; ctl: number; vdot: number | null;
 }) {
   const { d, profile } = o;
   const causes: string[] = [], fixes: string[] = [];
@@ -227,7 +247,7 @@ function diagnose(o: {
   const lightShare = 4 / 3; // une semaine allégée sur quatre
   const wVol = Math.log(Math.max(1, peakWeekly / Math.max(30, o.base))) / Math.log(o.growth);
   const wLong = Math.log(Math.max(1, d.longMin / Math.max(20, o.longest))) / Math.log(1.1);
-  const needWeeks = Math.ceil(Math.max(wVol, wLong) * lightShare) + (d.effortKm >= 80 ? 2 : 1) + 1;
+  const needWeeks = Math.ceil(Math.max(wVol, wLong) * lightShare) + (d.effortKm >= 130 ? 3 : d.effortKm >= 80 ? 2 : 1) + 1;
   const okDate = addDays(o.firstMonday, needWeeks * 7 - 1);
   if (okDate > o.goal.date && diffDays(o.today, okDate) <= MAX_PLAN_DAYS) fixes.push(`Viser une course plus tard : à partir du ${frDate(okDate)} environ, la progression a le temps d’atteindre ce que demande ce format sans brûler les étapes.`);
 
@@ -235,7 +255,7 @@ function diagnose(o: {
   const ratio = d.gainM / Math.max(1, d.distanceKm);
   let best: { km: number; gain: number } | null = null;
   for (let km = Math.floor(d.distanceKm) - 1; km >= 8; km--) {
-    const t = raceDemands({ ...o.goal, distanceKm: km, gainM: Math.round(km * ratio) }, profile.level, o.ctl);
+    const t = raceDemands({ ...o.goal, distanceKm: km, gainM: Math.round(km * ratio) }, profile.level, o.ctl, o.vdot);
     if (o.reachWeekly >= Math.min(t.weeklyMin, o.cap) * 0.95 && o.reachLong >= t.longMin * 0.95) { best = { km, gain: Math.round((km * ratio) / 50) * 50 }; break; }
   }
   if (best) fixes.push(`Choisir un format plus court à cette date : jusqu’à environ ${best.km} km et ${best.gain} m D+, le plan te prépare correctement.`);
@@ -267,15 +287,23 @@ function sessionsFor(weeks: PlanWeek[], o: { start: string; goal: PlannerGoal; p
       slots = slots.map((s) => (s === drop ? dayBefore : s));
     }
     const qualitySlot = pickQualitySlot(slots.filter((s) => !(b2b && s === dayBefore)), longSlot);
-    const quality = qualityFor(phase, wk.light, profile.level, wi, o.dplusPerKm);
-    const firstEasy = slots.find((s) => s !== longSlot && s !== qualitySlot && !(b2b && s === dayBefore));
+    // Alternance comptée à rebours depuis la course : elle ne change pas quand le plan est recalculé chaque lundi.
+    const toGo = weeks.length - 1 - wi;
+    const quality = qualityFor(phase, wk.light, profile.level, toGo, o.dplusPerKm);
+    // Seconde séance de qualité (allure soutenue) pour qui s’entraîne beaucoup : confirmé dès 5 sorties, régulier dès 6.
+    const wantsTwo = !wk.light && (phase === "Développement" || phase === "Spécifique") && ((profile.level === "confirme" && days >= 5) || (profile.level === "regulier" && days >= 6));
+    const quality2Slot = wantsTwo && quality
+      ? slots.filter((s) => s !== longSlot && s !== qualitySlot && s !== dayBefore && dist(s, qualitySlot) >= 2 && dist(s, longSlot) >= 2).sort((a, b) => dist(b, qualitySlot) - dist(a, qualitySlot))[0] ?? -1
+      : -1;
+    const q2Min = quality2Slot >= 0 ? clamp(wk.minutes * 0.13, 45, 70) : 0;
+    const firstEasy = slots.find((s) => s !== longSlot && s !== qualitySlot && s !== quality2Slot && !(b2b && s === dayBefore));
     const strength = (days >= 5 && profile.level !== "debutant") || (phase === "Fondation" && days >= 4);
 
     const qMin = quality ? (quality === "sharpen" ? 40 : clamp(wk.minutes * 0.18, 50, 85)) : 0;
     const b2bMin = b2b ? wk.longMin * 0.55 : 0;
     const strengthMin = strength && firstEasy != null ? 40 : 0;
-    const easySlots = slots.filter((s) => s !== longSlot && s !== qualitySlot && !(b2b && s === dayBefore) && !(strengthMin && s === firstEasy));
-    const easyMin = clamp((wk.minutes - wk.longMin - qMin - b2bMin - strengthMin * 0.5) / Math.max(1, easySlots.length), 30, 80);
+    const easySlots = slots.filter((s) => s !== longSlot && s !== qualitySlot && s !== quality2Slot && !(b2b && s === dayBefore) && !(strengthMin && s === firstEasy));
+    const easyMin = clamp((wk.minutes - wk.longMin - qMin - q2Min - b2bMin - strengthMin * 0.5) / Math.max(1, easySlots.length), 30, 80);
     const longGain = round50(wk.gainM * (b2b ? 0.45 : 0.55));
     const qGain = round50(wk.gainM * 0.3);
 
@@ -293,6 +321,7 @@ function sessionsFor(weeks: PlanWeek[], o: { start: string; goal: PlannerGoal; p
       if (slot === longSlot && wk.longMin) items.push(make(isTest ? "test" : b2b ? "b2b" : "long", date, b2b ? b2bMin : wk.longMin, phase, isTest ? round50(wk.gainM * 0.6) : b2b ? round50(wk.gainM * 0.3) : longGain, b2b ? "J2" : undefined));
       else if (b2b && slot === dayBefore) items.push(make("b2b", date, wk.longMin, phase, longGain, "J1"));
       else if (slot === qualitySlot && quality) items.push(make(quality, date, qMin, phase, qGain));
+      else if (slot === quality2Slot) items.push(make("tempo", date, q2Min, phase, 0));
       else if (strengthMin && slot === firstEasy) items.push(make("strength", date, 40, phase, 0));
       else items.push(make("easy", date, easyMin, phase, 0));
     }

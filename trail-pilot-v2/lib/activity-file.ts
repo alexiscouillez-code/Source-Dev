@@ -5,6 +5,7 @@
  * plus un tracé GPS simplifié (500 points au plus) pour la carte.
  */
 import { encodePolyline, thin, type LatLon } from "./polyline";
+import { analyze, type Analysis } from "./engine/streams";
 
 export interface ParsedActivity {
   date: string | null; sport: "trail" | "course" | "rando" | "velo" | "renfo" | "autre"; name: string | null;
@@ -12,6 +13,8 @@ export interface ParsedActivity {
   avgHr: number | null; maxHr: number | null; format: "FIT" | "TCX" | "GPX";
   /** Tracé encodé (polyline), absent pour une séance sans GPS. */
   track: string | null;
+  /** Résumé de l’analyse seconde par seconde (zones, allure ajustée, VO2max), quand le fichier la permet. */
+  analysis?: Analysis | null;
 }
 const trackOf = (pts: LatLon[], max = 500) => { const v = pts.filter(([a, b]) => Number.isFinite(a) && Number.isFinite(b) && (a !== 0 || b !== 0)); return v.length >= 2 ? encodePolyline(thin(v, max)) : null; };
 
@@ -133,7 +136,22 @@ async function parseFitBuffer(buf: ArrayBuffer): Promise<ParsedActivity> {
     gainM: Math.round(gain), lossM: Math.round(loss),
     avgHr: n(s?.avg_heart_rate) ?? h.avg, maxHr: n(s?.max_heart_rate) ?? h.max,
     track: trackOf(records.map((r) => [n(r.position_lat) ?? NaN, n(r.position_long) ?? NaN] as LatLon)),
+    analysis: fitAnalysis(records),
   };
+}
+
+/** Flux seconde par seconde d’un fichier FIT (temps, cardio, vitesse, altitude, distance) → résumé d’analyse. */
+function fitAnalysis(records: Record<string, unknown>[]): Analysis | null {
+  const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  const t0 = records[0]?.timestamp ? new Date(records[0].timestamp as string).getTime() : NaN;
+  if (!Number.isFinite(t0) || records.length < 120) return null;
+  const time: number[] = [], hr: (number | null)[] = [], speed: (number | null)[] = [], altitude: (number | null)[] = [], distance: (number | null)[] = [];
+  for (const r of records) {
+    const t = r.timestamp ? (new Date(r.timestamp as string).getTime() - t0) / 1000 : NaN;
+    if (!Number.isFinite(t) || (time.length && t <= time[time.length - 1])) continue;
+    time.push(t); hr.push(n(r.heart_rate)); speed.push(n(r.enhanced_speed) ?? n(r.speed)); altitude.push(n(r.enhanced_altitude) ?? n(r.altitude)); distance.push(n(r.distance));
+  }
+  try { return analyze({ time, hr, speed, altitude, distance }); } catch { return null; }
 }
 
 export async function parseActivityFile(file: File): Promise<ParsedActivity> {

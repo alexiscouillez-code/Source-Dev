@@ -3,6 +3,7 @@ import { all, one, run } from "@/db/client";
 import { open, seal, sign, verify } from "./crypto";
 import type { Sport } from "./engine/load";
 import { cleanPolyline, decodePolyline, encodePolyline, thin } from "./polyline";
+import { analyze } from "./engine/streams";
 
 const API = "https://www.strava.com/api/v3";
 export const STRAVA_SCOPE = "read,activity:read_all";
@@ -117,6 +118,37 @@ async function upsertActivity(userId: number, a: StravaActivity) {
   );
 }
 
+// ---------- Analyse seconde par seconde ----------
+type StreamSet = Partial<Record<"time" | "heartrate" | "velocity_smooth" | "grade_smooth" | "altitude" | "distance", { data: number[] }>>;
+const STREAMS_PER_SYNC = 25; // Strava limite les appels : on rattrape l’historique par lots, des plus récentes aux plus anciennes
+
+/** Télécharge les flux d’une activité, en tire le résumé d’analyse et l’enregistre. Renvoie false si la limite d’appels est atteinte. */
+async function analyzeActivity(token: string, userId: number, stravaId: string) {
+  let state = 2, json: string | null = null, loss: number | null = null;
+  try {
+    const s = await api<StreamSet>(token, `/activities/${stravaId}/streams?keys=time,heartrate,velocity_smooth,grade_smooth,altitude,distance&key_by_type=true`);
+    if (s.time?.data?.length) {
+      const a = analyze({ time: s.time.data, hr: s.heartrate?.data, speed: s.velocity_smooth?.data, grade: s.grade_smooth?.data, altitude: s.altitude?.data, distance: s.distance?.data });
+      if (a) { state = 1; json = JSON.stringify(a); loss = a.loss; }
+    }
+  } catch (err) {
+    if (err instanceof StravaError && (err.status === 429 || err.status === 401)) return false; // on réessaiera à la prochaine synchro
+    if (!(err instanceof StravaError) || err.status !== 404) return true; // erreur passagère : l’activité reste à analyser
+  }
+  await run("UPDATE activities SET analysis = ?, stream_state = ?, loss_m = COALESCE(loss_m, ?) WHERE user_id = ? AND strava_id = ?", [json, state, loss, userId, stravaId]);
+  return true;
+}
+
+/** Analyse les sorties à pied avec cardio qui ne l’ont pas encore été (les plus récentes d’abord). */
+async function analyzePending(token: string, userId: number, limit = STREAMS_PER_SYNC) {
+  const rows = await all<{ strava_id: string }>(
+    `SELECT strava_id FROM activities WHERE user_id = ? AND strava_id IS NOT NULL AND stream_state IS NULL AND avg_hr IS NOT NULL
+       AND sport IN ('course', 'trail', 'rando') AND duration_min >= 15 ORDER BY date DESC LIMIT ?`, [userId, limit]);
+  let done = 0;
+  for (const r of rows) { if (!(await analyzeActivity(token, userId, r.strava_id))) break; done++; }
+  return done;
+}
+
 /** Importe les activités depuis la dernière synchro (120 jours au premier passage). */
 export async function syncUser(userId: number) {
   const link = await one<Link>("SELECT * FROM strava_links WHERE user_id = ?", [userId]);
@@ -134,7 +166,9 @@ export async function syncUser(userId: number) {
     }
     await run("UPDATE strava_links SET last_sync_at = ?, last_error = NULL WHERE user_id = ?", [Date.now(), userId]);
     if (!backfilled) await run("INSERT OR REPLACE INTO app_kv(key, value, updated_at) VALUES (?, '1', ?)", [`tracks:${userId}`, Date.now()]);
-    return { imported };
+    // L’analyse fine ne doit jamais faire échouer la synchro elle-même.
+    const analyzed = await analyzePending(token, userId).catch(() => 0);
+    return { imported, analyzed };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Erreur Strava";
     await run("UPDATE strava_links SET last_error = ? WHERE user_id = ?", [message, userId]);
@@ -159,6 +193,9 @@ export async function handleWebhook(e: WebhookEvent) {
   }
   const token = await accessToken(link);
   await upsertActivity(link.user_id, await api<StravaActivity>(token, `/activities/${e.object_id}`));
+  // Nouvelle sortie : analysée dans la foulée, puis un petit lot de rattrapage de l’historique.
+  await run("UPDATE activities SET stream_state = NULL WHERE user_id = ? AND strava_id = ? AND stream_state = 2", [link.user_id, String(e.object_id)]);
+  await analyzePending(token, link.user_id, 6).catch(() => 0);
 }
 
 /** Crée l’abonnement webhook de l’application s’il n’existe pas encore (une fois pour toute l’app). */

@@ -134,7 +134,7 @@ function Vo2Card({ go, targets }: Pick<Ctx, "go"> & { targets: Ctx["me"]["target
       )}
       {v.value != null && <TargetsTable targets={targets} />}
       {v.value != null && v.notes.length > 0 && <ul className="reasons small">{v.notes.map((n) => <li key={n}>{n}</li>)}</ul>}
-      <p className="muted" style={{ margin: 0, fontSize: 11.5 }}>Estimation de terrain (allure ramenée au plat selon Minetti, coût de l’allure selon Daniels, réserve cardiaque selon Swain, rapport FC max / FC repos selon Uth), précise à environ 5 à 10 %. Les montres utilisent leur propre méthode et donnent souvent quelques points de plus. Seul un test d’effort en laboratoire mesure vraiment la VO2max.</p>
+      <p className="muted" style={{ margin: 0, fontSize: 11.5 }}>Estimation de terrain, précise à environ 5 à 10 %. Quand une sortie a été analysée seconde par seconde (Strava ou fichier de montre), le calcul part de ses passages d’effort stable, pente par pente, comme le font les montres. Sinon il part des moyennes de la sortie : coût de la pente sur route (Minetti), km-effort sur sentier, coût de l’allure (Daniels), réserve cardiaque (Swain). Seul un test d’effort en laboratoire mesure vraiment la VO2max.</p>
       {v.watch == null && v.value != null && <p className="muted small" style={{ margin: 0 }}>Ta montre affiche une autre valeur ? Renseigne-la dans <button className="link small" onClick={() => go("account")}>ton profil</button> : elle servira à calculer tes allures.</p>}
     </section>
   );

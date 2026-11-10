@@ -3,7 +3,7 @@ import { one } from "@/db/client";
 import { estimateVo2 } from "@/lib/engine/vo2";
 import { trainingTargets } from "@/lib/engine/paces";
 import { mailConfigured } from "@/lib/mail";
-import { dashboard, loadActivities, resolveToday } from "@/lib/service";
+import { dashboard, loadActivities, resolveToday, toVo2Run } from "@/lib/service";
 import { stravaStatus } from "@/lib/strava";
 
 export const GET = withUser(async (user, req) => {
@@ -19,7 +19,7 @@ export const GET = withUser(async (user, req) => {
   ]);
   const p = data.profile;
   const vo2 = estimateVo2(
-    history.map((r) => ({ date: r.date, sport: r.sport, durationMin: r.duration_min, distanceKm: r.distance_km, gainM: r.gain_m, lossM: r.loss_m, avgHr: r.avg_hr, maxHr: r.max_hr, name: r.name })),
+    history.map(toVo2Run),
     today, { hrMax: p.hr_max, hrRest: p.hr_rest, watch: p.vo2_watch },
   );
   return json({

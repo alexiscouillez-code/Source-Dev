@@ -56,7 +56,7 @@ export const VERDICT = {
 } as const;
 
 export interface PlanSession { id: number; date: string; template: string; title: string; sport: string; duration_min: number; gain_m: number | null; rpe_target: number; description: string; phase: string; status: string; activity_id: number | null; locked: number; original: string | null; a_duration?: number | null; a_distance?: number | null; a_gain?: number | null; a_name?: string | null }
-export interface Activity { id: number; date: string; sport: string; name: string | null; duration_min: number; distance_km: number | null; gain_m: number | null; loss_m: number | null; avg_hr: number | null; rpe: number | null; source: string; load: number; effort: number; effortSource: "ressenti" | "fc" | "estimé"; track?: string | null }
+export interface Activity { id: number; date: string; sport: string; name: string | null; duration_min: number; distance_km: number | null; gain_m: number | null; loss_m: number | null; avg_hr: number | null; rpe: number | null; source: string; load: number; effort: number; effortSource: "ressenti" | "zones" | "fc" | "estimé"; insight?: { zones: number[] | null; gap: number | null; dec: number | null; vo2: number | null } | null; track?: string | null }
 export interface Targets {
   vdot: number | null; method: "reserve" | "max" | null;
   paces: { key: "E" | "M" | "T" | "I"; label: string; use: string; fast: number; slow: number }[];

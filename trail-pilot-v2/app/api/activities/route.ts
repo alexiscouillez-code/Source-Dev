@@ -1,3 +1,4 @@
+import { cleanAnalysis } from "@/lib/engine/streams";
 import { body, isoDate, json, withUser } from "@/lib/api";
 import { parseActivity } from "@/lib/activity-input";
 import { all, run } from "@/db/client";
@@ -22,9 +23,11 @@ export const POST = withUser(async (user, req) => {
   const a = parseActivity(b, today);
   const source = b.source === "gpx" ? "gpx" : b.source === "fichier" ? "fichier" : "manual";
   const now = Date.now();
+  // Fichier de montre : le navigateur a analysé les données seconde par seconde et n’envoie que le résumé.
+  const analysis = source !== "manual" ? cleanAnalysis(b.analysis) : null;
   const { id } = await run(
-    "INSERT INTO activities(user_id, date, sport, name, duration_min, distance_km, gain_m, loss_m, avg_hr, max_hr, rpe, source, track, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    [user.id, a.date, a.sport, a.name, a.duration, a.distance, a.gain, a.loss, a.avgHr, a.maxHr, a.rpe, source, a.track, now, now],
+    "INSERT INTO activities(user_id, date, sport, name, duration_min, distance_km, gain_m, loss_m, avg_hr, max_hr, rpe, source, track, analysis, stream_state, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    [user.id, a.date, a.sport, a.name, a.duration, a.distance, a.gain, a.loss ?? analysis?.loss ?? null, a.avgHr, a.maxHr, a.rpe, source, a.track, analysis ? JSON.stringify(analysis) : null, analysis ? 1 : null, now, now],
   );
   await reconcile(user.id, today);
   return json({ id }, 201);

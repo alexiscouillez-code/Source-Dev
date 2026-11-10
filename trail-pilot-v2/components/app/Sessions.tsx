@@ -9,7 +9,30 @@ import { parseActivityFile } from "@/lib/activity-file";
 
 const TrackMap = dynamic(() => import("./TrackMap"), { ssr: false, loading: () => <div className="tmap" style={{ height: 300 }}><div className="tmap-loading">Chargement de la carte…</div></div> });
 
-const EFFORT_SOURCE = { ressenti: "ton ressenti", fc: "ta fréquence cardiaque", "estimé": "une estimation" };
+const EFFORT_SOURCE = { ressenti: "ton ressenti", zones: "le temps passé dans chaque zone cardiaque", fc: "ta fréquence cardiaque moyenne", "estimé": "une estimation" };
+const ZONE_NAMES = ["Z1 récupération", "Z2 endurance", "Z3 tempo", "Z4 seuil", "Z5 VO2max"];
+const paceOf = (mPerMin: number) => { const p = 1000 / mPerMin; return `${Math.floor(p)}:${String(Math.round((p % 1) * 60) % 60).padStart(2, "0")}`; };
+
+/** Analyse de la sortie : barre des zones cardiaques, allure ajustée à la pente, découplage, VO2max de la séance. */
+function Insight({ a }: { a: Activity }) {
+  const i = a.insight;
+  if (!i || (!i.zones && !i.gap)) return null;
+  const total = i.zones?.reduce((t, v) => t + v, 0) ?? 0;
+  return (
+    <div className="insight">
+      {i.zones && total > 0 && (
+        <div className="zbar" role="img" aria-label={`Temps par zone cardiaque : ${i.zones.map((m, k) => `${ZONE_NAMES[k]} ${m} min`).join(", ")}`}>
+          {i.zones.map((m, k) => m > 0 && <i key={k} className={`z${k + 1}`} style={{ flexGrow: m }} title={`${ZONE_NAMES[k]} : ${fmtDur(m)} (${Math.round((m / total) * 100)} %)`}>{m / total > 0.12 ? `Z${k + 1}` : ""}</i>)}
+        </div>
+      )}
+      <div className="insight-facts">
+        {i.gap != null && <span title="Allure ajustée à la pente : l’allure à plat qui aurait coûté le même effort">Allure ajustée <b>{paceOf(i.gap)}</b> /km</span>}
+        {i.dec != null && <span className={i.dec > 8 ? "warn" : ""} title="Découplage cardiaque : perte d’efficacité entre la première et la seconde moitié. Sous 5 %, ton endurance tient la durée.">Découplage <b>{i.dec > 0 ? "+" : ""}{String(i.dec).replace(".", ",")} %</b></span>}
+        {i.vo2 != null && <span title="VO2max estimée sur les passages d’effort stable de cette sortie">VO2max <b>{String(i.vo2).replace(".", ",")}</b></span>}
+      </div>
+    </div>
+  );
+}
 
 export default function Sessions({ me, refresh, toast }: Ctx) {
   const [acts, setActs] = useState<Activity[] | null>(null);
@@ -44,7 +67,7 @@ export default function Sessions({ me, refresh, toast }: Ctx) {
     try {
       const g = await parseActivityFile(file);
       const s = (v: number | null) => (v == null ? "" : String(v).replace(".", ","));
-      setSheet({ source: "fichier", format: g.format, track: g.track, sport: g.sport, date: g.date && g.date <= localToday() ? g.date : localToday(), durationMin: s(g.durationMin), distanceKm: s(g.distanceKm), gainM: s(g.gainM), lossM: s(g.lossM), avgHr: s(g.avgHr), maxHr: s(g.maxHr), name: g.name ?? "" });
+      setSheet({ source: "fichier", format: g.format, track: g.track, analysis: g.analysis ?? null, sport: g.sport, date: g.date && g.date <= localToday() ? g.date : localToday(), durationMin: s(g.durationMin), distanceKm: s(g.distanceKm), gainM: s(g.gainM), lossM: s(g.lossM), avgHr: s(g.avgHr), maxHr: s(g.maxHr), name: g.name ?? "" });
     } catch (e) { toast(e instanceof Error ? e.message : "Fichier illisible"); }
     finally { if (fileRef.current) fileRef.current.value = ""; }
   }
@@ -88,7 +111,8 @@ export default function Sessions({ me, refresh, toast }: Ctx) {
                   <div className="s">
                     {SPORT_LABEL[a.sport]} · {fmtDur(a.duration_min)}{a.distance_km ? ` · ${fmtKm(a.distance_km)} km` : ""}{a.gain_m ? ` · ${fmtNum(a.gain_m)} m D+` : ""}{a.avg_hr ? ` · ${Math.round(a.avg_hr)} bpm` : ""}
                   </div>
-                  <div className="s" title={`Effort ${a.effort}/10 d’après ${EFFORT_SOURCE[a.effortSource]}`}>Charge <b className="mono" style={{ color: "var(--snow)" }}>{a.load}</b> UA · effort {a.effort}/10 ({a.effortSource}){a.source === "strava" ? " · Strava" : a.source === "gpx" ? " · GPX" : a.source === "fichier" ? " · fichier montre" : ""}</div>
+                  <div className="s" title={`Effort ${a.effort}/10 d’après ${EFFORT_SOURCE[a.effortSource]}`}>Charge <b className="mono" style={{ color: "var(--snow)" }}>{a.load}</b> UA · effort {String(a.effort).replace(".", ",")}/10 ({a.effortSource}){a.source === "strava" ? " · Strava" : a.source === "gpx" ? " · GPX" : a.source === "fichier" ? " · fichier montre" : ""}</div>
+                  <Insight a={a} />
                 </div>
                 <div className="item-actions">
                   {a.track && <button className="iconbtn" aria-label="Voir sur la carte" title="Voir sur la carte" onClick={() => showOnMap(a.id)}><IconPin /></button>}
@@ -110,17 +134,19 @@ export default function Sessions({ me, refresh, toast }: Ctx) {
   );
 }
 
-interface Draft { source: "manual" | "gpx" | "fichier"; format?: string; track?: string | null; date: string; sport: string; name: string; durationMin: string; distanceKm: string; gainM: string; lossM: string; avgHr: string; maxHr?: string; rpe: number }
+interface Draft { source: "manual" | "gpx" | "fichier"; format?: string; track?: string | null; analysis?: unknown; date: string; sport: string; name: string; durationMin: string; distanceKm: string; gainM: string; lossM: string; avgHr: string; maxHr?: string; rpe: number }
 
 function SessionSheet({ initial, onClose, onSaved }: { initial: Partial<Draft>; onClose: () => void; onSaved: () => Promise<void> }) {
   const [f, setF] = useState<Draft>({ source: "manual", date: localToday(), sport: "trail", name: "", durationMin: "", distanceKm: "", gainM: "", lossM: "", avgHr: "", rpe: 5, ...initial });
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Fichier analysé seconde par seconde : sans ressenti saisi, l’effort vient du temps passé dans chaque zone cardiaque.
+  const [felt, setFelt] = useState(!initial.analysis);
   const set = (k: keyof Draft) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
 
   async function submit(e: React.FormEvent) {
     e.preventDefault(); setBusy(true); setErr(null);
-    try { await api("/api/activities", { method: "POST", body: f }); await onSaved(); }
+    try { await api("/api/activities", { method: "POST", body: felt ? f : { ...f, rpe: null } }); await onSaved(); }
     catch (e2) { setErr(e2 instanceof Error ? e2.message : "Erreur"); setBusy(false); }
   }
 
@@ -142,8 +168,8 @@ function SessionSheet({ initial, onClose, onSaved }: { initial: Partial<Draft>; 
           <label className="field">D+ (m)<input inputMode="numeric" value={f.gainM} onChange={set("gainM")} placeholder="850" /></label>
           <label className="field">D− (m)<input inputMode="numeric" value={f.lossM} onChange={set("lossM")} placeholder="850" /></label>
         </div>
-        <label className="field">Ressenti de l’effort : <b style={{ color: "var(--snow)" }}>{f.rpe}/10</b> <small>{f.rpe <= 3 ? "facile, conversation" : f.rpe <= 5 ? "modéré" : f.rpe <= 7 ? "soutenu" : f.rpe <= 8 ? "dur" : "maximal"}</small>
-          <input type="range" min={1} max={10} value={f.rpe} onChange={(e) => setF({ ...f, rpe: Number(e.target.value) })} />
+        <label className="field">Ressenti de l’effort : {felt ? <><b style={{ color: "var(--snow)" }}>{f.rpe}/10</b> <small>{f.rpe <= 3 ? "facile, conversation" : f.rpe <= 5 ? "modéré" : f.rpe <= 7 ? "soutenu" : f.rpe <= 8 ? "dur" : "maximal"}</small></> : <small>calculé depuis tes zones cardiaques · déplace le curseur pour donner ton ressenti</small>}
+          <input type="range" min={1} max={10} value={f.rpe} onChange={(e) => { setFelt(true); setF({ ...f, rpe: Number(e.target.value) }); }} />
         </label>
         {err && <p className="note err" role="alert">{err}</p>}
         <button className="btn" type="submit" disabled={busy}>{busy ? "Enregistrement…" : "Enregistrer"}</button>

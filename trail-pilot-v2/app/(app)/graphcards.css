@@ -94,3 +94,13 @@
   @keyframes gc-flip { 0% { transform: perspective(300px) rotateX(-180deg); } 100% { transform: none; } }
 }
 @media (prefers-reduced-motion: reduce) { .gc-inner { transition: none; } }
+
+/* ---------- Analyse d’une sortie (onglet Séances) : zones cardiaques et indicateurs ---------- */
+.insight { display: grid; gap: 6px; margin-top: 8px; max-width: 520px; }
+.zbar { display: flex; height: 16px; border-radius: 6px; overflow: hidden; gap: 1.5px; background: var(--line); }
+.zbar i { min-width: 3px; display: grid; place-items: center; font-style: normal; font-family: var(--mono); font-size: 9.5px; font-weight: 600; color: #0b0f14; }
+.zbar .z1 { background: #8fb8d8; } .zbar .z2 { background: #5fd39a; } .zbar .z3 { background: #f5c451; } .zbar .z4 { background: #ff8a4c; } .zbar .z5 { background: #ef5a4a; }
+.insight-facts { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--mute); }
+.insight-facts b { font-family: var(--mono); color: var(--snow); font-weight: 600; }
+.insight-facts .warn b { color: var(--danger); }
+@media (prefers-reduced-motion: no-preference) { .zbar i { transform-origin: left; animation: grow-x .7s var(--ease) both; } }
