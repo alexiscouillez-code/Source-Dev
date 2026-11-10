@@ -3,10 +3,13 @@
 import { fmtPace, sessionTarget } from "@/lib/engine/paces";
 import type { Targets } from "./client";
 import { stepsFor } from "./workout";
+import { conditionsFor, slowed, type DayWeather } from "@/lib/engine/conditions";
 
 /** Consigne chiffrée d’une séance : allure sur plat et fréquence cardiaque, tirées de ta VO2max. */
-export function SessionTarget({ targets, template, rpe, duration, title }: { targets: Targets | undefined; template: string; rpe: number; duration?: number; title?: string }) {
+export function SessionTarget({ targets, template, rpe, duration, title, gain, sport, day }: { targets: Targets | undefined; template: string; rpe: number; duration?: number; title?: string; gain?: number | null; sport?: string; day?: DayWeather | null }) {
   if (!targets) return null;
+  const c = template === "strength" || template === "race" ? null : conditionsFor({ template, sport, durationMin: duration ?? 0, gainM: gain ?? null }, day);
+  const f = c?.factor ?? 1, hot = f > 1.005;
   const t = sessionTarget(targets as Parameters<typeof sessionTarget>[0], template, rpe);
   const z = t.zones && targets.zones.length ? [targets.zones[t.zones[0] - 1], targets.zones[t.zones[1] - 1]] : null;
   if (!t.pace && !z) {
@@ -16,21 +19,27 @@ export function SessionTarget({ targets, template, rpe, duration, title }: { tar
   return (
     <>
     <div className="target">
-      {t.pace && <span><small>Allure sur plat</small><b className="mono">{fmtPace(t.pace.fast)}–{fmtPace(t.pace.slow)} /km</b></span>}
+      {t.pace && <span><small>Allure sur plat{hot ? ` · corrigée chaleur (+${Math.round((f - 1) * 100)} %)` : ""}</small><b className="mono">{fmtPace(slowed(t.pace.fast, f))}–{fmtPace(slowed(t.pace.slow, f))} /km</b>{hot && <small className="muted">habituelle {fmtPace(t.pace.fast)}–{fmtPace(t.pace.slow)} · le matin, elle reste valable</small>}</span>}
       {z && <span><small>Fréquence cardiaque{z[0].z === z[1].z ? ` · zone ${z[0].z}` : ` · zones ${z[0].z}-${z[1].z}`}</small><b className="mono">{z[0].low}–{z[1].high} bpm</b></span>}
       {t.hint && <em>{t.hint}</em>}
     </div>
-    {duration != null && <Steps targets={targets} template={template} duration={duration} title={title ?? ""} />}
+    {c && (c.notes.length > 0 || day) && (
+      <div className={`cond cond-${c.tone}`}>
+        {day && <b className="cond-day">{day.label} · {day.tMin}–{day.tMax} °C{day.feelsMax - day.tMax >= 2 ? ` (${day.feelsMax} ressentis)` : ""}{day.windMax >= 25 ? ` · vent ${day.windMax} km/h` : ""}</b>}
+        {c.notes.map((n) => <p key={n}>{n}</p>)}
+      </div>
+    )}
+    {duration != null && <Steps targets={targets} template={template} duration={duration} title={title ?? ""} factor={f} />}
     </>
   );
 }
 
 /** Déroulé de la séance, étape par étape, avec l’allure et le cardio de chacune. */
-function Steps({ targets, template, duration, title }: { targets: Targets; template: string; duration: number; title: string }) {
+function Steps({ targets, template, duration, title, factor = 1 }: { targets: Targets; template: string; duration: number; title: string; factor?: number }) {
   const steps = stepsFor({ template, duration_min: duration, title });
   if (steps.length < 2) return null;
   const bpm = (z?: [number, number]) => { if (!z) return null; const lo = targets.zones.find((x) => x.z === z[0]), hi = targets.zones.find((x) => x.z === z[1]); return lo && hi ? `${lo.low}–${hi.high} bpm` : null; };
-  const pace = (k?: "E" | "T" | "I") => { const p = k ? targets.paces.find((x) => x.key === k) : null; return p ? `${fmtPace(p.fast)}–${fmtPace(p.slow)} /km` : null; };
+  const pace = (k?: "E" | "T" | "I") => { const p = k ? targets.paces.find((x) => x.key === k) : null; return p ? `${fmtPace(slowed(p.fast, factor))}–${fmtPace(slowed(p.slow, factor))} /km` : null; };
   const fmtMin = (m: number) => (m < 1 ? `${Math.round(m * 60)} s` : Number.isInteger(m) ? `${m} min` : `${String(m).replace(".", ",")} min`);
   const rows: { lead: string; name: string; detail: string; kind: string }[] = [];
   steps.forEach((s) => {

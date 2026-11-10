@@ -3,8 +3,10 @@ import { all, libsql, one, run } from "@/db/client";
 import { addDays, diffDays, mondayOf, range, todayIn } from "./engine/dates";
 import { adapt, decide, watchBaseline, type CheckIn, type PlannedLike, type Verdict, type Watch } from "./engine/decision";
 import { isFoot, sessionLoad, type ActivityLike, type Sport } from "./engine/load";
-import { parseAnalysis, windowsVo2, zoneMinutes } from "./engine/streams";
+import { parseAnalysis, windowsVo2, zoneBounds, zoneMinutes } from "./engine/streams";
 import { reviewSession } from "./engine/review";
+import { applyLearning, learn, type Learning, type Past } from "./engine/learn";
+import { assignShoes } from "./shoes";
 import { trainingTargets } from "./engine/paces";
 import { estimateVo2, type Vo2Run } from "./engine/vo2";
 import { buildRacePlan, maintenancePlan, phaseFor, type Level, type RacePlan } from "./engine/planner";
@@ -60,6 +62,7 @@ export function withLoad(a: ActivityRow, physio: { hrMax: number | null; hrRest:
 
 /** Lie les séances réalisées au planning et marque les séances manquées. */
 export async function reconcile(userId: number, today: string) {
+  await assignShoes(userId);
   const plans = await all<PlanRow>("SELECT * FROM plan_sessions WHERE user_id = ? AND date <= ? AND status IN ('planned', 'adapted')", [userId, today]);
   if (!plans.length) return;
   const acts = await all<ActivityRow>("SELECT id, date, sport FROM activities WHERE user_id = ? AND date >= ?", [userId, plans.reduce((m, p) => (p.date < m ? p.date : m), today)]);
@@ -94,11 +97,15 @@ export async function regeneratePlan(userId: number, today: string) {
   items = withSideRaces(withStrength(items), sides, { start: addDays(today, 1), level: profile.level, ctl: tl.ctl, mainDate: goal && goal.date > today ? goal.date : null });
   const absence = await loadAbsence(userId, today);
   if (absence) items = applyAbsence(items, absence);
-  const keep = await all<{ date: string }>("SELECT date FROM plan_sessions WHERE user_id = ? AND date > ? AND (locked = 1 OR status NOT IN ('planned', 'adapted'))", [userId, today]);
+  const lr = await loadLearning(userId, today);
+  if (!lr.off) items = applyLearning(items, lr.learning, today);
+  await run("INSERT INTO plan_learning(user_id, sig, off, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET sig = excluded.sig, updated_at = excluded.updated_at",
+    [userId, lr.off ? "" : lr.learning.sig, lr.off ? 1 : 0, Date.now()]);
+  const keep = await all<{ date: string }>("SELECT date FROM plan_sessions WHERE user_id = ? AND date > ? AND (locked = 1 OR status != 'planned')", [userId, today]);
   const kept = new Set(keep.map((k) => k.date));
   const now = Date.now();
   await libsql().batch([
-    { sql: "DELETE FROM plan_sessions WHERE user_id = ? AND date > ? AND locked = 0 AND status IN ('planned', 'adapted')", args: [userId, today] },
+    { sql: "DELETE FROM plan_sessions WHERE user_id = ? AND date > ? AND locked = 0 AND status = 'planned'", args: [userId, today] },
     ...items.filter((i) => !kept.has(i.date)).map((i) => ({
       sql: "INSERT INTO plan_sessions(user_id, date, template, title, sport, duration_min, gain_m, rpe_target, description, phase, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'planned', ?, ?)",
       args: [userId, i.date, i.template, i.title, i.sport, i.durationMin, i.gainM, i.rpeTarget, i.description, i.phase, now, now],
@@ -248,6 +255,30 @@ export function applyAbsence<T extends { date: string; template: string; title: 
   return out;
 }
 
+/** Les 14 derniers jours du plan, avec le prévu / réalisé de chaque séance faite. */
+async function recentPast(userId: number, today: string, physio: { hrMax: number | null; hrRest: number | null }): Promise<Past[]> {
+  const targets = trainingTargets(null, physio.hrMax, physio.hrRest);
+  const rows = await all<PlanRow & { a_duration: number | null; a_gain: number | null; a_analysis: string | null }>(
+    `SELECT p.*, a.duration_min AS a_duration, a.gain_m AS a_gain, a.analysis AS a_analysis FROM plan_sessions p LEFT JOIN activities a ON a.id = p.activity_id
+     WHERE p.user_id = ? AND p.date >= ? AND p.date < ?`, [userId, addDays(today, -14), today]);
+  return rows.map((p) => ({ date: p.date, template: p.template, status: p.status, duration: p.a_duration,
+    review: p.status === "done" && p.a_duration != null ? reviewSession(p, { duration_min: p.a_duration, gain_m: p.a_gain }, parseAnalysis(p.a_analysis), targets, physio) : null }));
+}
+
+/** Ce que le plan apprend du prévu / réalisé, et si le coureur a choisi de garder le plan sans ajustement. */
+export async function loadLearning(userId: number, today: string): Promise<{ learning: Learning; off: boolean; applied: string | null }> {
+  const prof = await loadProfile(userId);
+  const physio = { hrMax: prof.hr_max, hrRest: prof.hr_rest };
+  const z = zoneBounds(physio);
+  const [past, row] = await Promise.all([recentPast(userId, today, physio), one<{ sig: string; off: number }>("SELECT sig, off FROM plan_learning WHERE user_id = ?", [userId])]);
+  return { learning: learn(past, today, z ? Math.round(z[1]) : null), off: !!row?.off, applied: row ? row.sig : null };
+}
+
+export async function setLearningOff(userId: number, today: string, off: boolean) {
+  await run("INSERT INTO plan_learning(user_id, sig, off, updated_at) VALUES (?, '', ?, ?) ON CONFLICT(user_id) DO UPDATE SET off = excluded.off, updated_at = excluded.updated_at", [userId, off ? 1 : 0, Date.now()]);
+  await regeneratePlan(userId, today);
+}
+
 /** Le plan suit la charge réelle : il se recalcule automatiquement chaque nouvelle semaine. */
 export async function planView(userId: number, today: string) {
   await reconcile(userId, today);
@@ -258,6 +289,9 @@ export async function planView(userId: number, today: string) {
     goal = await loadGoal(userId);
     meta = readPlanMeta(goal);
   }
+  // Nouveau signal du prévu / réalisé (séances manquées, footings trop rapides…) : le plan est réajusté.
+  let lr = await loadLearning(userId, today);
+  if (!lr.off && lr.learning.sig !== (lr.applied ?? "")) { await regeneratePlan(userId, today); goal = await loadGoal(userId); meta = readPlanMeta(goal); lr = { ...lr, applied: lr.learning.sig }; }
   const from = addDays(mondayOf(today), -7);
   const to = goal && goal.date > today ? goal.date : addDays(today, 21);
   const prof = await loadProfile(userId);
@@ -284,5 +318,6 @@ export async function planView(userId: number, today: string) {
       review: p.status === "done" && p.a_duration != null ? reviewSession(p, { duration_min: p.a_duration, gain_m: p.a_gain }, parseAnalysis(a_analysis), targets, physio) : null,
     })),
     doneByWeek, races, absence: await loadAbsence(userId, today),
+    learning: { items: lr.learning.items, off: lr.off },
   };
 }

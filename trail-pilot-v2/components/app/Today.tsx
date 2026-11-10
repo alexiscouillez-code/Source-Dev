@@ -4,11 +4,12 @@ import { useState } from "react";
 import type { Ctx } from "./AppShell";
 import InfoTip, { EXPLAIN } from "./InfoTip";
 import { SessionTarget } from "./Targets";
+import { dayOf, useForecast } from "./useForecast";
 import { ZONES } from "@/lib/engine/legs";
 import Onboarding from "./Onboarding";
 import Coach from "./Coach";
 import WeekCard from "./WeekCard";
-import { api, dayLabel, fmtDur, fmtNum, SPORT_LABEL, VERDICT, type Me, type PlanSession } from "./client";
+import { api, dayLabel, fmtDur, fmtNum, localToday, SPORT_LABEL, VERDICT, type Me, type PlanSession } from "./client";
 
 export default function Today({ me, refresh, go, toast }: Ctx) {
   const [editing, setEditing] = useState(!me.checkin);
@@ -122,6 +123,7 @@ export function StatusChip({ status }: { status: string }) {
 
 export function SessionBlock({ s, targets }: { s: PlanSession; targets?: Me["targets"] }) {
   const original = s.original ? (JSON.parse(s.original) as { title: string; durationMin: number }) : null;
+  const fc = useForecast(localToday());
   return (
     <div className="session">
       <div className="row between"><span className="eyebrow">{dayLabel(s.date, { weekday: "long", day: "numeric", month: "short" })} · {s.phase}</span><StatusChip status={s.status} /></div>
@@ -132,7 +134,7 @@ export function SessionBlock({ s, targets }: { s: PlanSession; targets?: Me["tar
         {s.gain_m ? <div><b>{s.gain_m} m</b><small>D+ visé</small></div> : null}
         <div><b>{SPORT_LABEL[s.sport] ?? s.sport}</b><small>Activité</small></div>
       </div>
-      <SessionTarget targets={targets} template={s.template} rpe={s.rpe_target} duration={s.duration_min} title={s.title} />
+      <SessionTarget targets={targets} template={s.template} rpe={s.rpe_target} duration={s.duration_min} title={s.title} gain={s.gain_m} sport={s.sport} day={dayOf(fc, s.date)} />
       <p className="soft small" style={{ margin: 0 }}>{s.description}</p>
       {original && <p className="muted small" style={{ margin: 0 }}>Prévu initialement : {original.title}, {fmtDur(original.durationMin)}.</p>}
     </div>

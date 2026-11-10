@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { Ctx } from "./AppShell";
 import { api, DAYS } from "./client";
+import { HomeCard, ShoesCard } from "./Gear";
 
 export default function Account({ me, refresh, toast, go }: Ctx) {
   return (
@@ -11,6 +12,8 @@ export default function Account({ me, refresh, toast, go }: Ctx) {
       <div className="grid g2">
         <RaceCard me={me} go={go} />
         <ProfileCard me={me} refresh={refresh} toast={toast} />
+        <ShoesCard toast={toast} />
+        <HomeCard toast={toast} />
         <ReminderCard me={me} refresh={refresh} toast={toast} />
         <CalendarCard toast={toast} />
         <StravaCard me={me} refresh={refresh} toast={toast} />

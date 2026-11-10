@@ -87,6 +87,7 @@ export default function RaceDay({ route, strat, onClose }: { route: RaceRoute; s
   const km = gpsKm ?? (lastMark ? Math.max(lastMark.km, planKmShift(strat, route.distanceKm, elapsed, lastMark)) : planKm);
   const next = route.aid.find((a) => a.km > km + 0.05);
   const target = next?.km ?? route.distanceKm;
+  const cutoff = next ? next.cutoff ?? null : route.finishCutoff ?? null;
   const tAt = passageAt(strat, target), tNow = passageAt(strat, km);
   const delta = lastMark ? lastMark.at / 60000 - (passageAt(strat, lastMark.km).low + passageAt(strat, lastMark.km).high) / 2 : null;
   const eta = st.start != null ? st.start + st.pauseTotal + ((tAt.low + tAt.high) / 2 + (delta ?? 0)) * 60000 : null;
@@ -144,6 +145,11 @@ export default function RaceDay({ route, strat, onClose }: { route: RaceRoute; s
         <small>{next ? "Prochain ravito" : "Arrivée"}</small>
         <b>{next ? next.name || `Ravito km ${kmTxt(next.km)}` : "Ligne d’arrivée"}</b>
         <span>dans {kmTxt(Math.max(0, target - km))} km{gainTo ? ` · ${fmtNum(gainTo)} m D+` : ""}{eta ? ` · vers ${hhmm(eta)}` : ""}</span>
+        {cutoff != null && st.start != null && eta != null && (() => {
+          // Marge sur la barrière horaire du prochain point, d’après l’heure d’arrivée prévue.
+          const m = Math.round((st.start + st.pauseTotal + cutoff * 60000 - eta) / 60000);
+          return <span className={`rd-cut ${m < 0 ? "bad" : m < 20 ? "warn" : ""}`}>Barrière {hhmm(st.start + st.pauseTotal + cutoff * 60000)} · {m < 0 ? `${fmtDur(-m)} de retard` : `marge ${fmtDur(m)}`}</span>;
+        })()}
       </div>
       {alert && <button className="rd-alert" onClick={() => setAlert(null)}>{alert}<small>Toucher pour fermer</small></button>}
       <div className="rd-actions">

@@ -149,4 +149,22 @@ export const MIGRATIONS: { tag: string; statements: string[] }[] = [
       `UPDATE activities SET stream_state = NULL WHERE stream_state = 1 AND strava_id IS NOT NULL AND analysis NOT LIKE '%"best"%'`,
     ],
   },
+  {
+    tag: "009_learning_shoes_home",
+    statements: [
+      // Ce que le plan a appris du prévu / réalisé (signature des ajustements appliqués) et choix de les désactiver.
+      `CREATE TABLE IF NOT EXISTS plan_learning (
+        user_id INTEGER PRIMARY KEY REFERENCES app_users(id) ON DELETE CASCADE,
+        sig TEXT NOT NULL DEFAULT '', off INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL)`,
+      // Chaussures : kilométrage, limite d’usure, paire par défaut pour la route et pour le trail.
+      `CREATE TABLE IF NOT EXISTS shoes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+        name TEXT NOT NULL, terrain TEXT NOT NULL, base_km REAL NOT NULL DEFAULT 0, limit_km INTEGER NOT NULL DEFAULT 700,
+        is_default INTEGER NOT NULL DEFAULT 0, retired INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL)`,
+      `CREATE INDEX IF NOT EXISTS shoes_user ON shoes(user_id)`,
+      `ALTER TABLE activities ADD COLUMN shoe_id INTEGER`,
+      // Lieu d’entraînement habituel, pour corriger les allures selon la météo.
+      `ALTER TABLE profiles ADD COLUMN home TEXT`,
+    ],
+  },
 ];

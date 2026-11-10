@@ -10,12 +10,16 @@
  *    500-750 ml d’eau/h et 300-600 mg de sodium/h, à ajuster selon la chaleur et ta tolérance.
  */
 export type RoutePoint = [km: number, ele: number];
-export interface Aid { km: number; name?: string | null }
-export interface RaceRoute { points: RoutePoint[]; aid: Aid[]; distanceKm: number; gainM: number; lossM: number; name?: string | null; uploadedAt?: number; /** Tracé GPS (polyline encodée) */ line?: string | null }
+export interface Aid { km: number; name?: string | null; /** Barrière horaire, en minutes depuis le départ */ cutoff?: number | null }
+export interface RaceRoute { points: RoutePoint[]; aid: Aid[]; distanceKm: number; gainM: number; lossM: number; name?: string | null; uploadedAt?: number; /** Tracé GPS (polyline encodée) */ line?: string | null; /** Heure de départ « HH:MM » */ startTime?: string | null; /** Barrière à l’arrivée, en minutes */ finishCutoff?: number | null }
 export interface Section {
   from: number; to: number; km: number; gain: number; loss: number; label: string;
   minutes: { low: number; high: number }; arrival: { low: number; high: number };
   carbs: [number, number]; water: [number, number]; pace: string;
+  /** Barrière horaire en fin de section (minutes) et marge sur l’estimation prudente */
+  cutoff: number | null; margin: number | null;
+  /** Ce qu’il faut emporter : gels (≈ 25 g de glucides) et flasques de 500 ml */
+  gels: [number, number]; flasks: [number, number];
 }
 export interface Strategy { sections: Section[]; total: { low: number; high: number }; perHour: { carbs: [number, number]; water: [number, number]; sodium: [number, number] }; totals: { carbs: [number, number]; water: [number, number] } }
 
@@ -67,6 +71,8 @@ export function buildStrategy(route: RaceRoute, rawEstimate: { low: number; high
   const dist = route.distanceKm;
   const named = new Map<number, string>();
   for (const a of route.aid) if (a.km > 0.2 && a.km < dist - 0.2) { const k = Math.round(a.km * 10) / 10; if (!named.has(k)) named.set(k, a.name?.trim() || ""); }
+  const cutoffAt = new Map<number, number>();
+  for (const a of route.aid) if (a.cutoff && a.cutoff > 0) cutoffAt.set(Math.round(a.km * 10) / 10, a.cutoff);
   const cuts = [...named.keys()].sort((a, b) => a - b);
   const auto = !cuts.length;
   if (auto) for (let k = 10; k < dist - 3; k += 10) cuts.push(k);
@@ -93,10 +99,33 @@ export function buildStrategy(route: RaceRoute, rawEstimate: { low: number; high
       carbs: [r((needs.carbs[0] * h) / 5) * 5, r((needs.carbs[1] * h) / 5) * 5],
       water: [r((needs.water[0] * h) / 50) * 50, r((needs.water[1] * h) / 50) * 50],
       pace: `${Math.floor(paceMin)}:${String(r((paceMin % 1) * 60) % 60).padStart(2, "0")}`,
+      ...cutoffOf(i === raw.length - 1 ? route.finishCutoff ?? null : cutoffAt.get(Math.round(x.to * 10) / 10) ?? null, r(accHigh)),
+      gels: [Math.ceil(r((needs.carbs[0] * h) / 5) * 5 / 25), Math.ceil(r((needs.carbs[1] * h) / 5) * 5 / 25)],
+      flasks: [Math.max(0, Math.ceil(r((needs.water[0] * h) / 50) * 50 / 500 - 0.15)), Math.max(1, Math.ceil(r((needs.water[1] * h) / 50) * 50 / 500 - 0.15))],
     };
   });
   const sum = (k: "carbs" | "water", j: 0 | 1) => sections.reduce((s, x) => s + x[k][j], 0);
   return { sections, total: { low: r(accLow), high: r(accHigh) }, perHour: needs, totals: { carbs: [sum("carbs", 0), sum("carbs", 1)], water: [sum("water", 0), sum("water", 1)] } };
+}
+
+const cutoffOf = (cutoff: number | null, arrivalHigh: number) => ({ cutoff, margin: cutoff ? cutoff - arrivalHigh : null });
+
+/** « 7:30 » + 95 min → « 9:05 » (heure réelle de passage, sur 24 h). */
+export function clockAt(start: string | null | undefined, minutes: number): string | null {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(start ?? "");
+  if (!m) return null;
+  const t = (Number(m[1]) * 60 + Number(m[2]) + Math.round(minutes)) % 1440;
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
+}
+
+/** « 4h30 », « 4:30 », « 270 » → minutes ; vide → null. */
+export function parseDuration(v: string): number | null | undefined {
+  const t = v.trim().toLowerCase().replace(/\s/g, "");
+  if (!t) return null;
+  let m = /^(\d{1,3})[h:](\d{1,2})?(?:min)?$/.exec(t);
+  if (m) return Number(m[1]) * 60 + Number(m[2] ?? 0);
+  m = /^(\d{1,4})(?:min)?$/.exec(t);
+  return m ? Number(m[1]) : undefined;
 }
 
 /** Simplifie un profil à environ un point tous les 100 m, et au plus 2 500 points. */

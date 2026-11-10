@@ -1,5 +1,5 @@
-import { body, json, num, withUser } from "@/lib/api";
-import { run } from "@/db/client";
+import { body, HttpError, json, num, withUser } from "@/lib/api";
+import { one, run } from "@/db/client";
 import { ownActivity, resolveToday } from "@/lib/service";
 import { parseActivity } from "@/lib/activity-input";
 
@@ -7,6 +7,13 @@ export const PATCH = withUser(async (user, req, ctx) => {
   const id = Number((await ctx.params).id);
   const current = await ownActivity(user.id, id);
   const b = await body(req);
+  // Paire de chaussures (0 = aucune) : modifiable quelle que soit la source.
+  if (b.shoeId !== undefined) {
+    const shoe = Number(b.shoeId);
+    if (shoe !== 0 && !(await one("SELECT 1 FROM shoes WHERE id = ? AND user_id = ?", [shoe, user.id]))) throw new HttpError(400, "Paire introuvable.");
+    await run("UPDATE activities SET shoe_id = ?, updated_at = ? WHERE id = ?", [shoe, Date.now(), id]);
+    if (Object.keys(b).length === 1) return json({ ok: true });
+  }
   if (current.source === "strava") {
     // Les données Strava font foi : seul le ressenti est modifiable.
     await run("UPDATE activities SET rpe = ?, updated_at = ? WHERE id = ?", [num(b.rpe, 1, 10, "Ressenti", true), Date.now(), id]);

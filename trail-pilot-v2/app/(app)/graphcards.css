@@ -142,3 +142,63 @@
 /* ---------- Imprévu et fraîcheur des données ---------- */
 .banner.absence { border-color: color-mix(in srgb, var(--lite) 45%, var(--line)); }
 .fresh { margin: -6px 0 14px; font-size: 13px; color: var(--mute); } .fresh b { color: var(--snow); } .fresh.err { color: var(--danger); }
+
+/* Ce que le plan a appris */
+.banner.learn { align-items: flex-start; }
+.banner.learn.on { border-color: color-mix(in srgb, var(--ember) 45%, var(--line)); }
+.learn-list { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 4px; font-size: 13.5px; color: var(--soft, inherit); }
+.learn-list li.chg::marker { color: var(--ember); }
+
+/* Stratégie : barrières horaires, éditeur de ravitos, fiche imprimable */
+.strat-table .st-row { grid-template-columns: 1.4fr 1fr 1fr 1fr .9fr 1.1fr; }
+@media (max-width: 700px) { .strat-table .st-row { grid-template-columns: 1fr 1fr; } }
+.st-row small.m-ok { color: var(--ok); }
+.st-row small.m-warn { color: var(--lite); }
+.st-row small.m-bad { color: var(--danger); font-weight: 600; }
+.aid-top { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.aid-rows { display: grid; gap: 6px; }
+.aid-row { display: grid; grid-template-columns: 74px 1fr 84px 40px; gap: 6px; align-items: center; }
+.aid-row input { min-width: 0; width: 100%; }
+.aid-head { font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--mute); }
+@media (max-width: 420px) { .aid-row { grid-template-columns: 62px 1fr 70px 36px; } }
+
+.race-sheet { display: none; }
+@media print {
+  body > *:not(.race-sheet) { display: none !important; }
+  html, body { background: #fff !important; }
+  .race-sheet { display: block !important; color: #111; font: 11pt/1.4 system-ui, sans-serif; }
+  .race-sheet h1 { font-size: 20pt; margin: 0 0 4pt; }
+  .race-sheet header p { margin: 0 0 3pt; }
+  .race-sheet table { width: 100%; border-collapse: collapse; margin: 10pt 0; font-size: 10pt; }
+  .race-sheet th, .race-sheet td { border: 1px solid #999; padding: 4pt 5pt; text-align: left; vertical-align: top; }
+  .race-sheet th { background: #eee; }
+  .race-sheet tr.tight td { background: #fde8e1; }
+  .race-sheet .foot { color: #555; font-size: 9pt; margin-top: 12pt; }
+  @page { size: A4; margin: 12mm; }
+}
+.rd-cut { font-family: var(--mono); font-size: 13px; color: var(--ok); }
+.rd-cut.warn { color: var(--lite); }
+.rd-cut.bad { color: var(--danger); font-weight: 700; }
+
+/* Chaussures */
+.shoe-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.shoe { display: grid; gap: 6px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--ink-2); }
+.shoe-bar { height: 6px; border-radius: 99px; background: var(--ink-3, var(--line)); overflow: hidden; }
+.shoe-bar i { display: block; height: 100%; border-radius: inherit; background: var(--ok); transition: width .6s var(--ease, ease); }
+.shoe.w-bientot .shoe-bar i { background: var(--lite); }
+.shoe.w-usee .shoe-bar i { background: var(--danger); }
+.shoe-wear.w-bientot { color: var(--lite); }
+.shoe-wear.w-usee { color: var(--danger); font-weight: 600; }
+.shoe-list.old li { font-size: 13.5px; }
+.chip.warn { color: var(--lite); border-color: color-mix(in srgb, var(--lite) 50%, transparent); }
+.shoe-pick { font-size: 12px; padding: 2px 6px; border-radius: 8px; max-width: 160px; }
+
+/* Conditions du jour sur une séance */
+.cond { display: grid; gap: 4px; padding: 8px 12px; border-radius: 12px; border: 1px dashed var(--line); font-size: 13px; }
+.cond p { margin: 0; color: var(--soft, inherit); }
+.cond-day { font-family: var(--mono); font-size: 11.5px; letter-spacing: .04em; color: var(--mute); font-weight: 500; }
+.cond-chaud { border-color: color-mix(in srgb, var(--lite) 55%, transparent); }
+.cond-tres-chaud { border-color: color-mix(in srgb, var(--danger) 60%, transparent); border-style: solid; }
+.cond-froid { border-color: color-mix(in srgb, var(--rest) 55%, transparent); }
+.shoe-alert { margin: 0 0 12px; padding: 8px 12px; border-radius: 12px; font-size: 13.5px; border: 1px solid color-mix(in srgb, var(--lite) 50%, transparent); }
+.shoe-alert.w-usee { border-color: color-mix(in srgb, var(--danger) 55%, transparent); }

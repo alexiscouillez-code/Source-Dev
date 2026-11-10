@@ -36,6 +36,7 @@ function Insight({ a }: { a: Activity }) {
 
 export default function Sessions({ me, refresh, toast }: Ctx) {
   const [acts, setActs] = useState<Activity[] | null>(null);
+  const [shoes, setShoes] = useState<MiniShoe[]>([]);
   const [sheet, setSheet] = useState<Partial<Draft> | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [focus, setFocus] = useState<number | null>(null);
@@ -44,7 +45,7 @@ export default function Sessions({ me, refresh, toast }: Ctx) {
   const focused = acts?.find((a) => a.id === focus) ?? null;
   const showOnMap = (id: number) => { setFocus(id); mapRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); };
 
-  const load = useCallback(async () => { setActs((await api<{ activities: Activity[] }>("/api/activities")).activities); }, []);
+  const load = useCallback(async () => { const r = await api<{ activities: Activity[]; shoes?: MiniShoe[] }>("/api/activities"); setActs(r.activities); setShoes(r.shoes ?? []); }, []);
   useEffect(() => { load().catch((e) => toast(e.message)); }, [load, toast]);
 
   async function sync() {
@@ -55,6 +56,10 @@ export default function Sessions({ me, refresh, toast }: Ctx) {
   }
   async function setRpe(a: Activity, rpe: string) {
     try { await api(`/api/activities/${a.id}`, { method: "PATCH", body: { rpe: rpe ? Number(rpe) : null } }); await Promise.all([load(), refresh()]); }
+    catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }
+  }
+  async function setShoe(a: Activity, v: string) {
+    try { await api(`/api/activities/${a.id}`, { method: "PATCH", body: { shoeId: Number(v) } }); await load(); }
     catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }
   }
   async function remove(a: Activity) {
@@ -101,6 +106,9 @@ export default function Sessions({ me, refresh, toast }: Ctx) {
         </section>
       )}
 
+      {shoes.filter((s) => !s.retired && s.wear !== "ok").map((s) => (
+        <p key={s.id} className={`shoe-alert w-${s.wear}`}>{s.name} : {Math.round(s.km)} km sur {s.limitKm}. {s.wear === "usee" ? "Amorti fatigué : pense à la remplacer." : "Elle approche de sa limite : prévois la suivante."}</p>
+      ))}
       <section className="card" style={{ paddingTop: 6 }}>
         {!acts ? <div className="skeleton" /> : !acts.length ? <p className="empty">Aucune séance sur les 90 derniers jours.</p> : (
           <ul className="list">
@@ -121,6 +129,12 @@ export default function Sessions({ me, refresh, toast }: Ctx) {
                     <option value="">RPE</option>
                     {Array.from({ length: 10 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}/10</option>)}
                   </select>
+                  {shoes.length > 0 && FOOT.has(a.sport) && (
+                    <select className="rpe-select shoe-pick" aria-label="Chaussures de la sortie" value={a.shoe_id ?? 0} onChange={(e) => setShoe(a, e.target.value)}>
+                      <option value={0}>Chaussures ?</option>
+                      {shoes.filter((s) => !s.retired || s.id === a.shoe_id).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  )}
                   {a.source !== "strava" && <button className="iconbtn" aria-label="Supprimer la séance" onClick={() => remove(a)}><IconTrash /></button>}
                 </div>
               </li>
@@ -180,6 +194,9 @@ function SessionSheet({ initial, onClose, onSaved }: { initial: Partial<Draft>; 
 }
 
 /** Fraîcheur des données : dernière synchro Strava et part des sorties analysées seconde par seconde. */
+interface MiniShoe { id: number; name: string; retired: boolean; wear: "ok" | "bientot" | "usee"; km: number; limitKm: number }
+const FOOT = new Set(["trail", "course", "rando"]);
+
 function Freshness({ s }: { s: Me["strava"] }) {
   const ago = (t: number) => { const m = Math.round((Date.now() - t) / 60000); return m < 2 ? "à l’instant" : m < 60 ? `il y a ${m} min` : m < 48 * 60 ? `il y a ${Math.round(m / 60)} h` : `il y a ${Math.round(m / 1440)} jours`; };
   const a = s.analyzed;

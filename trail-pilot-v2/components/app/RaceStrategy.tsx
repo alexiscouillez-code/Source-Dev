@@ -5,7 +5,8 @@ import { motionOk } from "./motion";
 import RaceDay from "./RaceDay";
 import dynamic from "next/dynamic";
 import { api, fmtDur, fmtKm, fmtNum } from "./client";
-import { buildStrategy, passageAt, type RaceRoute, type Strategy, type WeatherAdjust } from "@/lib/engine/strategy";
+import { buildStrategy, clockAt, parseDuration, passageAt, type RaceRoute, type Strategy, type WeatherAdjust } from "@/lib/engine/strategy";
+import { createPortal } from "react-dom";
 import { decodePolyline } from "@/lib/polyline";
 import type { MapMarker } from "./TrackMap";
 
@@ -14,14 +15,17 @@ import { parseRouteFile } from "@/lib/activity-file";
 import InfoTip from "./InfoTip";
 
 /** Stratégie de course : profil du tracé, temps de passage par section, ravitaillements et nutrition. */
-export default function RaceStrategy({ route, estimate, onChanged, toast, weather }: {
+export default function RaceStrategy({ route, estimate, onChanged, toast, weather, raceName, raceDate }: {
+  raceName?: string; raceDate?: string;
   route: RaceRoute | null; estimate: { low: number; high: number }; weather?: WeatherAdjust | null;
   onChanged: () => Promise<void>; toast: (m: string) => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [editAid, setEditAid] = useState(false);
-  const [aidText, setAidText] = useState("");
+  const [rows, setRows] = useState<AidRow[]>([]);
+  const [start, setStart] = useState("");
+  const [finish, setFinish] = useState("");
   const [raceDay, setRaceDay] = useState(false);
   const strat = useMemo(() => (route ? buildStrategy(route, estimate, weather) : null), [route, estimate, weather]);
   const map = useMemo(() => {
@@ -51,20 +55,31 @@ export default function RaceStrategy({ route, estimate, onChanged, toast, weathe
       const res = await api<{ replanned: boolean }>("/api/goal/trace", { method: "PUT", body: { points: r.points, aid: r.aid, distanceKm: r.distanceKm, gainM: r.gainM, lossM: r.lossM, line: r.line } });
       await onChanged();
       toast(res.replanned ? `Tracé importé : ${fmtKm(r.distanceKm)} km, ${fmtNum(r.gainM)} m D+. Le plan a été recalculé sur ces chiffres.` : "Tracé importé.");
-      if (!r.aid.length) { setEditAid(true); setAidText(""); }
+      if (!r.aid.length) { setRows([{ km: "", name: "", cutoff: "" }]); setEditAid(true); }
     } catch (e) { toast(e instanceof Error ? e.message : "Tracé illisible"); }
     finally { setBusy(false); if (fileRef.current) fileRef.current.value = ""; }
   }
 
+  function openAid() {
+    if (!route) return;
+    setRows(route.aid.map((a) => ({ km: String(a.km).replace(".", ","), name: a.name ?? "", cutoff: a.cutoff ? durTxt(a.cutoff) : "" })));
+    setStart(route.startTime ?? ""); setFinish(route.finishCutoff ? durTxt(route.finishCutoff) : ""); setEditAid(true);
+  }
+
   async function saveAid(e: React.FormEvent) {
     e.preventDefault();
-    // Format : « 12 Refuge du Lac, 25,5, 38 Col » → un ravito par élément, nom facultatif.
-    const aid = aidText.split(/[;\n]/).map((s) => s.trim()).filter(Boolean).map((s) => {
-      const m = /^(\d+(?:[.,]\d+)?)\s*(?:km)?\s*[-–:]?\s*(.*)$/i.exec(s);
-      return m ? { km: Number(m[1].replace(",", ".")), name: m[2] } : null;
-    }).filter(Boolean);
+    const aid = [];
+    for (const r of rows) {
+      if (!r.km.trim()) continue;
+      const km = Number(r.km.replace(",", ".")), cutoff = parseDuration(r.cutoff);
+      if (!Number.isFinite(km) || km <= 0) { toast(`Kilomètre invalide : « ${r.km} »`); return; }
+      if (cutoff === undefined) { toast(`Barrière invalide : « ${r.cutoff} » (exemple : 4h30)`); return; }
+      aid.push({ km, name: r.name.trim(), cutoff });
+    }
+    const fin = parseDuration(finish);
+    if (fin === undefined) { toast(`Barrière d’arrivée invalide : « ${finish} »`); return; }
     setBusy(true);
-    try { await api("/api/goal/trace", { method: "PATCH", body: { aid } }); await onChanged(); setEditAid(false); toast("Ravitaillements enregistrés."); }
+    try { await api("/api/goal/trace", { method: "PATCH", body: { aid, startTime: start || null, finishCutoff: fin } }); await onChanged(); setEditAid(false); toast("Ravitaillements et barrières enregistrés."); }
     catch (e2) { toast(e2 instanceof Error ? e2.message : "Erreur"); }
     finally { setBusy(false); }
   }
@@ -97,7 +112,8 @@ export default function RaceStrategy({ route, estimate, onChanged, toast, weathe
         <div className="row" style={{ gap: 6 }}>
           <button className="btn sm" onClick={() => setRaceDay(true)}>Mode jour de course</button>
           {input}
-          <button className="btn ghost sm" disabled={busy} onClick={() => { setEditAid(!editAid); setAidText(route.aid.map((a) => `${String(a.km).replace(".", ",")}${a.name ? ` ${a.name}` : ""}`).join("; ")); }}>Ravitos</button>
+          <button className="btn ghost sm" onClick={() => window.print()}>Fiche de course</button>
+          <button className="btn ghost sm" disabled={busy} onClick={() => (editAid ? setEditAid(false) : openAid())}>Ravitos et barrières</button>
           <button className="btn ghost sm" disabled={busy} onClick={() => fileRef.current?.click()}>Changer de tracé</button>
           <button className="btn ghost sm" onClick={remove} aria-label="Retirer le tracé">Retirer</button>
         </div>
@@ -109,13 +125,26 @@ export default function RaceStrategy({ route, estimate, onChanged, toast, weathe
 
       {editAid && (
         <form className="aid-form" onSubmit={saveAid}>
-          <label className="field">Ravitaillements (km et nom, séparés par des points-virgules)
-            <input value={aidText} onChange={(e) => setAidText(e.target.value)} placeholder="12 Refuge du Lac; 25,5 Col de la Croix; 38" />
-          </label>
-          <div className="row"><button className="btn sm" type="submit" disabled={busy}>Enregistrer</button><button className="btn ghost sm" type="button" onClick={() => setEditAid(false)}>Annuler</button></div>
+          <div className="aid-top">
+            <label className="field">Heure de départ<input type="time" value={start} onChange={(e) => setStart(e.target.value)} /></label>
+            <label className="field">Barrière à l’arrivée<input value={finish} onChange={(e) => setFinish(e.target.value)} placeholder="ex. 9h00" inputMode="text" /></label>
+          </div>
+          <div className="aid-rows" role="group" aria-label="Ravitaillements">
+            <div className="aid-row aid-head" aria-hidden="true"><span>Km</span><span>Nom</span><span>Barrière</span><span /></div>
+            {rows.map((r, i) => (
+              <div className="aid-row" key={i}>
+                <input aria-label={`Kilomètre du ravito ${i + 1}`} value={r.km} inputMode="decimal" placeholder="12,5" onChange={(e) => setRows(rows.map((x, k) => (k === i ? { ...x, km: e.target.value } : x)))} />
+                <input aria-label={`Nom du ravito ${i + 1}`} value={r.name} maxLength={40} placeholder="Refuge du Lac" onChange={(e) => setRows(rows.map((x, k) => (k === i ? { ...x, name: e.target.value } : x)))} />
+                <input aria-label={`Barrière horaire du ravito ${i + 1}`} value={r.cutoff} placeholder="3h30" onChange={(e) => setRows(rows.map((x, k) => (k === i ? { ...x, cutoff: e.target.value } : x)))} />
+                <button type="button" className="btn ghost sm" aria-label={`Retirer le ravito ${i + 1}`} onClick={() => setRows(rows.filter((_, k) => k !== i))}>×</button>
+              </div>
+            ))}
+          </div>
+          <p className="muted small" style={{ margin: 0 }}>Barrière : temps écoulé depuis le départ (4h30, 270), tel qu’indiqué par l’organisation. Laisse vide s’il n’y en a pas.</p>
+          <div className="row"><button className="btn ghost sm" type="button" onClick={() => setRows([...rows, { km: "", name: "", cutoff: "" }])}>+ Ravito</button><button className="btn sm" type="submit" disabled={busy}>Enregistrer</button><button className="btn ghost sm" type="button" onClick={() => setEditAid(false)}>Annuler</button></div>
         </form>
       )}
-      {!route.aid.length && !editAid && <p className="muted small" style={{ margin: 0 }}>Aucun ravitaillement indiqué : la course est découpée tous les 10 km. Ajoute les tiens avec « Ravitos ».</p>}
+      {!route.aid.length && !editAid && <p className="muted small" style={{ margin: 0 }}>Aucun ravitaillement indiqué : la course est découpée tous les 10 km. Ajoute les tiens avec « Ravitos et barrières ».</p>}
 
       <div className="strat-sum">
         <div><small>Temps visé{weather && weather.timeFactor > 1 ? " (chaleur)" : ""}</small><b className="mono">{fmtDur(strat.total.low)} – {fmtDur(strat.total.high)}</b></div>
@@ -124,18 +153,20 @@ export default function RaceStrategy({ route, estimate, onChanged, toast, weathe
       </div>
 
       <div className="strat-table" role="table" aria-label="Sections de la course">
-        <div className="st-row st-head" role="row"><span role="columnheader">Section</span><span role="columnheader">Terrain</span><span role="columnheader">Temps</span><span role="columnheader">Passage</span><span role="columnheader">À emporter</span></div>
+        <div className="st-row st-head" role="row"><span role="columnheader">Section</span><span role="columnheader">Terrain</span><span role="columnheader">Temps</span><span role="columnheader">Passage</span><span role="columnheader">Barrière</span><span role="columnheader">À emporter</span></div>
         {strat.sections.map((s, i) => (
           <div key={i} className="st-row" role="row">
             <span role="cell"><b>{s.label}</b><small>km {String(s.from).replace(".", ",")} → {String(s.to).replace(".", ",")}</small></span>
             <span role="cell" className="mono">{fmtKm(s.km)} km<small>+{fmtNum(s.gain)} / −{fmtNum(s.loss)} m</small></span>
             <span role="cell" className="mono">{fmtDur(s.minutes.low)}–{fmtDur(s.minutes.high)}<small>{s.pace} /km</small></span>
-            <span role="cell" className="mono">{fmtDur(s.arrival.low)}–{fmtDur(s.arrival.high)}</span>
-            <span role="cell" className="mono">{s.carbs[1] ? `${s.carbs[0]}–${s.carbs[1]} g` : "eau seule"}<small>{s.water[0]}–{s.water[1]} ml</small></span>
+            <span role="cell" className="mono">{fmtDur(s.arrival.low)}–{fmtDur(s.arrival.high)}{route.startTime && <small>{clockAt(route.startTime, s.arrival.low)}–{clockAt(route.startTime, s.arrival.high)}</small>}</span>
+            <span role="cell" className="mono">{s.cutoff ? <>{fmtDur(s.cutoff)}<small className={marginTone(s.margin!)}>{marginTxt(s.margin!)}</small></> : <small className="muted">—</small>}</span>
+            <span role="cell" className="mono">{s.carbs[1] ? `${s.carbs[0]}–${s.carbs[1]} g` : "eau seule"}<small>{carryTxt(s)}</small></span>
           </div>
         ))}
       </div>
       {raceDay && <RaceDay route={route} strat={strat} onClose={() => setRaceDay(false)} />}
+      <RaceSheet route={route} strat={strat} name={raceName} date={raceDate} />
       <p className="muted small" style={{ margin: 0 }}>Un gel ou une barre apporte en général 20 à 30 g de glucides. Teste ta stratégie lors de ta sortie test et de tes sorties longues : rien de nouveau le jour J.</p>
     </section>
   );
@@ -219,4 +250,50 @@ function Profile({ route, aid, strat }: { route: RaceRoute; aid: number[]; strat
       </div>
     </div>
   );
+}
+
+interface AidRow { km: string; name: string; cutoff: string }
+const durTxt = (m: number) => `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}`;
+const marginTone = (m: number) => (m < 0 ? "m-bad" : m < 30 ? "m-warn" : "m-ok");
+const marginTxt = (m: number) => (m < 0 ? `hors délai de ${fmtDur(-m)}` : `marge ${fmtDur(m)}`);
+const carryTxt = (s: Strategy["sections"][number]) =>
+  `${s.gels[1] ? `${s.gels[0] === s.gels[1] ? s.gels[1] : `${s.gels[0]}–${s.gels[1]}`} gel${s.gels[1] > 1 ? "s" : ""} · ` : ""}${s.flasks[0] === s.flasks[1] ? s.flasks[1] : `${s.flasks[0]}–${s.flasks[1]}`} flasque${s.flasks[1] > 1 ? "s" : ""}`;
+
+/**
+ * Fiche de course imprimable (bouton « Fiche de course ») : une page A4 à glisser dans le sac ou à scotcher
+ * sur la flasque. Invisible à l’écran ; à l’impression, seule cette fiche sort.
+ */
+function RaceSheet({ route, strat, name, date }: { route: RaceRoute; strat: Strategy; name?: string; date?: string }) {
+  const [host, setHost] = useState<HTMLElement | null>(null);
+  useEffect(() => { setHost(document.body); }, []);
+  if (!host) return null;
+  const clk = (m: number) => clockAt(route.startTime, m);
+  const tight = strat.sections.filter((s) => s.margin != null && s.margin < 30);
+  return createPortal(
+    <div className="race-sheet" aria-hidden="true">
+      <header>
+        <h1>{name ?? "Ma course"}</h1>
+        <p>{date ? new Date(`${date}T12:00:00Z`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }) : ""}{route.startTime ? ` · départ ${route.startTime.replace(":", "h")}` : ""} · {fmtKm(route.distanceKm)} km · {fmtNum(route.gainM)} m D+</p>
+        <p><b>Temps visé {fmtDur(strat.total.low)} – {fmtDur(strat.total.high)}</b>{route.startTime ? ` (arrivée ${clk(strat.total.low)} – ${clk(strat.total.high)})` : ""} · glucides {strat.perHour.carbs[0]}–{strat.perHour.carbs[1]} g/h · eau {strat.perHour.water[0]}–{strat.perHour.water[1]} ml/h</p>
+      </header>
+      <table>
+        <thead><tr><th>Point</th><th>Km</th><th>D+ / D−</th><th>Passage</th>{route.startTime && <th>Heure</th>}<th>Barrière</th><th>Section suivante : emporter</th></tr></thead>
+        <tbody>
+          {strat.sections.map((s, i) => {
+            const next = strat.sections[i + 1];
+            return (
+              <tr key={i} className={s.margin != null && s.margin < 30 ? "tight" : ""}>
+                <td><b>{s.label}</b></td><td>{String(s.to).replace(".", ",")}</td><td>+{fmtNum(s.gain)} / −{fmtNum(s.loss)}</td>
+                <td>{fmtDur(s.arrival.low)}–{fmtDur(s.arrival.high)}</td>{route.startTime && <td>{clk(s.arrival.low)}–{clk(s.arrival.high)}</td>}
+                <td>{s.cutoff ? `${fmtDur(s.cutoff)} (${marginTxt(s.margin!)})` : "—"}</td>
+                <td>{next ? `${carryTxt(next)} · ${next.carbs[0]}–${next.carbs[1]} g` : "Arrivée"}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <p>Au départ, emporte : {carryTxt(strat.sections[0])} pour la 1re section. Total course : {strat.totals.carbs[0]}–{strat.totals.carbs[1]} g de glucides, {(strat.totals.water[0] / 1000).toFixed(1).replace(".", ",")}–{(strat.totals.water[1] / 1000).toFixed(1).replace(".", ",")} L d’eau.</p>
+      {tight.length > 0 && <p><b>Points serrés :</b> {tight.map((s) => `${s.label} (${marginTxt(s.margin!)})`).join(", ")}. Pars prudemment et ne t’attarde pas aux ravitos qui précèdent.</p>}
+      <p className="foot">1 gel ≈ 25 g de glucides (ou l’équivalent en boisson, barre, compote). 1 flasque = 500 ml. Trail Pilot · estimation d’après ta forme et le profil du parcours. Mange et bois avant d’avoir faim ou soif ; rien de nouveau le jour J.</p>
+    </div>, host);
 }
