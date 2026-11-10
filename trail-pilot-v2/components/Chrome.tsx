@@ -16,7 +16,7 @@ export function Logo() {
 
 export function Nav({ links = true }: { links?: boolean }) {
   return (
-    <header className="nav">
+    <header className={links ? "nav" : "nav nav-plain"}>
       <Logo />
       {links && (
         <nav className="nav-links" aria-label="Navigation principale">

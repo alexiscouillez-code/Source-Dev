@@ -78,3 +78,12 @@
     @keyframes read-progress { to { transform: scaleX(1); } }
   }
 }
+
+/* Pages légales : pas de photo sous la barre, elle suit donc le thème clair (sinon logo clair sur fond clair). */
+:root[data-theme="light"] .nav.nav-plain:not(.scrolled) { --ink: #f4f1ec; --ink-2: #ffffff; --ink-3: #ebe6de; --line: #e2dbd0; --snow: #141a21; --soft: #3c4650; --mute: #5f6973; --ember: #e4561c; color: var(--snow); }
+:root[data-theme="light"] .nav.nav-plain:not(.scrolled) .btn { color: #fff; }
+:root[data-theme="light"] .nav.nav-plain:not(.scrolled) .btn:not(.btn-ghost)::after { background: #141a21; }
+/* Barre du haut sur téléphone : rien ne passe sur deux lignes */
+.nav .logo span, .nav .btn { white-space: nowrap; }
+@media (max-width: 480px) { .nav { padding-inline: 14px; } .nav .logo { gap: 8px; font-size: 14px; letter-spacing: .04em; } .nav-right { gap: 8px; } .nav .btn { padding: 9px 13px; font-size: 14px; } }
+@media (max-width: 360px) { .nav .logo span { display: none; } }

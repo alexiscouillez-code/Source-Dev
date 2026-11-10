@@ -47,3 +47,4 @@ html[data-lq]::view-transition-old(root) { animation: lq-hold 40s linear; }     
 html[data-lq="drain"]::view-transition-old(root) { z-index: 1; }                /* en vidant, l’ancien thème (sombre) est au-dessus */
 html[data-lq]::view-transition-old(lq-toggle), html[data-lq]::view-transition-old(lq-fx) { display: none; }
 html[data-lq] .cursor { visibility: hidden; }                                    /* le curseur décoratif du site ne se mélange pas aux images */
+.auth-panel > button.theme-toggle.lq-toggle { position: absolute; }                /* connexion : l’interrupteur reste en haut à droite */

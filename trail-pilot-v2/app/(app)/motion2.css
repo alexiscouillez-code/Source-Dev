@@ -120,6 +120,14 @@
 .sk-t { width: 55%; height: 15px; } .sk-s { width: 80%; } .sk-c { width: 35%; }
 .raceday-banner { border-color: color-mix(in srgb, var(--ember) 50%, var(--line)); }
 
+/* Petits écrans : la date prend toute la largeur, les actions d’une séance passent sous son titre */
+@media (max-width: 560px) {
+  .fields.f3 > label.field:has(input[type="date"]) { grid-column: 1 / -1; }
+  label.field input[type="date"] { min-width: 0; width: 100%; }
+  .item.run { grid-template-columns: 54px 1fr; row-gap: 8px; }
+  .item.run .item-actions { grid-column: 2; justify-content: flex-start; }
+}
+
 /* ===== Animations ===== */
 @media (prefers-reduced-motion: no-preference) {
   /* Transitions de vue : l’onglet glisse dans le sens de la navigation */

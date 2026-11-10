@@ -81,7 +81,7 @@ export default function Sessions({ me, refresh, toast }: Ctx) {
         {!acts ? <div className="skeleton" /> : !acts.length ? <p className="empty">Aucune séance sur les 90 derniers jours.</p> : (
           <ul className="list">
             {acts.map((a) => (
-              <li key={a.id} className="item">
+              <li key={a.id} className="item run">
                 <div className="date"><small>{shortDay(a.date)}</small><b>{dayNum(a.date)}</b></div>
                 <div style={{ minWidth: 0 }}>
                   <div className="t">{a.name ?? SPORT_LABEL[a.sport]}</div>
