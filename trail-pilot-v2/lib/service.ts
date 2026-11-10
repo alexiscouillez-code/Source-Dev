@@ -1,6 +1,6 @@
 import "server-only";
 import { all, libsql, one, run } from "@/db/client";
-import { addDays, diffDays, mondayOf, todayIn } from "./engine/dates";
+import { addDays, diffDays, mondayOf, range, todayIn } from "./engine/dates";
 import { adapt, decide, watchBaseline, type CheckIn, type PlannedLike, type Verdict, type Watch } from "./engine/decision";
 import { isFoot, sessionLoad, type ActivityLike, type Sport } from "./engine/load";
 import { buildRacePlan, maintenancePlan, phaseFor, type Level, type RacePlan } from "./engine/planner";
@@ -161,7 +161,20 @@ export async function analysis(userId: number, today: string) {
   const likes = acts.map(toActivityLike);
   const bySport = new Map<string, number>();
   for (const a of acts.filter((x) => diffDays(x.date, today) < 28)) bySport.set(a.sport, (bySport.get(a.sport) ?? 0) + a.duration_min);
+  // Cartes graphiques : minutes par niveau d’effort sur 28 jours, et score de récupération des 7 derniers check-ins.
+  const intensity = { easy: 0, moderate: 0, hard: 0 };
+  for (const a of acts.filter((x) => diffDays(x.date, today) < 28)) {
+    const e = withLoad(a, physio).effort;
+    intensity[e <= 4 ? "easy" : e <= 6 ? "moderate" : "hard"] += Math.round(a.duration_min);
+  }
+  const checks = await all<{ date: string; sleep: number; legs: number; motivation: number; pain: number }>(
+    "SELECT date, sleep, legs, motivation, pain FROM checkins WHERE user_id = ? AND date >= ? AND date <= ?", [userId, addDays(today, -6), today]);
+  const recovery = range(addDays(today, -6), 7).map((date) => {
+    const c = checks.find((x) => x.date === date);
+    return { date, score: c ? Math.max(0, Math.min(100, Math.round(((c.sleep + c.legs + c.motivation - 3) / 12) * 100 - c.pain * 12))) : null };
+  });
   return {
+    intensity, recovery,
     points: tl.points.map((p) => ({ date: p.date, load: Math.round(p.load), atl: Math.round(p.atl), ctl: Math.round(p.ctl), form: Math.round(p.form) })),
     weeks: weeklySummary(likes, physio, today, 12),
     sports: Object.fromEntries(bySport),

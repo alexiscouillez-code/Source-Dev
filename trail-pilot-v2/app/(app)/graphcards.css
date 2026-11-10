@@ -1,0 +1,96 @@
+/* ---------- Cartes graphiques interactives (onglet Analyse) ----------
+   Vert quand tout va bien, rouge en alerte (--gc). Téléphone : on fait défiler les cartes du doigt ;
+   plus large : grille. Chaque carte se retourne pour expliquer son indicateur. */
+.gcards { display: grid; grid-auto-flow: column; grid-auto-columns: min(84%, 340px); gap: 12px; margin: 0 calc(var(--pad, 16px) * -1) 14px; padding: 2px var(--pad, 16px) 8px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.gcards::-webkit-scrollbar { display: none; }
+@media (min-width: 700px) { .gcards { grid-auto-flow: row; grid-template-columns: repeat(2, 1fr); margin-inline: 0; padding-inline: 0; overflow: visible; } }
+@media (min-width: 1500px) { .gcards { grid-template-columns: repeat(4, 1fr); } }
+
+.gcard { --gc: var(--ok); scroll-snap-align: center; perspective: 1200px; min-width: 0; }
+.gcard.is-alert { --gc: var(--danger); }
+.gc-inner { display: grid; height: 100%; transform-style: preserve-3d; transition: transform .6s cubic-bezier(.3, 1.2, .4, 1); }
+.gcard.is-flipped .gc-inner { transform: rotateY(180deg); }
+.gc-face { grid-area: 1 / 1; display: grid; grid-template-rows: auto 1fr auto auto; gap: 10px; padding: 16px; border-radius: 20px; backface-visibility: hidden; -webkit-backface-visibility: hidden;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--gc) 9%, var(--ink-2)), var(--ink-2) 55%); border: 1px solid color-mix(in srgb, var(--gc) 26%, var(--line));
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--snow) 5%, transparent) inset, 0 18px 40px -28px color-mix(in srgb, var(--gc) 60%, transparent); transition: background .5s, border-color .5s, box-shadow .5s, visibility 0s .3s; }
+.gc-back { transform: rotateY(180deg); grid-template-rows: auto 1fr auto; }
+.gcard:not(.is-flipped) .gc-back, .gcard.is-flipped .gc-front { visibility: hidden; }
+
+.gc-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.gc-head h3 { margin: 4px 0 0; font-size: 14px; font-weight: 500; color: var(--soft); line-height: 1.3; }
+.gc-big { font-size: 30px; font-weight: 750; letter-spacing: -.03em; color: var(--snow); margin-right: 4px; font-variant-numeric: tabular-nums; }
+.gc-status { flex: none; font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; padding: 5px 9px; border-radius: 99px; white-space: nowrap;
+  color: color-mix(in srgb, var(--gc) 78%, var(--snow)); background: color-mix(in srgb, var(--gc) 16%, transparent); border: 1px solid color-mix(in srgb, var(--gc) 40%, transparent); }
+.gc-more { all: unset; cursor: pointer; justify-self: start; font-size: 12.5px; font-weight: 600; color: var(--mute); padding: 6px 0; position: relative; }
+.gc-more::after { content: ""; position: absolute; inset: -6px -10px; }
+.gc-more:hover, .gc-more:focus-visible { color: var(--snow); }
+.gc-more:focus-visible { outline: 2px solid var(--ember); outline-offset: 4px; border-radius: 6px; }
+.gc-text { font-size: 13.5px; line-height: 1.5; color: var(--soft); align-self: start; }
+.gc-text p { margin: 0 0 8px; } .gc-text b { color: var(--snow); }
+.gc-empty { display: grid; place-items: center; min-height: 110px; text-align: center; font-size: 13px; color: var(--mute); border: 1px dashed var(--line); border-radius: 14px; padding: 12px; }
+.gc-axis { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--mute); }
+
+/* Zone de tracé + infobulle */
+.gc-plot { position: relative; height: 112px; touch-action: pan-y; }
+.gc-plot svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.gc-tip { position: absolute; bottom: calc(100% + 4px); transform: translateX(-50%); z-index: 3; display: grid; gap: 1px; padding: 7px 10px; border-radius: 10px; background: var(--snow); color: var(--ink); font-size: 11.5px; line-height: 1.3; white-space: nowrap; pointer-events: none; box-shadow: 0 10px 24px rgba(0, 0, 0, .28); }
+.gc-tip b { font-size: 13.5px; } .gc-tip small { opacity: .65; font-size: 10.5px; }
+.gc-tip::after { content: ""; position: absolute; left: 50%; top: 100%; width: 8px; height: 8px; margin: -4px 0 0 -4px; background: inherit; transform: rotate(45deg); }
+
+/* Courbe */
+.gc-line { fill: none; stroke: var(--gc); stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; transition: stroke .5s; }
+.gc-area { fill: color-mix(in srgb, var(--gc) 16%, transparent); transition: fill .5s; }
+.gc-rule { stroke: color-mix(in srgb, var(--snow) 35%, transparent); stroke-width: 1; stroke-dasharray: 3 3; }
+.gc-dot { position: absolute; width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px; border-radius: 50%; background: var(--ink-2); border: 2px solid var(--gc); opacity: 0; transition: transform .2s, opacity .2s, border-color .5s; pointer-events: none; }
+.gc-dot.now, .gc-dot.on { opacity: 1; } .gc-dot.on { transform: scale(1.7); background: var(--snow); }
+
+/* Anneau */
+.gc-ring { position: relative; display: grid; grid-template-columns: 112px 1fr; gap: 14px; align-items: center; min-height: 112px; }
+.gc-ring svg { width: 112px; height: 112px; transform: rotate(-90deg); overflow: visible; }
+.gc-track { fill: none; stroke: var(--line); stroke-width: 9; stroke-linecap: round; }
+.gc-seg { fill: none; stroke-width: 9; stroke-linecap: butt; cursor: pointer; transition: stroke-width .2s, opacity .2s, stroke .5s; }
+.gc-seg.on { stroke-width: 12; }
+.gc-ring:has(.gc-seg.on) .gc-seg:not(.on) { opacity: .4; }
+.gc-seg.s-easy { stroke: var(--ok); } .gc-seg.s-mod { stroke: var(--lite); } .gc-seg.s-hard { stroke: var(--danger); }
+.gc-ring-mid { position: absolute; left: 0; top: 50%; width: 112px; transform: translateY(-50%); display: grid; justify-items: center; text-align: center; pointer-events: none; }
+.gc-ring-mid b { font-size: 17px; letter-spacing: -.02em; } .gc-ring-mid small { font-size: 9.5px; color: var(--mute); max-width: 70px; line-height: 1.2; }
+.gc-legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.gc-legend li { display: grid; grid-template-columns: 10px 1fr auto; gap: 8px; align-items: center; padding: 5px 8px; border-radius: 10px; font-size: 13px; cursor: pointer; transition: background .2s; }
+.gc-legend li.on { background: color-mix(in srgb, var(--snow) 7%, transparent); }
+.gc-legend i { width: 10px; height: 10px; border-radius: 3px; }
+.gc-legend i.s-easy { background: var(--ok); } .gc-legend i.s-mod { background: var(--lite); } .gc-legend i.s-hard { background: var(--danger); }
+.gc-legend small { display: block; font-size: 10.5px; color: var(--mute); } .gc-legend b { font-family: var(--mono); font-size: 12.5px; }
+
+/* Barres */
+.gc-bars, .gc-days { display: flex; align-items: flex-end; gap: 4px; }
+.gc-bars button, .gc-days button { all: unset; box-sizing: border-box; flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 4px; cursor: pointer; min-width: 0; }
+.gc-bars i, .gc-days i { display: block; width: 100%; max-width: 22px; border-radius: 5px 5px 2px 2px; background: color-mix(in srgb, var(--gc) 55%, var(--ink-3)); transition: background .25s, transform .2s; transform-origin: 50% 100%; }
+.gc-bars button.on i, .gc-days button.on i, .gc-bars button:focus-visible i, .gc-days button:focus-visible i { background: var(--gc); transform: scaleX(1.12); }
+.gc-bars button:last-of-type i { background: var(--gc); }
+.gc-days { height: 64px; } .gc-days small { font-family: var(--mono); font-size: 9.5px; color: var(--mute); text-transform: uppercase; }
+.gc-days button.none i { background: var(--line); } .gc-days button.bad i { background: color-mix(in srgb, var(--danger) 70%, var(--ink-3)); }
+
+/* Jauge */
+.gc-gauge { position: relative; display: grid; justify-items: center; }
+.gc-gauge svg { width: 132px; height: 76px; overflow: visible; }
+.gc-gauge path { fill: none; stroke-width: 9; stroke-linecap: round; }
+.gc-gauge-val { stroke: var(--gc); transition: stroke .5s, stroke-dashoffset .8s var(--ease); filter: drop-shadow(0 0 6px color-mix(in srgb, var(--gc) 45%, transparent)); }
+.gc-gauge-mid { position: absolute; bottom: 2px; display: grid; justify-items: center; }
+.gc-gauge-mid b { font-size: 19px; letter-spacing: -.02em; } .gc-gauge-mid small { font-family: var(--mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: .1em; color: var(--mute); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .gcard { animation: card-in .55s var(--ease) both; }
+  .gcard:nth-child(2) { animation-delay: .07s; } .gcard:nth-child(3) { animation-delay: .14s; } .gcard:nth-child(4) { animation-delay: .21s; }
+  .gc-line { stroke-dasharray: 1; animation: gc-draw 1.3s .2s var(--ease) both; }
+  @keyframes gc-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+  .gc-area { animation: fadein .8s .7s ease both; }
+  .gc-bars i { animation: grow-y .7s var(--d, 0ms) var(--ease) both; }
+  .gc-gauge-val { animation: gc-gauge 1.2s .3s var(--ease) both; }
+  @keyframes gc-gauge { from { stroke-dashoffset: var(--c); } to { stroke-dashoffset: var(--off); } }
+  .gc-tip { animation: gc-tip .18s ease-out both; }
+  @keyframes gc-tip { from { opacity: 0; transform: translateX(-50%) translateY(4px); } }
+  /* Le badge bascule quand la carte passe en alerte */
+  .gcard.is-alert .gc-front .gc-status { animation: gc-flip .7s .5s cubic-bezier(.3, 1.4, .5, 1) both; }
+  @keyframes gc-flip { 0% { transform: perspective(300px) rotateX(-180deg); } 100% { transform: none; } }
+}
+@media (prefers-reduced-motion: reduce) { .gc-inner { transition: none; } }

@@ -6,6 +6,7 @@ import InfoTip, { EXPLAIN } from "./InfoTip";
 import { TargetsTable } from "./Targets";
 import TrailProfile from "./TrailProfile";
 import Progress from "./Progress";
+import GraphCards, { type GraphData } from "./GraphCards";
 import { api, dayLabel, fmtDur, fmtNum, SPORT_LABEL } from "./client";
 
 interface Data {
@@ -13,6 +14,8 @@ interface Data {
   weeks: { week: string; minutes: number; km: number; gain: number; load: number; sessions: number }[];
   sports: Record<string, number>;
   summary: { atl: number; ctl: number; form: number; ratio: number | null; monotony: number | null; calibrated: boolean; historyDays: number };
+  intensity: GraphData["intensity"];
+  recovery: GraphData["recovery"];
 }
 
 export default function Analysis({ me, toast, go }: Ctx) {
@@ -24,6 +27,7 @@ export default function Analysis({ me, toast, go }: Ctx) {
   return (
     <>
       <Head />
+      {d.intensity && d.recovery && <GraphCards d={d} />}
       <TrailProfile go={go} />
       {!s.calibrated && <p className="note" style={{ marginBottom: 14 }}>Calibrage en cours : {s.historyDays} jours d’historique sur 28. Les indicateurs se fiabilisent au fil des séances.</p>}
       <section className="card">
