@@ -17,6 +17,7 @@ import RaceWeather from "./RaceWeather";
 import SideRaces, { type SideRaceRow } from "./SideRaces";
 import PlanCalendar from "./PlanCalendar";
 import Fold, { useFold } from "./Fold";
+import Debriefs from "./Debriefs";
 import type { RaceRoute, WeatherAdjust } from "@/lib/engine/strategy";
 
 type Verdict = "solide" | "ambitieux" | "risque" | "court";
@@ -113,12 +114,15 @@ export default function Planning({ me, refresh, toast, go }: Ctx) {
     return (
       <>
         <Head sub={v.goal && !editing ? "Course passée" : undefined} />
+        {!editing && <Debriefs today={v.today} rev={rev} toast={toast} />}
+        {v.goal && !editing && <p className="muted small" style={{ margin: "0 0 10px" }}>Prochaine étape : choisis ta prochaine course, le plan repart de ta forme actuelle.</p>}
         <RaceForm goal={v.goal} today={v.today} onSaved={saved} onCancel={editing ? () => setEditing(false) : undefined} />
         {!v.goal && v.sessions.length > 0 && (
           <section className="card" style={{ marginTop: 14 }}>
             <div className="card-head"><h2>En attendant : entretien</h2><div className="row"><button className="btn ghost sm" onClick={() => setAway(true)}>Imprévu</button><button className="btn ghost sm" onClick={recalc} disabled={busy}>Recalculer</button></div></div>
             <AbsenceBanner a={v.absence ?? null} today={v.today} onEdit={() => setAway(true)} onCancel={async () => { try { await api(`/api/absence?today=${v.today}`, { method: "DELETE" }); await Promise.all([load(), refresh()]); toast("Imprévu annulé."); } catch (e) { toast(e instanceof Error ? e.message : "Erreur"); } }} />
-            <LearningCard l={v.learning} onToggle={async (off) => { try { await api("/api/plan", { method: "PATCH", body: { learningOff: off, today: v.today } }); await Promise.all([load(), refresh()]); toast(off ? "Plan d’origine rétabli, sans ajustement." : "Ajustements réactivés."); } catch (e) { toast(e instanceof Error ? e.message : "Erreur"); } }} />
+            <Debriefs today={v.today} rev={rev} toast={toast} />
+      <LearningCard l={v.learning} onToggle={async (off) => { try { await api("/api/plan", { method: "PATCH", body: { learningOff: off, today: v.today } }); await Promise.all([load(), refresh()]); toast(off ? "Plan d’origine rétabli, sans ajustement." : "Ajustements réactivés."); } catch (e) { toast(e instanceof Error ? e.message : "Erreur"); } }} />
       {away && <AbsenceSheet a={v.absence ?? null} today={v.today} onClose={() => setAway(false)} onSaved={async (msg) => { setAway(false); await Promise.all([load(), refresh()]); toast(msg); }} />}
             <p className="muted small" style={{ margin: 0 }}>Sans course choisie, Trail Pilot te propose 3 semaines pour garder ta forme, à partir de ce que tu fais en ce moment.</p>
             <PlanBoard today={v.today} rev={rev} targets={me.targets} onStatus={setStatus} onWhere={whereTo} onMoveTo={moveTo} onRestore={restore} onChanged={noted}>
@@ -142,6 +146,7 @@ export default function Planning({ me, refresh, toast, go }: Ctx) {
         </div>
       } />
       <AbsenceBanner a={v.absence ?? null} today={v.today} onEdit={() => setAway(true)} onCancel={async () => { try { await api(`/api/absence?today=${v.today}`, { method: "DELETE" }); await Promise.all([load(), refresh()]); toast("Imprévu annulé : ton plan reprend son cours."); } catch (e) { toast(e instanceof Error ? e.message : "Erreur"); } }} />
+      <Debriefs today={v.today} rev={rev} toast={toast} />
       <LearningCard l={v.learning} onToggle={async (off) => { try { await api("/api/plan", { method: "PATCH", body: { learningOff: off, today: v.today } }); await Promise.all([load(), refresh()]); toast(off ? "Plan d’origine rétabli, sans ajustement." : "Ajustements réactivés."); } catch (e) { toast(e instanceof Error ? e.message : "Erreur"); } }} />
       {away && <AbsenceSheet a={v.absence ?? null} today={v.today} onClose={() => setAway(false)} onSaved={async (msg) => { setAway(false); await Promise.all([load(), refresh()]); toast(msg); }} />}
       <RaceHeader p={p} />

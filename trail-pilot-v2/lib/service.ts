@@ -132,7 +132,7 @@ export async function regeneratePlan(userId: number, today: string) {
   return items.length;
 }
 
-async function loadState(userId: number, today: string) {
+export async function loadState(userId: number, today: string) {
   const [profile, acts] = await Promise.all([loadProfile(userId), loadActivities(userId, addDays(today, -240))]);
   const physio = { hrMax: profile.hr_max, hrRest: profile.hr_rest };
   return { profile, acts, physio, tl: timeline(acts.map(toActivityLike), physio, today) };

@@ -21,7 +21,7 @@ export interface Streams {
   distance?: (number | null)[]; // m
 }
 export interface Best { k1: number | null; k5: number | null; k10: number | null; vam: number | null }
-export interface Analysis { v: 1; hist: number[]; win: [number, number, number][]; gap: number | null; dec: number | null; loss: number | null; moving: number; best?: Best }
+export interface Analysis { v: 1; hist: number[]; win: [number, number, number][]; gap: number | null; dec: number | null; loss: number | null; moving: number; best?: Best; /** Temps écoulé (s, pauses comprises) à chaque kilomètre entier */ km?: number[]; /** Fin de l’enregistrement : [secondes, km] */ end?: [number, number] }
 
 export const HIST_MIN = 60, HIST_STEP = 5, HIST_BINS = 32;
 const WIN = 120, STEP = 30, WARMUP = 480, MAX_WIN = 48;
@@ -107,8 +107,27 @@ export function analyze(s: Streams): Analysis | null {
     const e1 = mean(gapS, 0, h) / mean(hrS, 0, h), e2 = mean(gapS, h, m) / mean(hrS, h, m);
     if (e1 > 0) dec = Math.round(((e1 - e2) / e1) * 1000) / 10;
   }
-  return { v: 1, hist: hist.map((x) => Math.round(x)), win: kept, gap, dec, loss: s.altitude ? lossOf(s.altitude) : null, moving: Math.round(moving), best: bestsOf(s) };
+  return { v: 1, hist: hist.map((x) => Math.round(x)), win: kept, gap, dec, loss: s.altitude ? lossOf(s.altitude) : null, moving: Math.round(moving), best: bestsOf(s), ...kmSplits(s) };
 }
+
+/** Temps de passage à chaque kilomètre (pauses comprises, comme un chrono de course) : sert au débrief section par section. */
+function kmSplits(s: Streams): { km?: number[]; end?: [number, number] } {
+  if (!s.distance) return {};
+  const t: number[] = [], d: number[] = [];
+  for (let i = 0; i < s.time.length; i++) { const v = num(s.distance[i]); if (v != null && (!d.length || v >= d[d.length - 1])) { t.push(s.time[i]); d.push(v); } }
+  if (d.length < 2 || d[d.length - 1] - d[0] < 1000) return {};
+  const km: number[] = [];
+  let next = 1000;
+  for (let i = 1; i < d.length && km.length < MAX_KM; i++) {
+    while (d[i] - d[0] >= next && km.length < MAX_KM) {
+      const seg = d[i] - d[i - 1], f = seg > 0 ? (next - (d[i - 1] - d[0])) / seg : 1;
+      km.push(Math.round(t[i - 1] + f * (t[i] - t[i - 1]) - t[0]));
+      next += 1000;
+    }
+  }
+  return { km, end: [Math.round(t[t.length - 1] - t[0]), Math.round((d[d.length - 1] - d[0]) / 10) / 100] };
+}
+const MAX_KM = 320;
 
 /** Temps le plus court (s) pour couvrir `meters` d’un seul tenant, pauses comprises (comme les records Strava). */
 function bestFor(time: number[], dist: (number | null)[], meters: number) {
@@ -209,5 +228,7 @@ export function cleanAnalysis(x: unknown): Analysis | null {
       k1: ok(a.best.k1, 150, 3600) ? Math.round(a.best.k1!) : null, k5: ok(a.best.k5, 750, 18000) ? Math.round(a.best.k5!) : null,
       k10: ok(a.best.k10, 1500, 36000) ? Math.round(a.best.k10!) : null, vam: ok(a.best.vam, 200, 2500) ? Math.round(a.best.vam!) : null,
     } : undefined,
+    ...(Array.isArray(a.km) && a.km.length <= MAX_KM && a.km.every((v, i) => ok(v, 1, 900000) && (i === 0 || v >= a.km![i - 1])) ? { km: a.km.map(Math.round) } : {}),
+    ...(Array.isArray(a.end) && a.end.length === 2 && ok(a.end[0], 1, 900000) && ok(a.end[1], 0, 400) ? { end: [Math.round(a.end[0]), a.end[1]] as [number, number] } : {}),
   };
 }

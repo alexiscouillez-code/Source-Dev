@@ -330,3 +330,25 @@ form.cal-comment { display: grid; gap: 8px; white-space: normal; }
 .rg-line > span:first-child { color: var(--soft); }
 .rg-place { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; }
 .race-guide .reasons li { font-size: 13.5px; }
+
+/* ---------- Débrief de course ---------- */
+.db-top { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.db-top > div { display: grid; gap: 4px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--ink-2); min-width: 0; }
+.db-top small, .db-h { font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--mute); font-weight: 500; }
+.db-top b { font-size: 18px; }
+.db-res { font-size: 15px !important; } .db-res.r-mieux { color: var(--ok); } .db-res.r-moins { color: var(--lite); }
+.db-h { margin: 0 0 8px; }
+.db-sections { display: grid; }
+.db-row { display: grid; grid-template-columns: 1.6fr 1fr 1fr 1fr; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line); align-items: baseline; font-size: 14px; }
+.db-row small { display: block; font-family: var(--sans, inherit); font-size: 11.5px; color: var(--mute); }
+.db-head { border-top: 0; font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--mute); padding-bottom: 4px; }
+.db-row .t-vite { color: var(--ok); } .db-row .t-lent { color: var(--lite); }
+.db-proj { margin: 0; padding: 10px 12px; border-radius: 12px; border: 1px dashed var(--line); font-size: 14px; color: var(--soft); }
+.db-form { display: grid; gap: 10px; padding-top: 12px; border-top: 1px solid var(--line); }
+.db-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.db-tag { all: unset; cursor: pointer; padding: 7px 12px; border-radius: 999px; border: 1px solid var(--line); font-size: 13px; color: var(--soft); min-height: 30px; display: inline-flex; align-items: center; }
+.db-tag.on { background: var(--snow); color: var(--ink); border-color: var(--snow); font-weight: 600; }
+.db-tag:focus-visible { outline: 2px solid var(--ember); outline-offset: 2px; }
+@media (max-width: 600px) { .db-top { grid-template-columns: 1fr 1fr; } .db-top > div:last-child { grid-column: 1 / -1; } .db-row { grid-template-columns: 1.3fr .8fr .8fr .9fr; gap: 6px; font-size: 13px; } }
+.db-top b { white-space: nowrap; }
+@media (max-width: 600px) { .db-top b { font-size: 15px; } .db-top > div:nth-child(2) b { letter-spacing: -.03em; } }

@@ -183,4 +183,14 @@ export const MIGRATIONS: { tag: string; statements: string[] }[] = [
     // Lieu de départ d’une course de préparation, pour sa météo.
     statements: [`ALTER TABLE side_races ADD COLUMN place TEXT`],
   },
+  {
+    tag: "012_race_debriefs",
+    statements: [
+      // Débrief d’une course passée : ce qui était prévu (figé à la première ouverture) et le ressenti du coureur.
+      `CREATE TABLE IF NOT EXISTS race_debriefs (
+        user_id INTEGER NOT NULL REFERENCES app_users(id) ON DELETE CASCADE, race_key TEXT NOT NULL,
+        planned TEXT, rpe INTEGER, tags TEXT, note TEXT, tried INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL,
+        PRIMARY KEY (user_id, race_key))`,
+    ],
+  },
 ];

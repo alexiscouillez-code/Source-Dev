@@ -140,6 +140,13 @@ async function analyzeActivity(token: string, userId: number, stravaId: string) 
   return true;
 }
 
+/** Relit une sortie Strava déjà importée (par exemple pour obtenir ses temps de passage au kilomètre, utiles au débrief). */
+export async function reanalyze(userId: number, stravaId: string) {
+  const link = await one<Link>("SELECT * FROM strava_links WHERE user_id = ?", [userId]);
+  if (!link) return false;
+  try { return await analyzeActivity(await accessToken(link), userId, stravaId); } catch { return false; }
+}
+
 /** Analyse les sorties à pied avec cardio qui ne l’ont pas encore été (les plus récentes d’abord). */
 async function analyzePending(token: string, userId: number, limit = STREAMS_PER_SYNC) {
   const rows = await all<{ strava_id: string }>(

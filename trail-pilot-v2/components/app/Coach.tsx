@@ -70,7 +70,7 @@ export default function Coach({ toast }: { toast: (m: string) => void }) {
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(q); } }} />
             <button className="btn" type="submit" disabled={busy || !q.trim()}>{busy ? "…" : "Envoyer"}</button>
           </form>
-          <p className="muted" style={{ margin: 0, fontSize: 11.5 }}>Réponses générées par une IA à partir de tes données Trail Pilot : vérifie ce qui compte et, pour toute douleur qui dure, consulte un professionnel de santé.</p>
+          <p className="muted" style={{ margin: 0, fontSize: 11.5 }}>Réponses générées par une IA à partir de tes données Trail Pilot (le détail de tes sorties Strava ne lui est pas transmis, seulement ta charge et ta forme calculées) : vérifie ce qui compte et, pour toute douleur qui dure, consulte un professionnel de santé.</p>
         </>
       )}
     </section>

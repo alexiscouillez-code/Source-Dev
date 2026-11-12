@@ -26,6 +26,7 @@ Principes : progression d’au plus 10 % par semaine, une semaine plus légère 
 
 Santé : tu n’es pas médecin. Pas de diagnostic, pas de médicament ni de dosage. Douleur qui dure plus de deux ou trois jours, qui s’aggrave, qui fait boiter ou qui réveille la nuit, douleur thoracique, malaise ou essoufflement inhabituel : recommande clairement de consulter un professionnel de santé et de ne pas courir en attendant.
 
+Si le coureur te demande de commenter une sortie précise synchronisée depuis Strava, explique que tu n’as pas le détail des sorties Strava et propose de raisonner à partir de sa charge, de sa forme et de son plan, ou de ce qu’il t’en dit.
 Hors sujet (autre que sport, récupération, nutrition sportive, matériel, organisation de l’entraînement) : réponds en une phrase que tu es là pour l’entraînement.`;
 
 const h = (m: number) => `${Math.floor(m / 60)}h${String(Math.round(m % 60)).padStart(2, "0")}`;
@@ -38,7 +39,11 @@ async function context(userId: number, today: string) {
   const meta = goal && goal.date > today ? readPlanMeta(goal) : null;
   const next = await all<{ date: string; title: string; duration_min: number; gain_m: number | null; rpe_target: number; status: string }>(
     "SELECT date, title, duration_min, gain_m, rpe_target, status FROM plan_sessions WHERE user_id = ? AND date >= ? AND date <= ? ORDER BY date", [userId, today, addDays(today, 14)]);
+  // Conditions de l’API Strava : le détail d’une activité venue de Strava n’est jamais transmis à un modèle d’IA.
+  // Le coach reçoit les sorties importées par fichier ou saisies à la main, et les chiffres calculés par l’appli.
   const recent = history.filter((a) => a.date >= addDays(today, -21));
+  const own = recent.filter((a) => a.source !== "strava");
+  const fromStrava = recent.length - own.length;
   return {
     aujourdhui: today,
     profil: { niveau: p.level, seances_par_semaine: p.days_per_week, temps_max_semaine: p.max_weekly_minutes ? h(p.max_weekly_minutes) : null, fc_max: p.hr_max, fc_repos: p.hr_rest },
@@ -49,7 +54,8 @@ async function context(userId: number, today: string) {
     checkin_du_jour: d.checkin ? { sommeil_1a5: d.checkin.sleep, jambes_1a5: d.checkin.legs, motivation_1a5: d.checkin.motivation, douleur_0a2: d.checkin.pain, heures_de_sommeil: d.checkin.sleep_h, fc_reveil: d.checkin.rhr, vfc: d.checkin.hrv, commentaire: d.checkin.note ?? null } : "pas encore fait",
     decision_du_jour: d.decision ? { verdict: { ok: "OK", lite: "Allège", rest: "Récup" }[d.decision.verdict], raisons: d.decision.reasons } : null,
     prochaines_seances: next.map((s) => ({ date: s.date, seance: s.title, duree: h(s.duration_min), d_plus: s.gain_m, effort_sur_10: s.rpe_target, statut: s.status })),
-    seances_3_dernieres_semaines: recent.slice(0, 25).map((a) => ({ date: a.date, sport: a.sport, nom: a.name, duree: h(a.duration_min), km: a.distance_km, d_plus: a.gain_m, fc_moy: a.avg_hr, ressenti_sur_10: a.rpe })),
+    seances_3_dernieres_semaines: own.slice(0, 25).map((a) => ({ date: a.date, sport: a.sport, nom: a.name, duree: h(a.duration_min), km: a.distance_km, d_plus: a.gain_m, fc_moy: a.avg_hr, ressenti_sur_10: a.rpe })),
+    sorties_strava_non_detaillees: fromStrava ? `${fromStrava} sortie(s) synchronisée(s) depuis Strava sur 3 semaines : leur détail n’est pas transmis au coach, elles sont prises en compte uniquement dans la charge et la forme calculées par l’appli.` : null,
     vo2max_estimee: vo2.value,
     allures: t.paces.map((x) => ({ type: x.label, allure: `${fmtPace(x.fast)} à ${fmtPace(x.slow)} /km` })),
     zones_fc: t.zones.map((z) => ({ zone: z.z, bpm: `${z.low}-${z.high}` })),
