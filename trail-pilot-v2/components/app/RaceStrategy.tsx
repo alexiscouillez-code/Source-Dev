@@ -16,8 +16,8 @@ import { parseRouteFile } from "@/lib/activity-file";
 import InfoTip from "./InfoTip";
 
 /** Stratégie de course : profil du tracé, temps de passage par section, ravitaillements et nutrition. */
-export default function RaceStrategy({ route, estimate, onChanged, toast, weather, raceName, raceDate }: {
-  raceName?: string; raceDate?: string;
+export default function RaceStrategy({ route, estimate, onChanged, toast, weather, raceName, raceDate, gear = [] }: {
+  raceName?: string; raceDate?: string; gear?: { label: string; checked: boolean }[];
   route: RaceRoute | null; estimate: { low: number; high: number }; weather?: WeatherAdjust | null;
   onChanged: () => Promise<void>; toast: (m: string) => void;
 }) {
@@ -170,7 +170,7 @@ export default function RaceStrategy({ route, estimate, onChanged, toast, weathe
       <p className="muted small" style={{ margin: 0 }}>Un gel ou une barre apporte en général 20 à 30 g de glucides. Teste ta stratégie lors de ta sortie test et de tes sorties longues : rien de nouveau le jour J.</p>
     </Fold>
     {raceDay && <RaceDay route={route} strat={strat} onClose={() => setRaceDay(false)} />}
-    <RaceSheet route={route} strat={strat} name={raceName} date={raceDate} />
+    <RaceSheet route={route} strat={strat} name={raceName} date={raceDate} gear={gear} />
     </>
   );
 }
@@ -266,7 +266,7 @@ const carryTxt = (s: Strategy["sections"][number]) =>
  * Fiche de course imprimable (bouton « Fiche de course ») : une page A4 à glisser dans le sac ou à scotcher
  * sur la flasque. Invisible à l’écran ; à l’impression, seule cette fiche sort.
  */
-function RaceSheet({ route, strat, name, date }: { route: RaceRoute; strat: Strategy; name?: string; date?: string }) {
+function RaceSheet({ route, strat, name, date, gear }: { route: RaceRoute; strat: Strategy; name?: string; date?: string; gear: { label: string; checked: boolean }[] }) {
   const [host, setHost] = useState<HTMLElement | null>(null);
   useEffect(() => { setHost(document.body); }, []);
   if (!host) return null;
@@ -297,6 +297,7 @@ function RaceSheet({ route, strat, name, date }: { route: RaceRoute; strat: Stra
       </table>
       <p>Au départ, emporte : {carryTxt(strat.sections[0])} pour la 1re section. Total course : {strat.totals.carbs[0]}–{strat.totals.carbs[1]} g de glucides, {(strat.totals.water[0] / 1000).toFixed(1).replace(".", ",")}–{(strat.totals.water[1] / 1000).toFixed(1).replace(".", ",")} L d’eau.</p>
       {tight.length > 0 && <p><b>Points serrés :</b> {tight.map((s) => `${s.label} (${marginTxt(s.margin!)})`).join(", ")}. Pars prudemment et ne t’attarde pas aux ravitos qui précèdent.</p>}
+      {gear.length > 0 && <div className="sheet-gear"><b>Matériel obligatoire</b><ul>{gear.map((g) => <li key={g.label}>☐ {g.label}</li>)}</ul></div>}
       <p className="foot">1 gel ≈ 25 g de glucides (ou l’équivalent en boisson, barre, compote). 1 flasque = 500 ml. Trail Pilot · estimation d’après ta forme et le profil du parcours. Mange et bois avant d’avoir faim ou soif ; rien de nouveau le jour J.</p>
     </div>, host);
 }

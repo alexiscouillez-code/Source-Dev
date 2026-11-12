@@ -45,6 +45,15 @@ export default function Today({ me, refresh, go, toast }: Ctx) {
         </div>
       )}
 
+      {me.goal && me.goal.daysToGoal != null && me.goal.daysToGoal >= 1 && me.goal.daysToGoal <= 2 && (
+        <div className="banner" style={{ marginBottom: 14 }}>
+          <div>
+            <b>{me.goal.daysToGoal === 1 ? "C’est demain : prépare ton sac" : "Dans 2 jours : vérifie ton matériel"}</b>
+            <div className="small muted">{me.goal.gear ? `Matériel obligatoire : ${me.goal.gear.ready}/${me.goal.gear.total} prêt${me.goal.gear.ready > 1 ? "s" : ""}.` : "Saisis la liste du matériel obligatoire de ta course pour la cocher en faisant ton sac."}</div>
+          </div>
+          <button className="btn sm" onClick={() => go("plan")}>Voir ma liste</button>
+        </div>
+      )}
       <div className="grid g2">
         {me.decision && !editing ? (
           <DecisionCard me={me} onEdit={() => setEditing(true)} />

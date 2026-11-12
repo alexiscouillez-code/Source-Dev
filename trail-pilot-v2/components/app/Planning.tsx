@@ -19,6 +19,7 @@ import SideRaces, { type SideRaceRow } from "./SideRaces";
 import PlanCalendar from "./PlanCalendar";
 import Fold, { useFold } from "./Fold";
 import Debriefs from "./Debriefs";
+import GearList, { type GearItem } from "./GearList";
 import { calibLabel } from "@/lib/engine/calibration";
 import type { RaceRoute, WeatherAdjust } from "@/lib/engine/strategy";
 
@@ -35,7 +36,7 @@ interface RacePlan {
   diagnosis?: { causes: string[]; fixes: string[]; gaps?: { key: string; label: string; reach: number; need: number; unit: "min" | "m" }[]; options?: { title: string; text: string }[]; keep?: string };
 }
 type Session = PlanSession;
-interface View { today: string; goal: { name: string; date: string; distance_km: number | null; gain_m: number | null; route?: RaceRoute | null } | null; plan: RacePlan | null; sessions: Session[]; doneByWeek: Record<string, number>; races: SideRaceRow[]; absence?: Absence | null; learning?: { items: { kind: string; text: string; changes: boolean }[]; off: boolean } }
+interface View { today: string; goal: { name: string; date: string; distance_km: number | null; gain_m: number | null; route?: RaceRoute | null; gear?: GearItem[] } | null; plan: RacePlan | null; sessions: Session[]; doneByWeek: Record<string, number>; races: SideRaceRow[]; absence?: Absence | null; learning?: { items: { kind: string; text: string; changes: boolean }[]; off: boolean } }
 
 const VERDICT: Record<Verdict, { label: string; color: string }> = {
   solide: { label: "Objectif solide", color: "var(--ok)" },
@@ -158,7 +159,8 @@ export default function Planning({ me, refresh, toast, go }: Ctx) {
         </PlanBoard>
       </section>
       <RaceWeather key={v.goal.route?.uploadedAt ?? 0} toast={toast} onAdjust={setWx} daysTo={p.race.daysTo} />
-      <RaceStrategy raceName={v.goal.name} raceDate={v.goal.date} route={v.goal.route ?? null} estimate={p.estimate} weather={wx} toast={toast} onChanged={async () => { await Promise.all([load(), refresh()]); }} />
+      <RaceStrategy gear={v.goal.gear ?? []} raceName={v.goal.name} raceDate={v.goal.date} route={v.goal.route ?? null} estimate={p.estimate} weather={wx} toast={toast} onChanged={async () => { await Promise.all([load(), refresh()]); }} />
+      <GearList key={(v.goal.gear ?? []).map((x) => x.label).join("|")} items={v.goal.gear ?? []} daysTo={p.race.daysTo} toast={toast} />
       <SideRaces races={v.races} today={v.today} mainDate={v.goal.date} toast={toast} onChanged={async () => { await Promise.all([load(), refresh()]); }} />
       <div className="grid g2 folds" style={{ marginTop: 14 }}>
         <Needs p={p} />

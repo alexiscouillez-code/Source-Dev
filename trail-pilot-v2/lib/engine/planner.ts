@@ -382,7 +382,7 @@ function make(t: Template, date: string, minutes: number, phase: string, gain: n
   switch (t) {
     case "long":
       return { date, template: t, phase, sport: "trail", title: "Sortie longue", durationMin: d, rpeTarget: 4, gainM: g,
-        description: "Allure facile et régulière, tu dois pouvoir parler. Marche franchement dans les montées raides. Teste ce que tu mangeras en course : un apport toutes les 40 minutes." };
+        description: "Allure facile et régulière, tu dois pouvoir parler. Marche franchement dans les montées raides." };
     case "test":
       return { date, template: t, phase, sport: "trail", title: "Sortie test", durationMin: d, rpeTarget: 5, gainM: g,
         description: "La plus grosse journée du plan, comme une répétition de course : même sac, mêmes chaussures, même nutrition. Allure de course, pas plus vite. Note ce qui coince." };

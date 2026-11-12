@@ -383,3 +383,15 @@ form.cal-comment { display: grid; gap: 8px; white-space: normal; }
 .share-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .share-list li { display: grid; gap: 4px; padding: 10px 12px; border-radius: 12px; background: var(--ink-2); border: 1px solid var(--line); border-left: 4px solid var(--c, var(--line)); }
 .share-foot { text-align: center; margin: 8px 0 0; }
+.fuel-feel { display: grid; gap: 6px; padding-top: 8px; border-top: 1px dashed var(--line); }
+
+/* Matériel obligatoire */
+.gear-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.gear-list li { display: flex; align-items: center; gap: 8px; padding: 4px 4px 4px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--ink); }
+.gear-list label { flex: 1; display: flex; align-items: center; gap: 10px; min-height: 36px; cursor: pointer; font-size: 14.5px; }
+.gear-list input { width: 20px; height: 20px; accent-color: var(--ok); }
+.gear-list li.on span { color: var(--mute); text-decoration: line-through; }
+@media print {
+  .race-sheet .sheet-gear ul { columns: 2; margin: 4pt 0 0; padding: 0; list-style: none; font-size: 10pt; }
+  .race-sheet .sheet-gear { margin-top: 8pt; }
+}

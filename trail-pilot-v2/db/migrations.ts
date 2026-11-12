@@ -207,4 +207,15 @@ export const MIGRATIONS: { tag: string; statements: string[] }[] = [
     // Lien de partage du planning en lecture seule (empreinte du jeton ; le lien chiffré est gardé dans app_kv).
     statements: [`ALTER TABLE profiles ADD COLUMN share_token TEXT`, `CREATE INDEX IF NOT EXISTS profiles_share ON profiles(share_token)`],
   },
+  {
+    tag: "015_fuel_gear",
+    statements: [
+      // Ressenti de l’alimentation testée sur une sortie longue (« passé », « limite », « pas passé ») et cible essayée.
+      `CREATE TABLE IF NOT EXISTS fuel_logs (
+        user_id INTEGER NOT NULL REFERENCES app_users(id) ON DELETE CASCADE, date TEXT NOT NULL,
+        feel TEXT NOT NULL, target INTEGER, updated_at INTEGER NOT NULL, PRIMARY KEY (user_id, date))`,
+      // Matériel obligatoire de la course principale : [{ label, checked }].
+      `ALTER TABLE goals ADD COLUMN gear TEXT`,
+    ],
+  },
 ];

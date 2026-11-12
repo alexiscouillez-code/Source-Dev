@@ -11,6 +11,7 @@ import { cleanSignals, noteCap, type NoteSignals } from "./engine/note";
 import { analyzeNote } from "./note-ai";
 import { raceWeather, type Place } from "./weather";
 import { loadCalibration } from "./calibration";
+import { fuelTarget, type FuelFeel } from "./engine/fuel";
 import { weatherAdjust } from "./engine/strategy";
 import { trainingTargets } from "./engine/paces";
 import { estimateVo2, type Vo2Run } from "./engine/vo2";
@@ -20,7 +21,7 @@ import { timeline, weeklySummary } from "./engine/timeline";
 import { HttpError } from "./api";
 
 export interface ProfileRow { hr_max: number | null; hr_rest: number | null; vo2_watch: number | null; days_per_week: number; long_day: number; max_weekly_minutes: number | null; level: Level }
-export interface GoalRow { name: string; date: string; distance_km: number | null; gain_m: number | null; plan_meta?: string | null; route?: string | null }
+export interface GoalRow { name: string; date: string; distance_km: number | null; gain_m: number | null; plan_meta?: string | null; route?: string | null; gear?: string | null }
 export interface ActivityRow { id: number; date: string; sport: Sport; name: string | null; duration_min: number; distance_km: number | null; gain_m: number | null; loss_m: number | null; avg_hr: number | null; max_hr: number | null; rpe: number | null; source: string; strava_id: string | null; analysis?: string | null }
 export interface PlanRow { id: number; date: string; template: string; title: string; sport: string; duration_min: number; gain_m: number | null; rpe_target: number; description: string; phase: string; status: string; activity_id: number | null; locked: number; original: string | null }
 export interface CheckinRow { date: string; sleep: number; legs: number; motivation: number; pain: 0 | 1 | 2; note: string | null; pain_zones?: string | null; sleep_h?: number | null; rhr?: number | null; hrv?: number | null }
@@ -50,7 +51,9 @@ export async function loadProfile(userId: number) {
 }
 export const loadSideRaces = (userId: number) =>
   all<SideRace & { id: number }>("SELECT id, name, date, distance_km AS distanceKm, gain_m AS gainM, priority FROM side_races WHERE user_id = ? ORDER BY date", [userId]);
-export const loadGoal = (userId: number) => one<GoalRow>("SELECT name, date, distance_km, gain_m, plan_meta, route FROM goals WHERE user_id = ?", [userId]);
+export const loadGoal = (userId: number) => one<GoalRow>("SELECT name, date, distance_km, gain_m, plan_meta, route, gear FROM goals WHERE user_id = ?", [userId]);
+export type GearItem = { label: string; checked: boolean };
+export const readGear = (g: { gear?: string | null } | null | undefined): GearItem[] => { try { const a = g?.gear ? JSON.parse(g.gear) : []; return Array.isArray(a) ? a : []; } catch { return []; } };
 export const readPlanMeta = (g: GoalRow | null | undefined): RacePlan | null => { try { return g?.plan_meta ? JSON.parse(g.plan_meta) : null; } catch { return null; } };
 export const loadActivities = (userId: number, since: string) =>
   all<ActivityRow>("SELECT id, date, sport, name, duration_min, distance_km, gain_m, loss_m, avg_hr, max_hr, rpe, source, strava_id, analysis FROM activities WHERE user_id = ? AND date >= ? ORDER BY date DESC, id DESC", [userId, since]);
@@ -118,6 +121,7 @@ export async function regeneratePlan(userId: number, today: string) {
   items = withSideRaces(withStrength(items), sides, { start: addDays(today, 1), level: profile.level, ctl: tl.ctl, mainDate: goal && goal.date > today ? goal.date : null });
   const absence = await loadAbsence(userId, today);
   if (absence) items = applyAbsence(items, absence);
+  if (goal && goal.date > today) items = await withFuel(userId, items, today, goal.date, readPlanMeta(await loadGoal(userId))?.estimate ?? null);
   const lr = await loadLearning(userId, today);
   if (!lr.off) items = applyLearning(items, lr.learning, today);
   await run("INSERT INTO plan_learning(user_id, sig, off, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET sig = excluded.sig, updated_at = excluded.updated_at",
@@ -139,6 +143,35 @@ export async function loadState(userId: number, today: string) {
   const [profile, acts] = await Promise.all([loadProfile(userId), loadActivities(userId, addDays(today, -240))]);
   const physio = { hrMax: profile.hr_max, hrRest: profile.hr_rest };
   return { profile, acts, physio, tl: timeline(acts.map(toActivityLike), physio, today) };
+}
+
+// ---------- Alimentation des sorties longues ----------
+const FUEL_MARK = " Alimentation à entraîner :";
+/** Ajoute à chaque sortie longue la quantité à manger et boire, qui progresse vers celle du plan de course. */
+async function withFuel<T extends { date: string; template: string; durationMin: number; description: string }>(userId: number, items: T[], today: string, raceDate: string, est: { low: number; high: number } | null): Promise<T[]> {
+  if (!est) return items;
+  const raceMin = (est.low + est.high) / 2;
+  const [first, last] = await Promise.all([
+    one<{ d: string | null }>("SELECT MIN(date) AS d FROM plan_sessions WHERE user_id = ? AND date >= ?", [userId, addDays(raceDate, -400)]),
+    one<{ feel: FuelFeel; target: number | null }>("SELECT feel, target FROM fuel_logs WHERE user_id = ? AND date <= ? ORDER BY date DESC LIMIT 1", [userId, today]),
+  ]);
+  const planStart = first?.d && first.d < today ? first.d : today;
+  let lastFeel = last?.feel ?? null, lastTarget = last?.target ?? null;
+  return items.map((x) => {
+    if (x.template !== "long" && x.template !== "b2b") return x;
+    const f = fuelTarget({ date: x.date, durationMin: x.durationMin, planStart, raceDate, raceMin, lastFeel, lastTarget });
+    if (!f) return x;
+    // Seule la prochaine sortie est freinée par un mauvais ressenti ; les suivantes reprennent la progression prévue.
+    lastFeel = null; lastTarget = null;
+    const base = x.description.includes(FUEL_MARK) ? x.description.slice(0, x.description.indexOf(FUEL_MARK)) : x.description;
+    return { ...x, description: `${base} ${f.text}` };
+  });
+}
+
+export async function saveFuelFeel(userId: number, date: string, feel: FuelFeel, target: number | null, today: string) {
+  await run("INSERT INTO fuel_logs(user_id, date, feel, target, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(user_id, date) DO UPDATE SET feel = excluded.feel, target = excluded.target, updated_at = excluded.updated_at",
+    [userId, date, feel, target, Date.now()]);
+  await regeneratePlan(userId, today);
 }
 
 // ---------- Commentaires du jour ----------
@@ -250,7 +283,8 @@ export async function dashboard(userId: number, today: string) {
   return {
     today,
     profile,
-    goal: goal ? { name: goal.name, date: goal.date, distance_km: goal.distance_km, gain_m: goal.gain_m, daysToGoal, phase: upcoming[0]?.phase ?? phaseFor(daysToGoal), verdict: readPlanMeta(goal)?.verdict ?? null } : null,
+    goal: goal ? { name: goal.name, date: goal.date, distance_km: goal.distance_km, gain_m: goal.gain_m, daysToGoal, phase: upcoming[0]?.phase ?? phaseFor(daysToGoal), verdict: readPlanMeta(goal)?.verdict ?? null,
+      gear: (() => { const g = readGear(goal); return g.length ? { total: g.length, ready: g.filter((x) => x.checked).length } : null; })() } : null,
     load: { atl: tl.atl, ctl: tl.ctl, form: tl.form, ratio: tl.ratio, monotony: tl.monotony, load7: tl.load7, calibrated: tl.calibrated, historyDays: tl.historyDays },
     checkin, decision,
     // Commentaire du jour (écrit au check-in ou dans le calendrier) et ce que l’IA y a lu.
@@ -386,6 +420,7 @@ export async function calendarView(userId: number, today: string, from: string, 
     loadGoal(userId), loadSideRaces(userId), loadAbsence(userId, today),
   ]);
   const notes = await all<{ date: string; note: string; signals: string | null }>("SELECT date, note, signals FROM day_notes WHERE user_id = ? AND date BETWEEN ? AND ?", [userId, from, to]);
+  const fuel = await all<{ date: string; feel: string }>("SELECT date, feel FROM fuel_logs WHERE user_id = ? AND date BETWEEN ? AND ?", [userId, from, to]);
   const attached = new Set(sessions.map((p) => p.activity_id).filter((x): x is number => x != null));
   return {
     today, from, to,
@@ -399,6 +434,7 @@ export async function calendarView(userId: number, today: string, from: string, 
     checkins: checks.map((c) => ({ date: c.date, sleep: c.sleep, legs: c.legs, motivation: c.motivation, pain: c.pain, zones: painZonesOf(c), sleepH: c.sleep_h, rhr: c.rhr, hrv: c.hrv,
       score: Math.max(0, Math.min(100, Math.round(((c.sleep + c.legs + c.motivation - 3) / 12) * 100 - c.pain * 12))) })),
     notes: notes.map((n) => ({ date: n.date, note: n.note, resume: readSignals(n.signals)?.resume ?? null })),
+    fuel,
     races: [
       ...(goal && goal.date >= from && goal.date <= to ? [{ date: goal.date, name: goal.name, main: true }] : []),
       ...sides.filter((r) => r.date >= from && r.date <= to).map((r) => ({ date: r.date, name: r.name, main: false })),
@@ -484,7 +520,7 @@ export async function planView(userId: number, today: string) {
   for (const a of done) if (isFoot(a.sport)) { const m = mondayOf(a.date); doneByWeek[m] = Math.round((doneByWeek[m] ?? 0) + a.duration_min); }
   return {
     today,
-    goal: goal ? { name: goal.name, date: goal.date, distance_km: goal.distance_km, gain_m: goal.gain_m, route: (() => { try { return goal.route ? JSON.parse(goal.route) : null; } catch { return null; } })() } : null,
+    goal: goal ? { name: goal.name, date: goal.date, distance_km: goal.distance_km, gain_m: goal.gain_m, gear: readGear(goal), route: (() => { try { return goal.route ? JSON.parse(goal.route) : null; } catch { return null; } })() } : null,
     plan: goal && goal.date > today ? meta : null,
     // Prévu / réalisé : chaque séance faite est comparée à ce qui était prévu.
     sessions: sessions.map(({ a_analysis, ...p }) => ({

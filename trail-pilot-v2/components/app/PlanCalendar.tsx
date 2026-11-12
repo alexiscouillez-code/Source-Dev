@@ -17,6 +17,7 @@ interface CalData {
   sessions: PlanSession[]; extras: Extra[];
   checkins: { date: string; sleep: number; legs: number; motivation: number; pain: number; zones: string[]; sleepH: number | null; rhr: number | null; hrv: number | null; score: number }[];
   notes: { date: string; note: string; resume: string | null }[];
+  fuel?: { date: string; feel: string }[];
   races: { date: string; name: string; main: boolean }[];
   absence: Absence | null;
 }
@@ -160,6 +161,7 @@ export default function PlanCalendar({ today, rev, targets, onStatus, onWhere, o
               </div>
               {s.status === "done" && s.a_duration != null && <p className="cal-real">Réalisé{s.a_name ? ` (${s.a_name})` : ""} : <b>{fmtDur(s.a_duration)}</b>{s.a_distance ? ` · ${fmtKm(s.a_distance)} km` : ""}{s.a_gain ? ` · ${fmtNum(s.a_gain)} m D+` : ""}</p>}
               {s.review && <ReviewLine r={s.review} />}
+              {s.status === "done" && /Alimentation à entraîner/.test(s.description) && <FuelFeel date={s.date} today={today} feel={data.fuel?.find((f) => f.date === s.date)?.feel ?? null} onSaved={onChanged} />}
               {s.status !== "done" && s.template !== "recovery" && <SessionTarget targets={targets} template={s.template} rpe={s.rpe_target} duration={s.duration_min} title={s.title} gain={s.gain_m} sport={s.sport} day={s.date >= today ? dayOf(fc, s.date) : null} />}
               <p className="soft small" style={{ margin: 0 }}>{s.description}</p>
               <div className="row" style={{ gap: 8 }}>
@@ -190,6 +192,28 @@ export default function PlanCalendar({ today, rev, targets, onStatus, onWhere, o
           {!day?.sessions.length && !day?.extras.length && !day?.race && <p className="muted" style={{ margin: 0 }}>{absent ? "Rien de prévu." : sel < today ? "Jour de repos." : "Repos prévu."}</p>}
         </div>
       )}
+    </div>
+  );
+}
+
+const FEEL: [string, string][] = [["ok", "Passé sans souci"], ["limite", "Un peu limite"], ["ko", "Ça n’est pas passé"]];
+/** Après une sortie longue : l’alimentation testée est-elle passée ? La quantité de la sortie suivante s’ajuste. */
+function FuelFeel({ date, today, feel, onSaved }: { date: string; today: string; feel: string | null; onSaved: () => Promise<void> | void }) {
+  const [busy, setBusy] = useState(false);
+  const [cur, setCur] = useState(feel);
+  async function pick(f: string) {
+    setBusy(true);
+    try { await api("/api/fuel", { method: "POST", body: { date, today, feel: f } }); setCur(f); await onSaved(); }
+    catch { /* le choix reste modifiable */ }
+    finally { setBusy(false); }
+  }
+  return (
+    <div className="fuel-feel">
+      <small className="cal-kicker">L’alimentation est passée ?</small>
+      <div className="db-tags" role="radiogroup" aria-label="Ressenti de l’alimentation">
+        {FEEL.map(([k, l]) => <button key={k} type="button" role="radio" aria-checked={cur === k} className={`db-tag ${cur === k ? "on" : ""}`} disabled={busy} onClick={() => pick(k)}>{l}</button>)}
+      </div>
+      {cur && <small className="muted">{cur === "ok" ? "La quantité continue de monter vers celle du jour J." : cur === "limite" ? "Ta prochaine sortie longue garde la même quantité." : "Ta prochaine sortie longue baisse de 10 g par heure. Essaie des prises plus petites et plus fréquentes."}</small>}
     </div>
   );
 }
