@@ -154,7 +154,7 @@ function DecisionCard({ me, onEdit }: { me: Me; onEdit: () => void }) {
       <div className="meter" role="img" aria-label={`Forme ressentie ${d.score} sur 100`}><i style={{ width: `${d.score}%` }} /></div>
       <p style={{ margin: 0, fontSize: 18 }}>{v.line}</p>
       <ul className="reasons">{d.reasons.map((r) => <li key={r}>{r}</li>)}</ul>
-      {me.checkin?.note && <p className="ci-said"><small>Ton commentaire</small>{me.checkin.note}</p>}
+      {me.checkin?.note && <p className="ci-said"><small>Ton commentaire</small>{me.checkin.note}{me.dayNote?.resume && <em>Compris par le coach : {me.dayNote.resume}</em>}</p>}
     </section>
   );
 }
@@ -183,7 +183,7 @@ function CheckinCard({ me, onDone, onCancel }: { me: Me; onDone: (msg: string) =
   const [v, setV] = useState({ sleep: me.checkin?.sleep ?? 3, legs: me.checkin?.legs ?? 3, motivation: me.checkin?.motivation ?? 3, pain: me.checkin?.pain ?? 0 });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [note, setNote] = useState(me.checkin?.note ?? "");
+  const [note, setNote] = useState(me.checkin?.note ?? me.dayNote?.note ?? "");
   const [zones, setZones] = useState<string[]>(() => { try { return me.checkin?.pain_zones ? JSON.parse(me.checkin.pain_zones) : []; } catch { return []; } });
   const [consent, setConsent] = useState(me.settings.healthConsent);
   const s = (v: number | null | undefined) => (v == null ? "" : String(v).replace(".", ","));
@@ -264,7 +264,7 @@ function CheckinCard({ me, onDone, onCancel }: { me: Me; onDone: (msg: string) =
         </details>
         <label className="field ci-note">Commentaire <small className="muted">facultatif</small>
           <textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} rows={2} placeholder="Nuit hachée, grosse journée de travail, mollet raide au réveil…" />
-          <small className="muted">Pour toi : il s’affiche dans le calendrier, au jour concerné, et le coach en tient compte si tu lui poses une question.</small>
+          <small className="muted">Lu par l’IA du coach : fatigue, douleur, maladie ou manque de temps peuvent alléger la séance du jour. Tu le retrouves dans le calendrier, au jour concerné.</small>
         </label>
         {err && <p className="note err" role="alert">{err}</p>}
         <button className="btn" type="submit" disabled={busy}>{busy ? "Analyse…" : "Voir ma décision"}</button>

@@ -74,6 +74,7 @@ export interface Me {
   profile: { hr_max: number | null; hr_rest: number | null; vo2_watch: number | null; days_per_week: number; long_day: number; max_weekly_minutes: number | null; level: "debutant" | "regulier" | "confirme" };
   goal: { name: string; date: string; distance_km: number | null; gain_m: number | null; daysToGoal: number | null; phase: string } | null;
   load: { atl: number; ctl: number; form: number; ratio: number | null; monotony: number | null; load7: number; calibrated: boolean; historyDays: number };
+  dayNote?: { note: string; resume: string | null } | null;
   checkin: { sleep: number; legs: number; motivation: number; pain: 0 | 1 | 2; note: string | null; pain_zones?: string | null; sleep_h?: number | null; rhr?: number | null; hrv?: number | null } | null;
   decision: { verdict: Verdict; score: number; reasons: string[] } | null;
   todayPlan: PlanSession | null; tomorrowPlan: PlanSession | null; upcoming: PlanSession[]; needsPlan: boolean;

@@ -1,8 +1,9 @@
 import { diffDays } from "./dates";
+import type { NoteSignals } from "./note";
 
 export type Verdict = "ok" | "lite" | "rest";
 export interface Watch { sleepH?: number | null; rhr?: number | null; hrv?: number | null; base?: { rhr: number | null; hrv: number | null; nRhr: number; nHrv: number } }
-export interface CheckIn { sleep: number; legs: number; motivation: number; pain: 0 | 1 | 2; zones?: string[]; watch?: Watch }
+export interface CheckIn { sleep: number; legs: number; motivation: number; pain: 0 | 1 | 2; zones?: string[]; watch?: Watch; /** Commentaire du jour, lu par l’IA */ noteSignals?: NoteSignals | null; /** Commentaire de la veille */ prevNote?: NoteSignals | null }
 
 const DESCENT_ZONES = ["quads", "knees", "shins"], CLIMB_ZONES = ["calves", "ankles", "glutes"];
 export interface LoadState { ratio: number | null; form: number; ctl: number; calibrated: boolean }
@@ -27,7 +28,9 @@ export function watchBaseline(rows: { rhr: number | null; hrv: number | null }[]
  *  4. mesures de la montre, si tu les donnes : moins de 6 h de sommeil (−8, −15 sous 5 h),
  *     FC au réveil au-dessus de ta référence (+5 bpm : −7, +8 bpm : −15),
  *     VFC sous ta référence (−10 % : −7, −20 % : −15) ; référence = médiane de tes 14 derniers jours ;
- *  5. seuils : ≥ 62 OK, ≥ 42 allège, sinon récup.
+ *  5. commentaire libre, lu par l’IA puis traduit en signaux : fatigue (−8 / −18), gêne non cochée (−15),
+ *     veille malade ou douloureuse (−20 / −10) ; malade, douleur marquée ou aucun créneau → récup ; peu de temps → allège au mieux ;
+ *  6. seuils : ≥ 62 OK, ≥ 42 allège, sinon récup.
  */
 export function decide(c: CheckIn, load: LoadState, today: string, goalDate?: string | null) {
   const reasons: string[] = [];
@@ -81,8 +84,21 @@ export function decide(c: CheckIn, load: LoadState, today: string, goalDate?: st
     reasons.push("Historique encore court : la décision s’appuie surtout sur ton ressenti.");
   }
 
+  const n = c.noteSignals, pv = c.prevNote;
+  if (n) {
+    if (n.fatigue === 2) { score -= 18; reasons.push("Ton commentaire : grosse fatigue signalée."); }
+    else if (n.fatigue === 1) { score -= 8; reasons.push("Ton commentaire : un peu de fatigue."); }
+    if (n.douleur === 1 && c.pain === 0) { score -= 15; reasons.push("Ton commentaire évoque une gêne : on reste prudent."); }
+  }
+  if (pv?.malade) { score -= 20; reasons.push("Hier, tu notais être malade : reprise en douceur."); }
+  else if (pv && pv.douleur > 0 && c.pain === 0 && !n?.douleur) { score -= 10; reasons.push("Hier, tu notais une douleur : on vérifie qu’elle est partie avant de forcer."); }
+
   score = Math.max(0, Math.min(100, Math.round(score)));
-  const verdict: Verdict = score >= 62 ? "ok" : score >= 42 ? "lite" : "rest";
+  let verdict: Verdict = score >= 62 ? "ok" : score >= 42 ? "lite" : "rest";
+  if (n?.malade) { verdict = "rest"; reasons.push("Ton commentaire : tu es malade. On ne s’entraîne pas avec de la fièvre ou un virus, repos."); }
+  else if (n?.douleur === 2) { verdict = "rest"; reasons.push("Ton commentaire évoque une douleur marquée : repos, et fais-la examiner si elle persiste."); }
+  else if (n?.temps === "aucun") { verdict = "rest"; reasons.push("Ton commentaire : pas de créneau aujourd’hui. La séance saute, sans la rattraper."); }
+  else if (n?.temps === "court" && verdict === "ok") { verdict = "lite"; reasons.push("Ton commentaire : peu de temps aujourd’hui, séance raccourcie."); }
   if (goalDate) {
     const d = diffDays(today, goalDate);
     if (d >= 1 && d <= 10 && verdict === "ok") reasons.push(`J-${d} : affûtage, on garde du jus pour le jour J.`);
@@ -101,7 +117,7 @@ export function adapt(p: PlannedLike, v: Verdict): PlannedLike {
       rpeTarget: Math.min(p.rpeTarget, 3),
       gainM: p.gainM ? Math.round((p.gainM * 0.5) / 50) * 50 : p.gainM,
       template: "easy",
-      description: "Séance allégée suite au check-in : allure conversation, aucune intensité, 30 % de volume en moins. Si les sensations reviennent bonnes en route, n’en rajoute pas.",
+      description: "Séance allégée d’après ton check-in ou ton commentaire : allure conversation, aucune intensité, 30 % de volume en moins. Si les sensations reviennent bonnes en route, n’en rajoute pas.",
     };
   }
   return {

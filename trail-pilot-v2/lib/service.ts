@@ -7,6 +7,8 @@ import { parseAnalysis, windowsVo2, zoneBounds, zoneMinutes } from "./engine/str
 import { reviewSession } from "./engine/review";
 import { applyLearning, learn, type Learning, type Past } from "./engine/learn";
 import { assignShoes } from "./shoes";
+import { cleanSignals, noteCap, type NoteSignals } from "./engine/note";
+import { analyzeNote } from "./note-ai";
 import { trainingTargets } from "./engine/paces";
 import { estimateVo2, type Vo2Run } from "./engine/vo2";
 import { buildRacePlan, maintenancePlan, phaseFor, type Level, type RacePlan } from "./engine/planner";
@@ -134,7 +136,45 @@ async function loadState(userId: number, today: string) {
   return { profile, acts, physio, tl: timeline(acts.map(toActivityLike), physio, today) };
 }
 
-/** Enregistre le check-in du matin (avec son commentaire libre) et adapte la séance du jour. */
+// ---------- Commentaires du jour ----------
+const readSignals = (v: string | null | undefined): NoteSignals | null => { try { const o = v ? JSON.parse(v) : null; return o ? cleanSignals(o, o.source === "ia" ? "ia" : "mots-cles") : null; } catch { return null; } };
+export async function loadNote(userId: number, date: string) {
+  const r = await one<{ note: string; signals: string | null }>("SELECT note, signals FROM day_notes WHERE user_id = ? AND date = ?", [userId, date]);
+  return r ? { note: r.note, signals: readSignals(r.signals) } : null;
+}
+/** Enregistre le commentaire d’un jour et le fait lire par l’IA (une seule fois par texte). Texte vide : le commentaire est supprimé. */
+async function storeNote(userId: number, date: string, text: string | null | undefined): Promise<NoteSignals | null> {
+  const note = (text ?? "").trim().slice(0, 500);
+  if (!note) { await run("DELETE FROM day_notes WHERE user_id = ? AND date = ?", [userId, date]); return null; }
+  const prev = await loadNote(userId, date);
+  const signals = prev && prev.note === note && prev.signals ? prev.signals : await analyzeNote(note);
+  await run("INSERT INTO day_notes(user_id, date, note, signals, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(user_id, date) DO UPDATE SET note = excluded.note, signals = excluded.signals, updated_at = excluded.updated_at",
+    [userId, date, note, JSON.stringify(signals), Date.now()]);
+  return signals;
+}
+
+/** Décision du jour : check-in, mesures de la montre, charge, et ce que disent les commentaires d’aujourd’hui et d’hier. */
+async function decideFor(userId: number, today: string, c: CheckinRow) {
+  const [{ tl }, goal, note, prev, watch] = await Promise.all([loadState(userId, today), loadGoal(userId), loadNote(userId, today), loadNote(userId, addDays(today, -1)), watchOf(userId, today, c)]);
+  return decide({ ...c, zones: painZonesOf(c), watch, noteSignals: note?.signals ?? null, prevNote: prev?.signals ?? null }, tl, today, goal?.date);
+}
+
+/** Séances d’un jour qu’une décision peut encore adapter (ni faites, ni verrouillées, hors course). */
+const adaptable = (userId: number, date: string) =>
+  all<PlanRow>("SELECT * FROM plan_sessions WHERE user_id = ? AND date = ? AND locked = 0 AND status IN ('planned', 'adapted') AND template != 'race' ORDER BY id", [userId, date]);
+async function applyTo(userId: number, date: string, v: Verdict) {
+  let first: { date: string; title: string; verdict: Verdict } | null = null;
+  for (const p of await adaptable(userId, date)) {
+    // Le renforcement ne « s’allège » pas : il est gardé tel quel, et saute seulement en cas de repos.
+    if (p.template === "strength" && v !== "rest" && !p.original) continue;
+    const before = p.original ? (JSON.parse(p.original) as PlannedLike).title : p.title;
+    await applyVerdict(p, v);
+    if (v !== "ok" && !first) first = { date, title: before, verdict: v };
+  }
+  return first;
+}
+
+/** Enregistre le check-in du matin (avec son commentaire libre, lu par l’IA) et adapte la séance du jour. */
 export async function saveCheckin(userId: number, today: string, c: CheckIn & { note?: string | null }, health: { zones: string[]; consent: boolean } = { zones: [], consent: false }, watch: { sleepH: number | null; rhr: number | null; hrv: number | null } = { sleepH: null, rhr: null, hrv: null }) {
   // Les zones douloureuses sont des données de santé : enregistrées seulement avec un accord explicite.
   if (health.consent) await run("UPDATE profiles SET health_consent_at = COALESCE(health_consent_at, ?) WHERE user_id = ?", [Date.now(), userId]);
@@ -142,18 +182,40 @@ export async function saveCheckin(userId: number, today: string, c: CheckIn & { 
   const zones = consent && c.pain > 0 && health.zones.length ? JSON.stringify(health.zones) : null;
   // FC au réveil et VFC sont des mesures physiologiques : enregistrées seulement avec le même accord.
   const rhr = consent ? watch.rhr : null, hrv = consent ? watch.hrv : null;
+  const note = (c.note ?? "").trim().slice(0, 500) || null;
   await run(
     `INSERT INTO checkins(user_id, date, sleep, legs, motivation, pain, note, pain_zones, sleep_h, rhr, hrv, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(user_id, date) DO UPDATE SET sleep = excluded.sleep, legs = excluded.legs, motivation = excluded.motivation, pain = excluded.pain, note = excluded.note, pain_zones = excluded.pain_zones,
        sleep_h = excluded.sleep_h, rhr = excluded.rhr, hrv = excluded.hrv`,
-    [userId, today, c.sleep, c.legs, c.motivation, c.pain, c.note ?? null, zones, watch.sleepH, rhr, hrv, Date.now()],
+    [userId, today, c.sleep, c.legs, c.motivation, c.pain, note, zones, watch.sleepH, rhr, hrv, Date.now()],
   );
-  const [{ tl }, goal] = await Promise.all([loadState(userId, today), loadGoal(userId)]);
-  const d = decide({ ...c, zones: zones ? health.zones : [], watch: await watchOf(userId, today, { sleep_h: watch.sleepH, rhr, hrv }) }, tl, today, goal?.date);
-  // Check-in du matin : la décision porte sur la séance du jour (si elle n’est ni faite, ni verrouillée).
-  const next = await one<PlanRow>("SELECT * FROM plan_sessions WHERE user_id = ? AND date = ? AND locked = 0 AND status IN ('planned', 'adapted') AND template NOT IN ('race', 'strength')", [userId, today]);
-  if (next) await applyVerdict(next, d.verdict);
+  await storeNote(userId, today, note);
+  const d = await decideFor(userId, today, { date: today, sleep: c.sleep, legs: c.legs, motivation: c.motivation, pain: c.pain, note, pain_zones: zones, sleep_h: watch.sleepH, rhr, hrv });
+  // Check-in du matin : la décision porte sur la séance du jour (le renforcement seul n’est pas concerné, sauf repos imposé par le commentaire).
+  for (const p of await adaptable(userId, today)) if (p.template !== "strength") await applyVerdict(p, d.verdict);
   return d;
+}
+
+/**
+ * Commentaire écrit depuis le calendrier, pour n’importe quel jour. L’IA le lit, puis :
+ *  - aujourd’hui : la décision du jour est recalculée (ou, sans check-in, la séance du jour est allégée ou mise au repos) ;
+ *    si la séance du jour est déjà faite, une douleur, une maladie ou un épuisement allègent celle de demain ;
+ *  - jour à venir : la séance de ce jour-là est adaptée ; jour passé : le commentaire est gardé au carnet, sans effet.
+ */
+export async function saveDayNote(userId: number, today: string, date: string, text: string) {
+  const signals = await storeNote(userId, date, text);
+  await run("UPDATE checkins SET note = ? WHERE user_id = ? AND date = ?", [text.trim().slice(0, 500) || null, userId, date]);
+  let effect: { date: string; title: string; verdict: Verdict } | null = null;
+  if (date === today) {
+    const c = await one<CheckinRow>("SELECT date, sleep, legs, motivation, pain, note, pain_zones, sleep_h, rhr, hrv FROM checkins WHERE user_id = ? AND date = ?", [userId, today]);
+    const open = (await adaptable(userId, today)).length > 0;
+    if (c) { const d = await decideFor(userId, today, c); for (const p of await adaptable(userId, today)) if (p.template !== "strength" || d.verdict === "rest") { const title = p.original ? (JSON.parse(p.original) as PlannedLike).title : p.title; await applyVerdict(p, d.verdict); if (d.verdict !== "ok" && !effect) effect = { date: today, title, verdict: d.verdict }; } }
+    else effect = await applyTo(userId, today, noteCap(signals, true));
+    if (!open) effect = await applyTo(userId, addDays(today, 1), noteCap(signals, false));
+  } else if (date > today) {
+    effect = await applyTo(userId, date, noteCap(signals, true));
+  }
+  return { note: text.trim().slice(0, 500) || null, signals, effect };
 }
 
 async function applyVerdict(p: PlanRow, v: Verdict) {
@@ -176,7 +238,9 @@ export async function dashboard(userId: number, today: string) {
     all<PlanRow>("SELECT * FROM plan_sessions WHERE user_id = ? AND date >= ? AND date <= ? ORDER BY date", [userId, today, addDays(today, 7)]),
     one<{ n: number }>("SELECT COUNT(*) AS n FROM plan_sessions WHERE user_id = ? AND date > ?", [userId, today]),
   ]);
-  const decision = checkin ? decide({ ...checkin, zones: painZonesOf(checkin), watch: await watchOf(userId, today, checkin) }, tl, today, goal?.date) : null;
+  const dayNote = await loadNote(userId, today);
+  if (checkin) checkin.note = dayNote?.note ?? null;
+  const decision = checkin ? await decideFor(userId, today, checkin) : null;
   const daysToGoal = goal ? diffDays(today, goal.date) : null;
   return {
     today,
@@ -184,6 +248,8 @@ export async function dashboard(userId: number, today: string) {
     goal: goal ? { name: goal.name, date: goal.date, distance_km: goal.distance_km, gain_m: goal.gain_m, daysToGoal, phase: upcoming[0]?.phase ?? phaseFor(daysToGoal), verdict: readPlanMeta(goal)?.verdict ?? null } : null,
     load: { atl: tl.atl, ctl: tl.ctl, form: tl.form, ratio: tl.ratio, monotony: tl.monotony, load7: tl.load7, calibrated: tl.calibrated, historyDays: tl.historyDays },
     checkin, decision,
+    // Commentaire du jour (écrit au check-in ou dans le calendrier) et ce que l’IA y a lu.
+    dayNote: dayNote ? { note: dayNote.note, resume: dayNote.signals?.resume ?? null } : null,
     todayPlan: upcoming.find((p) => p.date === today) ?? null,
     tomorrowPlan: upcoming.find((p) => p.date === addDays(today, 1)) ?? null,
     upcoming,
@@ -310,10 +376,11 @@ export async function calendarView(userId: number, today: string, from: string, 
        WHERE p.user_id = ? AND p.date BETWEEN ? AND ? ORDER BY p.date, p.id`, [userId, from, to]),
     all<{ id: number; date: string; sport: Sport; name: string | null; duration_min: number; distance_km: number | null; gain_m: number | null; source: string }>(
       "SELECT id, date, sport, name, duration_min, distance_km, gain_m, source FROM activities WHERE user_id = ? AND date BETWEEN ? AND ? ORDER BY date, id", [userId, from, to]),
-    all<{ date: string; sleep: number; legs: number; motivation: number; pain: number; note: string | null }>(
-      "SELECT date, sleep, legs, motivation, pain, note FROM checkins WHERE user_id = ? AND date BETWEEN ? AND ?", [userId, from, to]),
+    all<{ date: string; sleep: number; legs: number; motivation: number; pain: number; pain_zones: string | null; sleep_h: number | null; rhr: number | null; hrv: number | null }>(
+      "SELECT date, sleep, legs, motivation, pain, pain_zones, sleep_h, rhr, hrv FROM checkins WHERE user_id = ? AND date BETWEEN ? AND ?", [userId, from, to]),
     loadGoal(userId), loadSideRaces(userId), loadAbsence(userId, today),
   ]);
+  const notes = await all<{ date: string; note: string; signals: string | null }>("SELECT date, note, signals FROM day_notes WHERE user_id = ? AND date BETWEEN ? AND ?", [userId, from, to]);
   const attached = new Set(sessions.map((p) => p.activity_id).filter((x): x is number => x != null));
   return {
     today, from, to,
@@ -323,7 +390,10 @@ export async function calendarView(userId: number, today: string, from: string, 
     })),
     // Sorties qui ne valident aucune séance du plan (jour de repos, deuxième sortie, vélo…).
     extras: acts.filter((a) => !attached.has(a.id)),
-    checkins: checks.map((c) => ({ date: c.date, note: c.note, score: Math.max(0, Math.min(100, Math.round(((c.sleep + c.legs + c.motivation - 3) / 12) * 100 - c.pain * 12))) })),
+    // Check-in complet de chaque jour : ce que tu avais déclaré, pour le relire plus tard.
+    checkins: checks.map((c) => ({ date: c.date, sleep: c.sleep, legs: c.legs, motivation: c.motivation, pain: c.pain, zones: painZonesOf(c), sleepH: c.sleep_h, rhr: c.rhr, hrv: c.hrv,
+      score: Math.max(0, Math.min(100, Math.round(((c.sleep + c.legs + c.motivation - 3) / 12) * 100 - c.pain * 12))) })),
+    notes: notes.map((n) => ({ date: n.date, note: n.note, resume: readSignals(n.signals)?.resume ?? null })),
     races: [
       ...(goal && goal.date >= from && goal.date <= to ? [{ date: goal.date, name: goal.name, main: true }] : []),
       ...sides.filter((r) => r.date >= from && r.date <= to).map((r) => ({ date: r.date, name: r.name, main: false })),

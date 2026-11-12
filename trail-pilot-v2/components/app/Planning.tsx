@@ -99,6 +99,11 @@ export default function Planning({ me, refresh, toast, go }: Ctx) {
       toast(`${a.title} déplacée au ${dayLabel(date, { weekday: "long", day: "numeric", month: "long" })}.`);
     } catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }
   }
+  async function restore(s: Session) {
+    try { await api(`/api/plan/${s.id}`, { method: "PATCH", body: { restore: true } }); await Promise.all([load(), refresh()]); toast("Séance prévue rétablie."); }
+    catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }
+  }
+  const noted = async () => { await Promise.all([load(), refresh()]); };
   const [away, setAway] = useState(false);
   const saved = async (msg: string) => { setEditing(false); await Promise.all([load(), refresh()]); toast(msg); };
 
@@ -116,7 +121,7 @@ export default function Planning({ me, refresh, toast, go }: Ctx) {
             <LearningCard l={v.learning} onToggle={async (off) => { try { await api("/api/plan", { method: "PATCH", body: { learningOff: off, today: v.today } }); await Promise.all([load(), refresh()]); toast(off ? "Plan d’origine rétabli, sans ajustement." : "Ajustements réactivés."); } catch (e) { toast(e instanceof Error ? e.message : "Erreur"); } }} />
       {away && <AbsenceSheet a={v.absence ?? null} today={v.today} onClose={() => setAway(false)} onSaved={async (msg) => { setAway(false); await Promise.all([load(), refresh()]); toast(msg); }} />}
             <p className="muted small" style={{ margin: 0 }}>Sans course choisie, Trail Pilot te propose 3 semaines pour garder ta forme, à partir de ce que tu fais en ce moment.</p>
-            <PlanBoard today={v.today} rev={rev} targets={me.targets} onStatus={setStatus} onWhere={whereTo} onMoveTo={moveTo}>
+            <PlanBoard today={v.today} rev={rev} targets={me.targets} onStatus={setStatus} onWhere={whereTo} onMoveTo={moveTo} onRestore={restore} onChanged={noted}>
               <WeekList sessions={v.sessions} weeks={[]} today={me.today} doneByWeek={v.doneByWeek} onStatus={setStatus} targets={me.targets} onWhere={whereTo} onMove={move} />
             </PlanBoard>
           </section>
@@ -141,7 +146,7 @@ export default function Planning({ me, refresh, toast, go }: Ctx) {
       {away && <AbsenceSheet a={v.absence ?? null} today={v.today} onClose={() => setAway(false)} onSaved={async (msg) => { setAway(false); await Promise.all([load(), refresh()]); toast(msg); }} />}
       <RaceHeader p={p} />
       <section className="card plan-board" style={{ marginTop: 14 }}>
-        <PlanBoard today={v.today} rev={rev} targets={me.targets} onStatus={setStatus} onWhere={whereTo} onMoveTo={moveTo}>
+        <PlanBoard today={v.today} rev={rev} targets={me.targets} onStatus={setStatus} onWhere={whereTo} onMoveTo={moveTo} onRestore={restore} onChanged={noted}>
           <WeekList sessions={v.sessions} weeks={p.weeks} today={v.today} doneByWeek={v.doneByWeek} onStatus={setStatus} targets={me.targets} onWhere={whereTo} onMove={move} />
         </PlanBoard>
       </section>

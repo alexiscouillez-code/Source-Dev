@@ -167,4 +167,15 @@ export const MIGRATIONS: { tag: string; statements: string[] }[] = [
       `ALTER TABLE profiles ADD COLUMN home TEXT`,
     ],
   },
+  {
+    tag: "010_day_notes",
+    statements: [
+      // Commentaire libre d’un jour (check-in ou calendrier) et ce que l’IA y a lu (signaux), pour adapter le plan.
+      `CREATE TABLE IF NOT EXISTS day_notes (
+        user_id INTEGER NOT NULL REFERENCES app_users(id) ON DELETE CASCADE, date TEXT NOT NULL,
+        note TEXT NOT NULL, signals TEXT, updated_at INTEGER NOT NULL, PRIMARY KEY (user_id, date))`,
+      `INSERT OR IGNORE INTO day_notes(user_id, date, note, signals, updated_at)
+         SELECT user_id, date, note, NULL, created_at FROM checkins WHERE note IS NOT NULL AND TRIM(note) != ''`,
+    ],
+  },
 ];

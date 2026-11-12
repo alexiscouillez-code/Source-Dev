@@ -8,12 +8,14 @@ import { SessionTarget } from "./Targets";
 import { dayOf, useForecast } from "./useForecast";
 import { downloadWorkout } from "./workout";
 import { ReviewLine } from "./Planning";
+import { ZONES } from "@/lib/engine/legs";
 
 interface Extra { id: number; date: string; sport: string; name: string | null; duration_min: number; distance_km: number | null; gain_m: number | null; source: string }
 interface CalData {
   month: string; today: string; from: string; to: string;
   sessions: PlanSession[]; extras: Extra[];
-  checkins: { date: string; note: string | null; score: number }[];
+  checkins: { date: string; sleep: number; legs: number; motivation: number; pain: number; zones: string[]; sleepH: number | null; rhr: number | null; hrv: number | null; score: number }[];
+  notes: { date: string; note: string; resume: string | null }[];
   races: { date: string; name: string; main: boolean }[];
   absence: Absence | null;
 }
@@ -36,7 +38,10 @@ const shortMin = (m: number) => (m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? Str
  * coche = faite). Toucher un jour ouvre son détail sous la grille : séance, réalisé, sorties hors plan,
  * commentaire du check-in. « Déplacer » puis toucher un autre jour change la date d’une séance.
  */
-export default function PlanCalendar({ today, rev, targets, onStatus, onWhere, onMoveTo }: {
+export default function PlanCalendar({ today, rev, targets, onStatus, onWhere, onMoveTo, onRestore, onChanged }: {
+  onRestore: (s: PlanSession) => void;
+  /** Un commentaire a été enregistré : le planning a pu changer. */
+  onChanged: () => Promise<void> | void;
   today: string; rev: number; targets?: Targets;
   onStatus: (s: PlanSession, status: string) => void;
   onWhere: (s: PlanSession) => void;
@@ -63,13 +68,14 @@ export default function PlanCalendar({ today, rev, targets, onStatus, onWhere, o
     return out;
   }, [data]);
   const byDay = useMemo(() => {
-    const m = new Map<string, { sessions: PlanSession[]; extras: Extra[]; race: CalData["races"][number] | null; check: CalData["checkins"][number] | null }>();
+    const m = new Map<string, { sessions: PlanSession[]; extras: Extra[]; race: CalData["races"][number] | null; check: CalData["checkins"][number] | null; note: CalData["notes"][number] | null }>();
     if (!data) return m;
-    const get = (d: string) => { if (!m.has(d)) m.set(d, { sessions: [], extras: [], race: null, check: null }); return m.get(d)!; };
+    const get = (d: string) => { if (!m.has(d)) m.set(d, { sessions: [], extras: [], race: null, check: null, note: null }); return m.get(d)!; };
     for (const s of data.sessions) get(s.date).sessions.push(s);
     for (const a of data.extras) get(a.date).extras.push(a);
     for (const r of data.races) get(r.date).race = r;
     for (const c of data.checkins) get(c.date).check = c;
+    for (const n of data.notes ?? []) get(n.date).note = n;
     return m;
   }, [data]);
   const inAbsence = (d: string) => !!data?.absence && d >= data.absence.start && d <= data.absence.end;
@@ -110,11 +116,11 @@ export default function PlanCalendar({ today, rev, targets, onStatus, onWhere, o
                 {w.map((d) => {
                   const x = byDay.get(d);
                   const out = d.slice(0, 7) !== month;
-                  const label = [dayLabel(d), x?.race ? `course ${x.race.name}` : "", ...(x?.sessions ?? []).map((s) => `${s.title}, ${fmtDur(s.duration_min)}, ${STATUS[s.status] ?? s.status}`), ...(x?.extras ?? []).map((a) => `sortie hors plan ${fmtDur(a.duration_min)}`), x?.check?.note ? "commentaire au check-in" : "", inAbsence(d) ? "imprévu" : ""].filter(Boolean).join(" · ");
+                  const label = [dayLabel(d), x?.race ? `course ${x.race.name}` : "", ...(x?.sessions ?? []).map((s) => `${s.title}, ${fmtDur(s.duration_min)}, ${STATUS[s.status] ?? s.status}`), ...(x?.extras ?? []).map((a) => `sortie hors plan ${fmtDur(a.duration_min)}`), x?.note ? "commentaire" : "", x?.check ? "check-in fait" : "", inAbsence(d) ? "imprévu" : ""].filter(Boolean).join(" · ");
                   return (
                     <button key={d} role="gridcell" aria-selected={sel === d} aria-label={label} onClick={() => pick(d)}
                       className={`cal-day ${out ? "out" : ""} ${d === today ? "today" : ""} ${sel === d ? "sel" : ""} ${d < today ? "past" : ""} ${inAbsence(d) ? "abs" : ""} ${moving && d >= today && d !== moving.date ? "drop" : ""}`}>
-                      <span className="cal-num">{Number(d.slice(8))}{x?.race && <i className="cal-flag" aria-hidden="true">⚑</i>}{x?.check?.note && <i className="cal-note" aria-hidden="true" />}</span>
+                      <span className="cal-num">{Number(d.slice(8))}{x?.race && <i className="cal-flag" aria-hidden="true">⚑</i>}{x?.note && <i className="cal-note" aria-hidden="true" />}</span>
                       <span className="cal-evs" aria-hidden="true">
                         {x?.sessions.filter((s) => s.template !== "race").map((s) => (
                           <span key={s.id} className={`ev ev-${kindOf(s.template)} st-${s.status}`}>{s.status === "done" && <b>✓</b>}<em>{s.title}</em><small>{shortMin(s.status === "done" && s.a_duration ? s.a_duration : s.duration_min)}</small></span>
@@ -164,6 +170,7 @@ export default function PlanCalendar({ today, rev, targets, onStatus, onWhere, o
                   </>
                 )}
                 {(s.status === "skipped" || (s.status === "done" && !s.activity_id)) && <button className="btn ghost sm" onClick={() => onStatus(s, "planned")}><IconUndo />Rétablir</button>}
+                {s.original && movable(s, today) && <button className="btn ghost sm" onClick={() => onRestore(s)}><IconUndo />Rétablir la séance prévue</button>}
                 {s.status === "missed" && <button className="btn ghost sm" onClick={() => onStatus(s, "done")}><IconCheck />Je l’ai faite</button>}
               </div>
             </article>
@@ -174,11 +181,73 @@ export default function PlanCalendar({ today, rev, targets, onStatus, onWhere, o
               <div className="s">Hors plan · {SPORT_LABEL[a.sport] ?? a.sport} · {fmtDur(a.duration_min)}{a.distance_km ? ` · ${fmtKm(a.distance_km)} km` : ""}{a.gain_m ? ` · ${fmtNum(a.gain_m)} m D+` : ""}{a.source === "strava" ? " · Strava" : ""}</div>
             </article>
           ))}
-          {day?.check?.note && <blockquote className="cal-comment"><small>Commentaire du check-in</small>{day.check.note}</blockquote>}
+          {day?.check && <CheckinRecap c={day.check} />}
+          <DayComment key={sel} date={sel} today={today} note={day?.note ?? null} onSaved={onChanged} />
           {!day?.sessions.length && !day?.extras.length && !day?.race && <p className="muted" style={{ margin: 0 }}>{absent ? "Rien de prévu." : sel < today ? "Jour de repos." : "Repos prévu."}</p>}
         </div>
       )}
     </div>
+  );
+}
+
+/** Le check-in tel qu’il a été rempli ce jour-là. */
+function CheckinRecap({ c }: { c: CalData["checkins"][number] }) {
+  const pain = ["aucune", "légère gêne", "marquée"][c.pain] ?? "—";
+  const zones = c.zones.map((z) => (ZONES as Record<string, string>)[z] ?? z).join(", ");
+  const h = (v: number) => `${Math.floor(v)} h ${String(Math.round((v % 1) * 60)).padStart(2, "0")}`;
+  return (
+    <section className="cal-ci" aria-label="Check-in de ce jour">
+      <small className="cal-kicker">Check-in du matin</small>
+      <dl>
+        <div><dt>Sommeil</dt><dd>{c.sleep}/5</dd></div>
+        <div><dt>Jambes</dt><dd>{c.legs}/5</dd></div>
+        <div><dt>Motivation</dt><dd>{c.motivation}/5</dd></div>
+        <div><dt>Douleur</dt><dd>{pain}{zones ? ` (${zones.toLowerCase()})` : ""}</dd></div>
+        {c.sleepH != null && <div><dt>Nuit</dt><dd>{h(c.sleepH)}</dd></div>}
+        {c.rhr != null && <div><dt>FC au réveil</dt><dd>{c.rhr} bpm</dd></div>}
+        {c.hrv != null && <div><dt>VFC</dt><dd>{c.hrv} ms</dd></div>}
+      </dl>
+    </section>
+  );
+}
+
+const EFFECT: Record<string, string> = { lite: "allégée", rest: "remplacée par du repos actif" };
+
+/** Commentaire libre du jour : modifiable depuis le calendrier, lu par l’IA, qui peut alléger la séance concernée. */
+function DayComment({ date, today, note, onSaved }: { date: string; today: string; note: CalData["notes"][number] | null; onSaved: () => Promise<void> | void }) {
+  const [text, setText] = useState(note?.note ?? "");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  // Dernier texte enregistré : le champ n’est jamais réinitialisé pendant que tu écris.
+  const [base, setBase] = useState(note?.note ?? "");
+  const dirty = text.trim() !== base;
+  async function save(e: React.FormEvent) {
+    e.preventDefault(); setBusy(true); setErr(null);
+    try {
+      const r = await api<{ signals: { resume: string } | null; effect: { date: string; title: string; verdict: string } | null }>("/api/notes", { method: "PUT", body: { date, today, note: text } });
+      const m = !text.trim() ? "Commentaire supprimé." : r.effect
+        ? `${r.effect.title} (${dayLabel(r.effect.date, { weekday: "long", day: "numeric", month: "long" })}) : séance ${EFFECT[r.effect.verdict] ?? "adaptée"}. Tu peux la rétablir si tu n’es pas d’accord.`
+        : date < today ? "Commentaire enregistré dans ton carnet." : "Commentaire enregistré : rien à changer dans ton planning.";
+      setBase(text.trim()); setMsg(m);
+      await onSaved();
+    } catch (e2) { setErr(e2 instanceof Error ? e2.message : "Erreur"); }
+    finally { setBusy(false); }
+  }
+  return (
+    <form className="cal-comment" onSubmit={save}>
+      <label><small className="cal-kicker">Commentaire du jour</small>
+        <textarea value={text} onChange={(e) => { setText(e.target.value); setMsg(null); }} maxLength={500} rows={2}
+          placeholder={date > today ? "Déplacement, peu de temps, événement prévu ce jour-là…" : "Sensations, fatigue, douleur, contexte de la journée…"} />
+      </label>
+      {note?.resume && !dirty && note.note === base && <p className="cal-ai"><b>Compris par le coach :</b> {note.resume}</p>}
+      {msg && <p className="cal-ai ok" role="status">{msg}</p>}
+      {err && <p className="note err" role="alert">{err}</p>}
+      <div className="row between">
+        <small className="muted">{date < today ? "Gardé dans ton carnet." : "Lu par l’IA du coach, qui peut alléger la séance concernée."}</small>
+        <button className="btn sm" disabled={busy || !dirty}>{busy ? "Analyse…" : "Enregistrer"}</button>
+      </div>
+    </form>
   );
 }
 
