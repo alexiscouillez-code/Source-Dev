@@ -1,5 +1,6 @@
 "use client";
 
+import Fold from "./Fold";
 import { useEffect, useState } from "react";
 import { api, fmtNum, localToday } from "./client";
 import { refreshForecast, useForecast } from "./useForecast";
@@ -31,8 +32,7 @@ export function HomeCard({ toast }: { toast: Toast }) {
 
   const has = f.status === "ok" || f.status === "error";
   return (
-    <section className="card">
-      <div className="card-head"><h2>Lieu d’entraînement</h2><span className={`chip ${has ? "ok" : "dim"}`}><span className="dot" />{has ? "Météo active" : "Non défini"}</span></div>
+    <Fold id="acc-home" title="Lieu d’entraînement" aside={<><span className={`chip ${has ? "ok" : "dim"}`}><span className="dot" />{has ? "Météo active" : "Non défini"}</span></>}>
       <p className="soft small" style={{ margin: 0 }}>
         Là où tu cours d’habitude. Les allures de tes séances sont corrigées selon la chaleur annoncée (et des consignes s’affichent par vent fort, pluie, neige ou orage), sur les 15 prochains jours.
       </p>
@@ -57,7 +57,7 @@ export function HomeCard({ toast }: { toast: Toast }) {
           ) : <p className="muted small" style={{ margin: 0 }}>Aucun lieu trouvé. Essaie le nom de la commune.</p>)}
         </form>
       )}
-    </section>
+    </Fold>
   );
 }
 
@@ -91,8 +91,7 @@ export function ShoesCard({ toast }: { toast: Toast }) {
   const active = shoes?.filter((s) => !s.retired) ?? [], retired = shoes?.filter((s) => s.retired) ?? [];
   const alert = active.filter((s) => s.wear !== "ok").length;
   return (
-    <section className="card shoes">
-      <div className="card-head"><h2>Mes chaussures</h2>{alert > 0 ? <span className="chip warn"><span className="dot" />{alert} à surveiller</span> : <span className="chip dim">{active.length} paire{active.length > 1 ? "s" : ""}</span>}</div>
+    <Fold id="acc-shoes" title="Mes chaussures" className="shoes" aside={<>{alert > 0 ? <span className="chip warn"><span className="dot" />{alert} à surveiller</span> : <span className="chip dim">{active.length} paire{active.length > 1 ? "s" : ""}</span>}</>}>
       {shoes && !active.length && !adding && <p className="soft small" style={{ margin: 0 }}>Ajoute tes paires : chaque sortie leur est attribuée selon le terrain, et tu sais quand les changer (en général entre 600 et 900 km).</p>}
       <ul className="shoe-list">
         {active.map((s) => {
@@ -133,6 +132,6 @@ export function ShoesCard({ toast }: { toast: Toast }) {
       {showRetired && retired.length > 0 && (
         <ul className="shoe-list old">{retired.map((s) => <li key={s.id} className="row between"><span>{s.name} <small className="muted">· {fmtNum(Math.round(s.km))} km</small></span><button className="btn ghost sm" disabled={busy} onClick={() => patch(s.id, { retired: false }, `${s.name} ressortie du placard.`)}>Ressortir</button></li>)}</ul>
       )}
-    </section>
+    </Fold>
   );
 }

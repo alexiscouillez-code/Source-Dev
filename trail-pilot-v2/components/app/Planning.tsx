@@ -16,6 +16,7 @@ import RaceStrategy from "./RaceStrategy";
 import RaceWeather from "./RaceWeather";
 import SideRaces, { type SideRaceRow } from "./SideRaces";
 import PlanCalendar from "./PlanCalendar";
+import Fold from "./Fold";
 import type { RaceRoute, WeatherAdjust } from "@/lib/engine/strategy";
 
 type Verdict = "solide" | "ambitieux" | "risque" | "court";
@@ -147,16 +148,15 @@ export default function Planning({ me, refresh, toast, go }: Ctx) {
       <RaceWeather key={v.goal.route?.uploadedAt ?? 0} toast={toast} onAdjust={setWx} />
       <RaceStrategy raceName={v.goal.name} raceDate={v.goal.date} route={v.goal.route ?? null} estimate={p.estimate} weather={wx} toast={toast} onChanged={async () => { await Promise.all([load(), refresh()]); }} />
       <SideRaces races={v.races} today={v.today} mainDate={v.goal.date} toast={toast} onChanged={async () => { await Promise.all([load(), refresh()]); }} />
-      <div className="grid g2" style={{ marginTop: 14 }}>
+      <div className="grid g2 folds" style={{ marginTop: 14 }}>
         <Needs p={p} />
-        <section className="card">
-          <div className="card-head"><h2>Volume semaine par semaine</h2><span className="chip">Jusqu’au jour J</span></div>
+        <Fold id="plan-volume" title="Volume semaine par semaine" aside={<span className="chip">{p.weeks.length} semaines</span>}>
           <WeekChart weeks={p.weeks} done={v.doneByWeek} today={v.today} />
           <div className="legend">
             {["Fondation", "Développement", "Spécifique", "Affûtage"].filter((ph) => p.weeks.some((w) => w.phase === ph)).map((ph) => <span key={ph}><i style={{ background: PHASE_COLOR[ph], height: 8 }} />{ph}</span>)}
             <span><i style={{ background: "var(--snow)", height: 3 }} />Réalisé</span>
           </div>
-        </section>
+        </Fold>
       </div>
       <p className="muted small" style={{ marginTop: 12, maxWidth: "75ch" }}>
         Le plan part de ta charge réelle (séances des 4 dernières semaines, fatigue et forme de fond) et se recalcule chaque lundi.
@@ -233,8 +233,7 @@ function Needs({ p }: { p: RacePlan }) {
     { k: "Dénivelé par semaine", now: p.current.weeklyGain, reach: Math.max(...p.weeks.map((w) => w.gainM)), need: p.demands.weeklyGain, fmt: (n: number) => `${fmtNum(n)} m` },
   ];
   return (
-    <section className="card">
-      <div className="card-head"><h2>Ce qu’il faut pour finir</h2></div>
+    <Fold id="plan-needs" title="Ce qu’il faut pour finir" aside={<span className="chip dim">{rows.filter((r) => r.reach >= r.need * 0.95).length}/{rows.length} repères atteints</span>}>
       {rows.map((r) => {
         const max = Math.max(r.need, r.reach, r.now) || 1;
         return (
@@ -252,7 +251,7 @@ function Needs({ p }: { p: RacePlan }) {
         <span><i className="key now" />Aujourd’hui</span><span><i className="key reach" />Atteint par le plan</span><span><i className="key need" />Conseillé pour finir</span>
       </div>
       {p.demands.backToBack && <p className="muted small" style={{ margin: 0 }}>Au-delà de 6 h de course, les sorties longues sont complétées par des enchaînements sur deux jours plutôt que rallongées sans fin.</p>}
-    </section>
+    </Fold>
   );
 }
 

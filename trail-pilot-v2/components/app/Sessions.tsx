@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import Fold, { useFold } from "./Fold";
 import type { Ctx } from "./AppShell";
 import { api, dayLabel, dayNum, fmtDur, fmtKm, fmtNum, localToday, shortDay, SPORT_LABEL, type Activity, type Me } from "./client";
 import { IconPin, IconPlus, IconSync, IconTrash } from "./icons";
@@ -43,7 +44,9 @@ export default function Sessions({ me, refresh, toast }: Ctx) {
   const fileRef = useRef<HTMLInputElement>(null), mapRef = useRef<HTMLElement>(null);
   const lines = useMemo(() => (acts ?? []).filter((a) => a.track).map((a) => ({ poly: a.track!, id: a.id, highlight: a.id === focus, label: `${a.name ?? SPORT_LABEL[a.sport]} · ${shortDay(a.date)} ${dayNum(a.date)}` })), [acts, focus]);
   const focused = acts?.find((a) => a.id === focus) ?? null;
-  const showOnMap = (id: number) => { setFocus(id); mapRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); };
+  const [mapOpen, setMapOpen] = useFold("runs-map", false);
+  // « Voir sur la carte » déplie la carte si besoin, puis l’amène à l’écran.
+  const showOnMap = (id: number) => { setFocus(id); setMapOpen(true); requestAnimationFrame(() => mapRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })); };
 
   const load = useCallback(async () => { const r = await api<{ activities: Activity[]; shoes?: MiniShoe[] }>("/api/activities"); setActs(r.activities); setShoes(r.shoes ?? []); }, []);
   useEffect(() => { load().catch((e) => toast(e.message)); }, [load, toast]);
@@ -100,11 +103,11 @@ export default function Sessions({ me, refresh, toast }: Ctx) {
       {me.strava.lastError && <p className="note err" style={{ marginBottom: 14 }}>Strava : {me.strava.lastError}</p>}
 
       {lines.length > 0 && (
-        <section className="card" ref={mapRef} style={{ marginBottom: 14, scrollMarginTop: 16 }}>
-          <div className="card-head"><h2>Carte de tes sorties</h2><span className="chip">{lines.length} tracé{lines.length > 1 ? "s" : ""}</span></div>
+        <Fold id="runs-map" title="Carte de tes sorties" open={mapOpen} onToggle={setMapOpen} sectionRef={mapRef} style={{ marginBottom: 14, scrollMarginTop: 16 }}
+          aside={<span className="chip">{lines.length} tracé{lines.length > 1 ? "s" : ""}</span>}>
           <TrackMap lines={lines} onSelect={setFocus} height={300} label="Carte des sorties des 90 derniers jours" />
           <p className="muted small" style={{ margin: 0 }}>{focused ? <>Sélection : <b style={{ color: "var(--snow)" }}>{focused.name ?? SPORT_LABEL[focused.sport]}</b>, {dayLabel(focused.date, { weekday: "long", day: "numeric", month: "long" })}{focused.distance_km ? ` · ${fmtKm(focused.distance_km)} km` : ""}. <button className="link" onClick={() => setFocus(null)}>Tout afficher</button></> : "Touche un tracé pour voir la sortie. Les sorties Strava et les fichiers de montre avec GPS apparaissent ici."}</p>
-        </section>
+        </Fold>
       )}
 
       {shoes.filter((s) => !s.retired && s.wear !== "ok").map((s) => (

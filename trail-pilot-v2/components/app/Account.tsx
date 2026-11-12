@@ -1,5 +1,6 @@
 "use client";
 
+import Fold from "./Fold";
 import { useEffect, useState } from "react";
 import type { Ctx } from "./AppShell";
 import { api, DAYS } from "./client";
@@ -9,7 +10,7 @@ export default function Account({ me, refresh, toast, go }: Ctx) {
   return (
     <>
       <header className="head"><div><span className="eyebrow">{me.user.email}</span><h1>Compte</h1></div><a className="btn ghost sm" href="/api/auth/logout">Se déconnecter</a></header>
-      <div className="grid g2">
+      <div className="grid g2 folds">
         <RaceCard me={me} go={go} />
         <ProfileCard me={me} refresh={refresh} toast={toast} />
         <ShoesCard toast={toast} />
@@ -40,15 +41,14 @@ function useSubmit(toast: Ctx["toast"]) {
 function RaceCard({ me, go }: Pick<Ctx, "me" | "go">) {
   const g = me.goal;
   return (
-    <section className="card">
-      <div className="card-head"><h2>Ma course</h2>{g && <span className="chip ember">{g.daysToGoal! > 0 ? `J-${g.daysToGoal}` : "Jour J"}</span>}</div>
+    <Fold id="acc-goal" title="Ma course" defaultOpen aside={<>{g && <span className="chip ember">{g.daysToGoal! > 0 ? `J-${g.daysToGoal}` : "Jour J"}</span>}</>}>
       {g ? (
         <p className="soft" style={{ margin: 0 }}><b style={{ color: "var(--snow)" }}>{g.name}</b>, le {new Date(`${g.date}T12:00:00`).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}{g.distance_km ? ` · ${String(g.distance_km).replace(".", ",")} km` : ""}{g.gain_m ? ` · ${g.gain_m} m D+` : ""}.</p>
       ) : (
         <p className="soft" style={{ margin: 0 }}>Aucune course choisie. Choisis-en une pour obtenir un plan d’entraînement jusqu’au jour J.</p>
       )}
       <button className="btn ghost" style={{ justifySelf: "start" }} onClick={() => go("plan")}>{g ? "Voir mon plan" : "Choisir ma course"}</button>
-    </section>
+    </Fold>
   );
 }
 
@@ -57,8 +57,7 @@ function ProfileCard({ me, refresh, toast }: P) {
   const [f, setF] = useState({ name: me.user.name ?? "", level: p.level, daysPerWeek: p.days_per_week, longDay: p.long_day, maxWeeklyMinutes: p.max_weekly_minutes?.toString() ?? "", hrMax: p.hr_max?.toString() ?? "", hrRest: p.hr_rest?.toString() ?? "", vo2Watch: p.vo2_watch?.toString().replace(".", ",") ?? "" });
   const { busy, err, run } = useSubmit(toast);
   return (
-    <section className="card">
-      <div className="card-head"><h2>Profil d’entraînement</h2></div>
+    <Fold id="acc-profile" title="Profil d’entraînement">
       <form className="form" onSubmit={(e) => { e.preventDefault(); run(async () => { await api("/api/profile", { method: "PUT", body: { ...f, vo2Watch: f.vo2Watch.replace(",", ".") } }); await refresh(); }, "Profil enregistré, planning recalculé."); }}>
         <div className="fields">
           <label className="field">Prénom<input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} maxLength={80} /></label>
@@ -81,7 +80,7 @@ function ProfileCard({ me, refresh, toast }: P) {
         {err && <p className="note err">{err}</p>}
         <button className="btn" type="submit" disabled={busy}>Enregistrer</button>
       </form>
-    </section>
+    </Fold>
   );
 }
 
@@ -89,8 +88,7 @@ function StravaCard({ me, refresh, toast }: P) {
   const s = me.strava;
   const { busy, err, run } = useSubmit(toast);
   return (
-    <section className="card">
-      <div className="card-head"><h2>Strava</h2><span className={`chip ${s.connected ? "ok" : "dim"}`}><span className="dot" />{s.connected ? "Connecté" : "Non connecté"}</span></div>
+    <Fold id="acc-strava" title="Strava" aside={<><span className={`chip ${s.connected ? "ok" : "dim"}`}><span className="dot" />{s.connected ? "Connecté" : "Non connecté"}</span></>}>
       {!s.configured ? (
         <p className="muted" style={{ margin: 0 }}>La connexion Strava n’est pas encore activée sur le site.</p>
       ) : s.connected ? (
@@ -109,7 +107,7 @@ function StravaCard({ me, refresh, toast }: P) {
           <a className="btn strava" href="/api/strava/connect" style={{ justifySelf: "start" }}>Connecter Strava</a>
         </>
       )}
-    </section>
+    </Fold>
   );
 }
 
@@ -121,14 +119,13 @@ function DataCard({ toast }: Pick<Ctx, "toast">) {
     try { await api("/api/account", { method: "DELETE" }); window.location.assign("/"); } catch (e) { toast(e instanceof Error ? e.message : "Erreur"); setBusy(false); }
   }
   return (
-    <section className="card">
-      <div className="card-head"><h2>Mes données</h2></div>
+    <Fold id="acc-data" title="Mes données">
       <p className="soft" style={{ margin: 0 }}>Tes séances, check-in et ton planning t’appartiennent. Télécharge-les à tout moment au format JSON.</p>
       <div className="row">
         <a className="btn ghost" href="/api/account" download>Exporter mes données</a>
         <button className="btn danger" onClick={del} disabled={busy}>Supprimer mon compte</button>
       </div>
-    </section>
+    </Fold>
   );
 }
 
@@ -174,8 +171,7 @@ function ReminderCard({ me, refresh, toast }: P) {
 
   const on = me.settings.reminder && here;
   return (
-    <section className="card">
-      <div className="card-head"><h2>Rappel du check-in</h2><span className={`chip ${on ? "ok" : "dim"}`}><span className="dot" />{on ? "Activé" : "Désactivé"}</span></div>
+    <Fold id="acc-reminder" title="Rappel du check-in" aside={<><span className={`chip ${on ? "ok" : "dim"}`}><span className="dot" />{on ? "Activé" : "Désactivé"}</span></>}>
       <p className="soft" style={{ margin: 0 }}>Chaque matin vers 7 h, une notification te rappelle ton check-in s’il n’est pas encore fait, avec la séance prévue ce jour-là.</p>
       {!me.push ? <p className="muted small" style={{ margin: 0 }}>Les notifications ne sont pas encore activées sur le site.</p>
         : support === "ios" ? <p className="note small" style={{ margin: 0 }}>Sur iPhone, ajoute d’abord Trail Pilot à l’écran d’accueil (bouton Partager, puis « Sur l’écran d’accueil »), ouvre-le depuis l’icône et reviens ici.</p>
@@ -190,7 +186,7 @@ function ReminderCard({ me, refresh, toast }: P) {
         </div>
       )}
       {me.settings.reminder && !here && support === "ok" && <p className="muted small" style={{ margin: 0 }}>Le rappel est actif sur un autre appareil.</p>}
-    </section>
+    </Fold>
   );
 }
 
@@ -204,8 +200,7 @@ function CalendarCard({ toast }: Pick<Ctx, "toast">) {
     try { await navigator.clipboard.writeText(url!); toast("Lien copié."); } catch { toast("Copie impossible : sélectionne le lien à la main."); }
   }
   return (
-    <section className="card">
-      <div className="card-head"><h2>Agenda</h2><span className={`chip ${url ? "ok" : "dim"}`}><span className="dot" />{url ? "Lien actif" : "Non relié"}</span></div>
+    <Fold id="acc-agenda" title="Agenda" aside={<><span className={`chip ${url ? "ok" : "dim"}`}><span className="dot" />{url ? "Lien actif" : "Non relié"}</span></>}>
       <p className="soft" style={{ margin: 0 }}>Ajoute ton plan à ton agenda : chaque séance apparaît le bon jour, avec sa durée et ses consignes, et se met à jour quand le plan change.</p>
       {url === undefined ? null : url ? (
         <>
@@ -228,7 +223,7 @@ function CalendarCard({ toast }: Pick<Ctx, "toast">) {
           <button className="btn" style={{ justifySelf: "start" }} disabled={busy} onClick={() => run(async () => setUrl((await api<{ url: string }>("/api/calendar", { method: "POST" })).url), "Lien d’agenda créé.")}>Relier mon agenda</button>
         </>
       )}
-    </section>
+    </Fold>
   );
 }
 
@@ -243,15 +238,14 @@ function EmailCard({ me, toast }: Pick<Ctx, "me" | "toast">) {
     u.searchParams.delete("verif"); window.history.replaceState(null, "", u.pathname + u.hash);
   }, []);
   return (
-    <section className="card">
-      <div className="card-head"><h2>Adresse e-mail</h2><span className={`chip ${me.user.emailVerified ? "ok" : "lite"}`}><span className="dot" />{me.user.emailVerified ? "Confirmée" : "À confirmer"}</span></div>
+    <Fold id="acc-email" title="Adresse e-mail" aside={<><span className={`chip ${me.user.emailVerified ? "ok" : "lite"}`}><span className="dot" />{me.user.emailVerified ? "Confirmée" : "À confirmer"}</span></>}>
       <p className="soft" style={{ margin: 0 }}>{me.user.email}. {me.user.emailVerified ? "Tu pourras récupérer ton compte si tu oublies ton mot de passe." : "Confirme-la pour pouvoir récupérer ton compte si tu oublies ton mot de passe."}</p>
       {flash && <p className="note small" style={{ margin: 0 }}>{flash}</p>}
       {err && <p className="note err">{err}</p>}
       {!me.user.emailVerified && (me.mail
         ? <button className="btn ghost" style={{ justifySelf: "start" }} disabled={busy} onClick={() => run(() => api("/api/auth/verify", { method: "POST" }), "E-mail de confirmation envoyé.")}>Renvoyer l’e-mail de confirmation</button>
         : <p className="muted small" style={{ margin: 0 }}>L’envoi d’e-mails n’est pas encore activé sur le site.</p>)}
-    </section>
+    </Fold>
   );
 }
 
@@ -259,13 +253,12 @@ function EmailCard({ me, toast }: Pick<Ctx, "me" | "toast">) {
 function HealthCard({ me, refresh, toast }: P) {
   const { busy, err, run } = useSubmit(toast);
   return (
-    <section className="card">
-      <div className="card-head"><h2>Données de santé</h2><span className={`chip ${me.settings.healthConsent ? "ok" : "dim"}`}><span className="dot" />{me.settings.healthConsent ? "Accord donné" : "Pas d’accord"}</span></div>
+    <Fold id="acc-health" title="Données de santé" aside={<><span className={`chip ${me.settings.healthConsent ? "ok" : "dim"}`}><span className="dot" />{me.settings.healthConsent ? "Accord donné" : "Pas d’accord"}</span></>}>
       <p className="soft" style={{ margin: 0 }}>Au check-in, tu peux indiquer où tu as mal (genou, mollet…) et noter ta FC au réveil et ta VFC, pour que l’X-Ray et la séance du jour en tiennent compte. Ces informations ne sont enregistrées qu’avec ton accord et ne sont jamais partagées.</p>
       {err && <p className="note err">{err}</p>}
       {me.settings.healthConsent
         ? <button className="btn danger" style={{ justifySelf: "start" }} disabled={busy} onClick={() => { if (confirm("Retirer ton accord ? Les zones douloureuses, FC au réveil et VFC déjà enregistrées seront effacées.")) run(async () => { await api("/api/health", { method: "DELETE" }); await refresh(); }, "Accord retiré, données effacées."); }}>Retirer mon accord et effacer</button>
         : <p className="muted small" style={{ margin: 0 }}>Tu pourras donner ton accord dans le check-in, au moment de signaler une douleur ou de noter tes mesures.</p>}
-    </section>
+    </Fold>
   );
 }

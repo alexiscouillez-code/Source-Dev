@@ -1,5 +1,6 @@
 "use client";
 
+import Fold from "./Fold";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motionOk } from "./motion";
 import RaceDay from "./RaceDay";
@@ -89,34 +90,35 @@ export default function RaceStrategy({ route, estimate, onChanged, toast, weathe
     try { await api("/api/goal/trace", { method: "DELETE" }); await onChanged(); } catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }
   }
 
+  // À moins de 3 semaines de la course, la stratégie est dépliée d’office : c’est le moment de la travailler.
+  const soon = !!raceDate && (new Date(`${raceDate}T12:00:00`).getTime() - Date.now()) / 86400000 <= 21;
   const input = <input ref={fileRef} type="file" accept=".gpx,.tcx,application/gpx+xml" hidden onChange={(e) => onFile(e.target.files?.[0])} />;
 
   if (!route || !strat) {
     return (
-      <section className="card strat" style={{ marginTop: 14 }}>
-        <div className="card-head"><h2>Stratégie de course</h2><span className="chip dim">Tracé à importer</span></div>
+      <Fold id="plan-strat" className="strat" style={{ marginTop: 14 }} title="Stratégie de course" defaultOpen={soon} aside={<span className="chip dim">Tracé à importer</span>}>
         <p className="soft" style={{ margin: 0 }}>Importe le GPX du parcours (fourni par l’organisation) : Trail Pilot affiche le profil, découpe la course aux ravitaillements et calcule pour chaque section ton temps de passage et ce qu’il faut boire et manger.</p>
         <div className="row">{input}<button className="btn" disabled={busy} onClick={() => fileRef.current?.click()}>{busy ? "Lecture…" : "Importer le tracé de la course"}</button></div>
-      </section>
+      </Fold>
     );
   }
 
   const aidKms = route.aid.map((a) => a.km);
   return (
-    <section className="card strat" style={{ marginTop: 14 }}>
-      <div className="card-head">
-        <h2 className="tip-label">Stratégie de course<InfoTip title="Comment c’est calculé">
+    <>
+    <Fold id="plan-strat" className="strat" style={{ marginTop: 14 }} title="Stratégie de course" defaultOpen={soon}
+      aside={<span className="chip">{fmtDur(strat.total.low)} – {fmtDur(strat.total.high)}</span>}>
+      <div className="row strat-actions" style={{ gap: 6 }}>
+        <button className="btn sm" onClick={() => setRaceDay(true)}>Mode jour de course</button>
+          {input}
+        <button className="btn ghost sm" onClick={() => window.print()}>Fiche de course</button>
+        <button className="btn ghost sm" disabled={busy} onClick={() => (editAid ? setEditAid(false) : openAid())}>Ravitos et barrières</button>
+        <button className="btn ghost sm" disabled={busy} onClick={() => fileRef.current?.click()}>Changer de tracé</button>
+        <button className="btn ghost sm" onClick={remove} aria-label="Retirer le tracé">Retirer</button>
+        <span className="tip-label small muted">Comment c’est calculé<InfoTip title="Comment c’est calculé">
           <span className="p">Le temps total estimé par ton plan est réparti entre les sections selon leur effort : distance, plus 1 km par 100 m de D+, plus un peu pour la descente. La fatigue qui s’accumule allonge les dernières sections.</span>
           <span className="p">Nutrition : repères usuels en endurance (<em>{strat.perHour.carbs[0]}-{strat.perHour.carbs[1]} g de glucides</em>, <em>{strat.perHour.water[0]}-{strat.perHour.water[1]} ml d’eau</em> et {strat.perHour.sodium[0]}-{strat.perHour.sodium[1]} mg de sodium par heure). À tester à l’entraînement et à ajuster selon la chaleur.</span>
-        </InfoTip></h2>
-        <div className="row" style={{ gap: 6 }}>
-          <button className="btn sm" onClick={() => setRaceDay(true)}>Mode jour de course</button>
-          {input}
-          <button className="btn ghost sm" onClick={() => window.print()}>Fiche de course</button>
-          <button className="btn ghost sm" disabled={busy} onClick={() => (editAid ? setEditAid(false) : openAid())}>Ravitos et barrières</button>
-          <button className="btn ghost sm" disabled={busy} onClick={() => fileRef.current?.click()}>Changer de tracé</button>
-          <button className="btn ghost sm" onClick={remove} aria-label="Retirer le tracé">Retirer</button>
-        </div>
+        </InfoTip></span>
       </div>
 
       {map && <TrackMap lines={map.lines} markers={map.markers} height={320} label={`Carte du parcours : ${fmtKm(route.distanceKm)} km`} />}
@@ -165,10 +167,11 @@ export default function RaceStrategy({ route, estimate, onChanged, toast, weathe
           </div>
         ))}
       </div>
-      {raceDay && <RaceDay route={route} strat={strat} onClose={() => setRaceDay(false)} />}
-      <RaceSheet route={route} strat={strat} name={raceName} date={raceDate} />
       <p className="muted small" style={{ margin: 0 }}>Un gel ou une barre apporte en général 20 à 30 g de glucides. Teste ta stratégie lors de ta sortie test et de tes sorties longues : rien de nouveau le jour J.</p>
-    </section>
+    </Fold>
+    {raceDay && <RaceDay route={route} strat={strat} onClose={() => setRaceDay(false)} />}
+    <RaceSheet route={route} strat={strat} name={raceName} date={raceDate} />
+    </>
   );
 }
 

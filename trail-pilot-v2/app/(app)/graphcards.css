@@ -271,3 +271,20 @@
 .ci-said { margin: 0; padding: 8px 12px; border-left: 3px solid var(--rest); border-radius: 0 10px 10px 0; background: var(--ink-2); font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .ci-said small { display: block; font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--mute); }
 @media (max-width: 699px) { .ev { padding: 2px 2px 2px 3px; gap: 2px; overflow: hidden; } .ev small { font-size: 9.5px; letter-spacing: -.02em; } .ev b { font-size: 9px; } }
+
+/* ---------- Cartes déroulantes ---------- */
+.fold-head { cursor: pointer; align-items: center; gap: 10px; -webkit-tap-highlight-color: transparent; }
+.fold-btn { all: unset; cursor: pointer; font: inherit; color: inherit; letter-spacing: inherit; }
+.fold-btn:focus-visible { outline: 2px solid var(--ember); outline-offset: 4px; border-radius: 6px; }
+.fold-aside { display: inline-flex; align-items: center; gap: 10px; margin-left: auto; flex-shrink: 0; }
+.fold-chev { font-style: normal; font-size: 22px; line-height: 1; color: var(--mute); width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--line); transition: transform .25s var(--ease), color .2s; }
+.fold-head:hover .fold-chev { color: var(--snow); }
+.fold.is-open > .fold-head .fold-chev { transform: rotate(90deg); }
+.fold-body { display: contents; }
+.fold.is-closed { gap: 0; }
+@keyframes fold-in { from { opacity: 0; transform: translateY(-6px); } }
+@media (prefers-reduced-motion: no-preference) { .fold-body > * { animation: fold-in .3s var(--ease) backwards; } }
+@media (prefers-reduced-motion: reduce) { .fold-chev { transition: none; } }
+@media (max-width: 520px) { .fold-aside .chip { max-width: 44vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } }
+.grid.folds { align-items: start; }
+.strat-actions { flex-wrap: wrap; align-items: center; }

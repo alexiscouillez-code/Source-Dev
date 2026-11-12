@@ -1,5 +1,6 @@
 "use client";
 
+import Fold from "./Fold";
 import { useState } from "react";
 import { api, dayLabel, fmtKm, fmtNum, localToday } from "./client";
 import { IconTrash } from "./icons";
@@ -29,11 +30,8 @@ export default function SideRaces({ races, today, mainDate, onChanged, toast }: 
   }
 
   return (
-    <section className="card" style={{ marginTop: 14 }}>
-      <div className="card-head">
-        <h2>Courses de préparation</h2>
-        {!open && <button className="btn ghost sm" onClick={() => setOpen(true)}>Ajouter</button>}
-      </div>
+    <Fold id="plan-sides" style={{ marginTop: 14 }} title="Courses de préparation" aside={<span className={`chip ${upcoming.length ? "" : "dim"}`}>{upcoming.length ? `${upcoming.length} prévue${upcoming.length > 1 ? "s" : ""}` : "Aucune"}</span>}>
+      {!open && <div className="row"><button className="btn ghost sm" onClick={() => setOpen(true)}>Ajouter une course</button></div>}
       {!upcoming.length && !open && <p className="soft small" style={{ margin: 0 }}>Tu fais d’autres courses avant {mainDate ? "ta course principale" : "ton prochain objectif"} ? Ajoute-les : le planning allège les jours d’avant, remplace la sortie longue de la semaine et prévoit la récupération.</p>}
       {upcoming.length > 0 && (
         <ul className="list races">
@@ -68,6 +66,6 @@ export default function SideRaces({ races, today, mainDate, onChanged, toast }: 
           <div className="row"><button className="btn sm" type="submit" disabled={busy}>{busy ? "Calcul…" : "Ajouter au planning"}</button><button type="button" className="btn ghost sm" onClick={() => { setOpen(false); setErr(null); }}>Annuler</button></div>
         </form>
       )}
-    </section>
+    </Fold>
   );
 }

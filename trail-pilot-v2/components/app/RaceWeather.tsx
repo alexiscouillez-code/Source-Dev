@@ -1,5 +1,6 @@
 "use client";
 
+import Fold from "./Fold";
 import { useCallback, useEffect, useState } from "react";
 import { api, dayLabel } from "./client";
 import { weatherAdjust, type WeatherAdjust } from "@/lib/engine/strategy";
@@ -45,9 +46,10 @@ export default function RaceWeather({ toast, onAdjust }: { toast: (m: string) =>
   const askPlace = d.status === "noplace" || edit;
 
   return (
-    <section className="card wx" style={{ marginTop: 14 }}>
-      <div className="card-head">
-        <div><span className="eyebrow">Météo du jour J</span><h2 style={{ marginTop: 4 }}>{d.place?.name ?? "Lieu de départ"}</h2></div>
+    <Fold id="plan-wx" className="wx" style={{ marginTop: 14 }} title="Météo du jour J" defaultOpen={!!adj && adj.tone !== "normal"}
+      aside={<span className={`chip ${adj && adj.tone !== "normal" ? "lite" : "dim"}`}>{d.status === "ok" ? `${d.weather.tMin}° / ${d.weather.tMax}° · ${d.weather.label}` : d.status === "later" ? "Prévision à J-15" : d.status === "noplace" ? "Lieu à indiquer" : "Indisponible"}</span>}>
+      <div className="row between">
+        <b>{d.place?.name ?? "Lieu de départ"}</b>
         {d.place && !d.fromTrace && !edit && <button className="link small" onClick={() => setEdit(true)}>Changer de lieu</button>}
       </div>
 
@@ -80,6 +82,6 @@ export default function RaceWeather({ toast, onAdjust }: { toast: (m: string) =>
           <p className="muted" style={{ margin: 0, fontSize: 11.5 }}>Prévision <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo</a> au point de départ, mise à jour toutes les 3 heures. En montagne, la météo change vite : vérifie le bulletin officiel la veille.</p>
         </>
       ) : null}
-    </section>
+    </Fold>
   );
 }
