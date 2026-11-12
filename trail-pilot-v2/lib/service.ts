@@ -10,6 +10,7 @@ import { assignShoes } from "./shoes";
 import { cleanSignals, noteCap, type NoteSignals } from "./engine/note";
 import { analyzeNote } from "./note-ai";
 import { raceWeather, type Place } from "./weather";
+import { loadCalibration } from "./calibration";
 import { weatherAdjust } from "./engine/strategy";
 import { trainingTargets } from "./engine/paces";
 import { estimateVo2, type Vo2Run } from "./engine/vo2";
@@ -104,7 +105,9 @@ export async function regeneratePlan(userId: number, today: string) {
     const r = buildRacePlan({ today, profile: pp, goal: { name: goal.name, date: goal.date, distanceKm: goal.distance_km, gainM: goal.gain_m }, activities: likes,
       load: { ctl: tl.ctl, atl: tl.atl, ratio: tl.ratio, calibrated: tl.calibrated },
       // Temps de course estimé depuis la VO2max (montre, sinon sorties) plutôt que depuis le niveau déclaré.
-      vdot: estimateVo2(acts.map(toVo2Run), today, { hrMax: profile.hr_max, hrRest: profile.hr_rest, watch: profile.vo2_watch }).paceVdot });
+      vdot: estimateVo2(acts.map(toVo2Run), today, { hrMax: profile.hr_max, hrRest: profile.hr_rest, watch: profile.vo2_watch }).paceVdot,
+      // Estimation recalée sur tes vraies courses (débriefs).
+      calib: await loadCalibration(userId, today) });
     items = r.items;
     const upcoming = sides.filter((s) => s.date > today && s.date < goal.date);
     if (upcoming.length) r.plan.notes.push(`Course${upcoming.length > 1 ? "s" : ""} de préparation intégrée${upcoming.length > 1 ? "s" : ""} au plan : ${upcoming.map((s) => `${s.name} (${s.priority === "B" ? "objectif secondaire" : "entraînement"}, le ${new Date(`${s.date}T12:00:00Z`).toLocaleDateString("fr-FR", { day: "numeric", month: "long", timeZone: "UTC" })})`).join(", ")}. La sortie longue de ces semaines est remplacée par la course, avec allègement avant et récupération après.`);
@@ -417,12 +420,13 @@ export async function sideRaceGuides(userId: number, today: string) {
   const read = (v: string | null): Place | null => { try { return v ? JSON.parse(v) : null; } catch { return null; } };
   const home = read(prof?.home ?? null);
   const vdot = estimateVo2(acts.map(toVo2Run), today, { hrMax: profile.hr_max, hrRest: profile.hr_rest, watch: profile.vo2_watch }).paceVdot;
+  const calib = await loadCalibration(userId, today);
   return Promise.all(rows.map(async (r) => {
     const own = read(r.place), place = own ?? home;
     const wx = place ? await raceWeather(place.lat, place.lon, r.date, today) : null;
     const adj = wx?.status === "ok" ? weatherAdjust(wx.weather) : null;
     // Temps visé : estimation d’après la forme, allongée par la chaleur ; une course d’entraînement se court 5 à 10 % en dedans.
-    const est = r.distanceKm ? raceDemands({ name: r.name, date: r.date, distanceKm: r.distanceKm, gainM: r.gainM }, profile.level, tl.ctl, vdot).estimate : null;
+    const est = r.distanceKm ? raceDemands({ name: r.name, date: r.date, distanceKm: r.distanceKm, gainM: r.gainM }, profile.level, tl.ctl, vdot, calib.factor).estimate : null;
     const k = (adj?.timeFactor ?? 1) * (r.priority === "C" ? 1.07 : 1);
     const tips = [
       r.priority === "B"
@@ -451,7 +455,10 @@ export async function planView(userId: number, today: string) {
   await reconcile(userId, today);
   let goal = await loadGoal(userId);
   let meta = readPlanMeta(goal);
-  if (goal && goal.date > today && (!meta || mondayOf(meta.generatedOn) < mondayOf(today) || meta.race.date !== goal.date || ((meta.verdict === "risque" || meta.verdict === "ambitieux") && !meta.diagnosis?.gaps))) {
+  // Un nouveau débrief change le calibrage : l’estimation est refaite tout de suite.
+  const calibNow = goal && goal.date > today ? await loadCalibration(userId, today) : null;
+  const calibChanged = !!meta && !!calibNow && Math.abs((meta.calib?.factor ?? 1) - calibNow.factor) > 0.001;
+  if (goal && goal.date > today && (!meta || calibChanged || mondayOf(meta.generatedOn) < mondayOf(today) || meta.race.date !== goal.date || ((meta.verdict === "risque" || meta.verdict === "ambitieux") && !meta.diagnosis?.gaps))) {
     await regeneratePlan(userId, today);
     goal = await loadGoal(userId);
     meta = readPlanMeta(goal);

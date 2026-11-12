@@ -352,3 +352,23 @@ form.cal-comment { display: grid; gap: 8px; white-space: normal; }
 @media (max-width: 600px) { .db-top { grid-template-columns: 1fr 1fr; } .db-top > div:last-child { grid-column: 1 / -1; } .db-row { grid-template-columns: 1.3fr .8fr .8fr .9fr; gap: 6px; font-size: 13px; } }
 .db-top b { white-space: nowrap; }
 @media (max-width: 600px) { .db-top b { font-size: 15px; } .db-top > div:nth-child(2) b { letter-spacing: -.03em; } }
+.race-time .calib { display: block; margin-top: 4px; font-size: 12px; color: var(--ok); max-width: 24ch; margin-left: auto; }
+
+/* ---------- Renforcement guidé ---------- */
+.sg { gap: 12px; }
+.sg-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; counter-reset: ex; }
+.sg-list > li { border: 1px solid var(--line); border-radius: 12px; background: var(--ink); counter-increment: ex; }
+.sg-ex { all: unset; box-sizing: border-box; cursor: pointer; width: 100%; display: flex; justify-content: space-between; gap: 10px; padding: 11px 12px; font-size: 14.5px; }
+.sg-ex b::before { content: counter(ex) ". "; color: var(--mute); font-family: var(--mono); font-weight: 500; }
+.sg-ex .mono { color: var(--mute); font-size: 12.5px; white-space: nowrap; }
+.sg-ex:focus-visible { outline: 2px solid var(--ember); outline-offset: -2px; border-radius: 12px; }
+.sg-detail { padding: 0 12px 12px; font-size: 13.5px; color: var(--soft); display: grid; gap: 6px; }
+.sg-detail ul { margin: 0; padding-left: 18px; display: grid; gap: 3px; }
+.sg-detail p { margin: 0; }
+.sg-run { display: grid; gap: 12px; justify-items: center; text-align: center; padding: 6px 0 4px; }
+.sg-bar { width: 100%; height: 5px; border-radius: 99px; background: var(--ink-3); overflow: hidden; }
+.sg-bar i { display: block; height: 100%; background: var(--ember); transition: width .3s var(--ease); }
+.sg-name { margin: 0; font-size: 22px; letter-spacing: -.02em; }
+.sg-time { font-size: 64px; line-height: 1; font-variant-numeric: tabular-nums; }
+.sg-time small { display: block; font-size: 14px; color: var(--mute); font-family: inherit; margin-top: 6px; }
+.sg-cues { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; color: var(--soft); font-size: 14.5px; max-width: 42ch; }

@@ -26,6 +26,7 @@ export const GET = withUser(async (user) => {
 
 export const DELETE = withUser(async (user) => {
   await unlink(user.id);
+  await run("UPDATE feedback SET user_id = NULL WHERE user_id = ?", [user.id]);
   for (const t of ["race_debriefs", "day_notes", "shoes", "absences", "plan_learning", "plan_sessions", "checkins", "activities", "goals", "side_races", "coach_messages", "terrains", "push_subs", "app_tokens", "profiles", "app_sessions"]) await run(`DELETE FROM ${t} WHERE user_id = ?`, [user.id]);
   await run("DELETE FROM app_kv WHERE key IN (?, ?)", [`cal:${user.id}`, `tracks:${user.id}`]);
   await run("DELETE FROM app_users WHERE id = ?", [user.id]);

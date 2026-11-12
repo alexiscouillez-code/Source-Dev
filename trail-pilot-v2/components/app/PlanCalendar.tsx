@@ -1,5 +1,6 @@
 "use client";
 
+import StrengthButton from "./StrengthButton";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, dayLabel, fmtDur, fmtKm, fmtNum, SPORT_LABEL, type Absence, type PlanSession, type Targets } from "./client";
 import { IconCheck, IconSkip, IconTerrain, IconUndo, IconWatch } from "./icons";
@@ -60,6 +61,8 @@ export default function PlanCalendar({ today, rev, targets, onStatus, onWhere, o
     catch { setErr(true); }
   }, [today]);
   useEffect(() => { load(month); }, [load, month, rev]);
+  // Mois suivant préchargé : il reste consultable hors ligne (en montagne, sans réseau).
+  useEffect(() => { if (navigator.onLine) api(`/api/plan/month?month=${addMonth(month, 1)}&today=${today}`).catch(() => {}); }, [month, today]);
 
   const weeks = useMemo(() => {
     if (!data) return [];
@@ -167,6 +170,7 @@ export default function PlanCalendar({ today, rev, targets, onStatus, onWhere, o
                     <button className="btn ghost sm" onClick={() => setMoving(s)} aria-pressed={moving?.id === s.id}>Déplacer</button>
                     <button className="btn ghost sm where" onClick={() => onWhere(s)}><IconTerrain />Où la faire ?</button>
                     {s.template !== "strength" && s.template !== "recovery" && <button className="btn ghost sm where" onClick={() => downloadWorkout(s, targets)}><IconWatch />Sur ma montre</button>}
+                    <StrengthButton s={s} onDone={s.template === "strength" ? () => onStatus(s, "done") : undefined} />
                   </>
                 )}
                 {(s.status === "skipped" || (s.status === "done" && !s.activity_id)) && <button className="btn ghost sm" onClick={() => onStatus(s, "planned")}><IconUndo />Rétablir</button>}

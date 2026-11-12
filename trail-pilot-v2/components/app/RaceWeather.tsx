@@ -12,7 +12,7 @@ type Data =
   | { status: "noplace" | "nogoal" | "past" | "error"; place?: { name: string }; fromTrace?: boolean };
 
 /** Météo du jour J au départ de la course, et ce qu’elle change pour l’eau, le sel et l’allure. */
-export default function RaceWeather({ toast, onAdjust }: { toast: (m: string) => void; onAdjust: (a: WeatherAdjust | null) => void }) {
+export default function RaceWeather({ toast, onAdjust, daysTo }: { toast: (m: string) => void; onAdjust: (a: WeatherAdjust | null) => void; daysTo?: number }) {
   const [d, setD] = useState<Data | null>(null);
   const [edit, setEdit] = useState(false);
   const [q, setQ] = useState("");
@@ -42,6 +42,9 @@ export default function RaceWeather({ toast, onAdjust }: { toast: (m: string) =>
   }
 
   if (!d || d.status === "nogoal" || d.status === "past") return null;
+  // Plus de 15 jours avant la course et lieu connu : rien à lire pour l’instant, la carte apparaît à J-15.
+  // De même pour le choix du lieu : il n’est demandé qu’à l’approche (3 semaines), quand la prévision va servir.
+  if (!edit && (d.status === "later" || (d.status === "noplace" && daysTo != null && daysTo > 21))) return null;
   const adj = d.status === "ok" ? weatherAdjust(d.weather) : null;
   const askPlace = d.status === "noplace" || edit;
 

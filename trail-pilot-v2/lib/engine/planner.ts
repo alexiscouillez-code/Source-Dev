@@ -32,6 +32,8 @@ export interface RacePlan {
   estimate: { low: number; high: number };
   /** D’où vient le temps estimé : la VO2max du coureur, sinon son niveau déclaré. */
   estimateFrom?: "vo2" | "niveau";
+  /** Temps du modèle sans calibrage, et calibrage appliqué */
+  modelMid?: number; calib?: { factor: number; n: number } | null;
   demands: { weeklyMin: number; longMin: number; weeklyGain: number; backToBack: boolean };
   current: { weeklyMin: number; longestMin: number; weeklyGain: number; hasHistory: boolean };
   reach: { weeklyMin: number; longMin: number };
@@ -88,7 +90,8 @@ export function trailTime(vdot: number, distanceKm: number, gainM: number) {
   return base * (1 + 0.045 * Math.max(0, base / 60 - 4));
 }
 
-export function raceDemands(goal: PlannerGoal, level: Level, ctl = 0, vdot: number | null = null) {
+/** `calib` : facteur personnel tiré de tes courses passées (engine/calibration), appliqué au seul temps estimé. */
+export function raceDemands(goal: PlannerGoal, level: Level, ctl = 0, vdot: number | null = null, calib = 1) {
   const assumed = !goal.distanceKm;
   const distanceKm = goal.distanceKm ?? 25;
   const gainM = goal.gainM ?? Math.round(distanceKm * 35);
@@ -105,16 +108,18 @@ export function raceDemands(goal: PlannerGoal, level: Level, ctl = 0, vdot: numb
   const weeklyGain = clamp(gainM * (effortKm > 100 ? 0.8 : 1.2), 300, 6000);
   return {
     distanceKm, gainM, effortKm: Math.round(effortKm), assumed, raceMin,
-    estimate: { low: Math.round((mid * (fromVo2 ? 0.94 : 0.92)) / 5) * 5, high: Math.round((mid * (fromVo2 ? 1.1 : 1.15)) / 5) * 5 }, fromVo2,
+    estimate: { low: Math.round((mid * calib * (fromVo2 ? 0.94 : 0.92)) / 5) * 5, high: Math.round((mid * calib * (fromVo2 ? 1.1 : 1.15)) / 5) * 5 }, fromVo2,
+    /** Temps médian du modèle, sans calibrage personnel : sert à recaler le facteur après la course. */
+    modelMid: Math.round(mid),
     longMin: round5(longMin), weeklyMin: round5(weeklyMin), weeklyGain: round50(weeklyGain), backToBack: raceMin > 360,
   };
 }
 
 // ---------- Plan ----------
-export function buildRacePlan(input: { today: string; profile: PlannerProfile; goal: PlannerGoal; activities: ActivityLike[]; load: LoadState; vdot?: number | null }): { items: PlanItem[]; plan: RacePlan } {
+export function buildRacePlan(input: { today: string; profile: PlannerProfile; goal: PlannerGoal; activities: ActivityLike[]; load: LoadState; vdot?: number | null; calib?: { factor: number; n: number } | null }): { items: PlanItem[]; plan: RacePlan } {
   const { today, profile, goal, activities, load } = input;
   const start = addDays(today, 1);
-  const d = raceDemands(goal, profile.level, load.ctl, input.vdot ?? null);
+  const d = raceDemands(goal, profile.level, load.ctl, input.vdot ?? null, input.calib?.factor ?? 1);
   const hasHistory = recentFoot(activities, today).length >= 3;
   const base = baselineWeekly(activities, today, profile.level);
   const longest = recentLongest(activities, today) || base * 0.3;
@@ -212,7 +217,7 @@ export function buildRacePlan(input: { today: string; profile: PlannerProfile; g
   const plan: RacePlan = {
     generatedOn: today,
     race: { name: goal.name, date: goal.date, distanceKm: d.distanceKm, gainM: d.gainM, effortKm: d.effortKm, daysTo, assumed: d.assumed },
-    estimate: d.estimate, estimateFrom: d.fromVo2 ? "vo2" : "niveau",
+    estimate: d.estimate, estimateFrom: d.fromVo2 ? "vo2" : "niveau", modelMid: d.modelMid, calib: input.calib && input.calib.n ? input.calib : null,
     demands: { weeklyMin: d.weeklyMin, longMin: d.longMin, weeklyGain: d.weeklyGain, backToBack: d.backToBack },
     current: { weeklyMin: round5(base), longestMin: round5(longest), weeklyGain: round50(baseGain), hasHistory },
     reach: { weeklyMin: reachWeekly, longMin: reachLong },

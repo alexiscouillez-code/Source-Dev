@@ -14,6 +14,8 @@ import { zoneMinutes } from "./streams";
 export interface PlannedRace {
   name: string; date: string; distanceKm: number | null; gainM: number | null;
   estimate: { low: number; high: number } | null;
+  /** Temps médian du modèle sans calibrage, et calibrage appliqué à l’estimation affichée */
+  modelMid?: number | null; calib?: number | null;
   sections?: { label: string; from: number; to: number; gain: number; loss: number; low: number; high: number }[];
 }
 export interface RaceActivity { durationMin: number; distanceKm: number | null; gainM: number | null; avgHr: number | null }
@@ -56,9 +58,9 @@ export function debrief(plan: PlannedRace, act: RaceActivity, analysis: Analysis
   let result: Debrief["result"] = { tone: "inconnu", label: "Pas d’estimation à comparer", delta: null };
   if (plan.estimate && match) {
     const { low, high } = plan.estimate;
-    if (actual < low) { result = { tone: "mieux", label: `${fmt(low - actual)} sous l’estimation`, delta: Math.round(actual - low) }; lessons.push(`Tu as fini ${fmt(low - actual)} plus vite que l’estimation la plus optimiste : ta forme valait mieux que le calcul. Tes prochaines estimations en tiennent compte.`); }
+    if (actual < low) { result = { tone: "mieux", label: `${fmt(low - actual)} sous l’estimation`, delta: Math.round(actual - low) }; lessons.push(`Tu as fini ${fmt(low - actual)} plus vite que l’estimation la plus optimiste : ta forme valait mieux que le calcul. Tes prochaines estimations sont recalées sur ce résultat.`); }
     else if (actual > high) { result = { tone: "moins", label: `${fmt(actual - high)} au-dessus de l’estimation`, delta: Math.round(actual - high) }; lessons.push(`Tu as mis ${fmt(actual - high)} de plus que l’estimation prudente. Regarde dans les sections où le temps est parti avant de conclure sur ta forme : un départ trop rapide ou un souci d’alimentation coûtent plus qu’un manque d’entraînement.`); }
-    else { result = { tone: "prevu", label: "Dans la fourchette prévue", delta: 0 }; lessons.push("Tu as fini dans la fourchette estimée : l’estimation était juste, tu peux t’y fier pour la suite."); }
+    else { result = { tone: "prevu", label: "Dans la fourchette prévue", delta: 0 }; lessons.push("Tu as fini dans la fourchette estimée : l’estimation était juste, tu peux t’y fier pour la suite. Tes prochaines estimations sont recalées sur ce résultat."); }
   }
 
   // Sections : temps réel de chaque tronçon, d’après les temps de passage au kilomètre

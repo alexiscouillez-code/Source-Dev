@@ -13,7 +13,7 @@ function setup() {
 }
 
 /** Envoie une notification à tous les appareils de l’utilisateur ; retire les abonnements expirés. */
-export async function pushToUser(userId: number, payload: { title: string; body: string; url?: string; tag?: string }) {
+export async function pushToUser(userId: number, payload: { title: string; body: string; url?: string; tag?: string; checkin?: boolean }) {
   if (!pushConfigured()) return 0;
   setup();
   const subs = await all<{ endpoint: string; p256dh: string; auth: string }>("SELECT endpoint, p256dh, auth FROM push_subs WHERE user_id = ?", [userId]);

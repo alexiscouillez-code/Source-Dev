@@ -1,9 +1,9 @@
 /* Trail Pilot : mode hors ligne et notifications (rappel du check-in du matin). */
-const VERSION = "tp-7";
+const VERSION = "tp-8";
 const STATIC = `${VERSION}-static`, PAGES = `${VERSION}-pages`, DATA = "tp-data", TILES = "tp-tiles";
 const MAX_TILES = 600;
 // Données de l’espace gardées pour la consultation hors ligne (dernière réponse reçue).
-const API_CACHED = /^\/api\/(me|plan|activities|analysis|vo2|trail-profile|xray|races|weather|coach|calendar|terrains|week|progress|plan\/month)$/;
+const API_CACHED = /^\/api\/(me|plan|activities|analysis|vo2|trail-profile|xray|races|weather|coach|calendar|terrains|week|progress|plan\/month|debrief|weather\/training)$/;
 const TILE_HOSTS = /(^|\.)tile\.openstreetmap\.org$|(^|\.)tile\.opentopomap\.org$/;
 
 self.addEventListener("install", (event) => {
@@ -83,13 +83,43 @@ self.addEventListener("push", (event) => {
     badge: "/icon.svg",
     tag: data.tag || "checkin",
     renotify: false,
-    data: { url: data.url || "/espace#today" },
+    data: { url: data.url || "/espace#today", checkin: !!data.checkin },
+    // Check-in express : on répond depuis la notification, sans ouvrir l’appli (2 ou 3 boutons selon l’appareil).
+    actions: data.checkin ? quickActions() : [],
   }));
 });
+
+function quickActions() {
+  const max = (self.Notification && self.Notification.maxActions) || 2;
+  return max >= 3
+    ? [{ action: "forme", title: "En forme" }, { action: "moyen", title: "Moyen" }, { action: "fatigue", title: "Fatigué" }]
+    : [{ action: "forme", title: "En forme" }, { action: "fatigue", title: "Fatigué" }];
+}
+
+const localDay = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+
+async function quickCheckin(level) {
+  try {
+    const res = await fetch("/api/checkins/quick", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ level, today: localDay() }) });
+    if (res.status === 401) return { title: "Connecte-toi à Trail Pilot", body: "Ta session a expiré : ouvre l’appli pour faire ton check-in.", open: true };
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.error || "Erreur");
+    return { title: j.title, body: j.body };
+  } catch (e) {
+    return { title: "Check-in non enregistré", body: "Pas de réseau ou erreur : ouvre Trail Pilot pour le faire.", open: true };
+  }
+}
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const url = (event.notification.data && event.notification.data.url) || "/espace#today";
+  if (["forme", "moyen", "fatigue"].includes(event.action)) {
+    event.waitUntil((async () => {
+      const r = await quickCheckin(event.action);
+      await self.registration.showNotification(r.title, { body: r.body, icon: "/apple-icon", badge: "/icon.svg", tag: "checkin-result", data: { url } });
+    })());
+    return;
+  }
   event.waitUntil((async () => {
     const all = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
     for (const c of all) {

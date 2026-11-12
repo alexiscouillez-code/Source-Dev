@@ -1,5 +1,6 @@
 "use client";
 
+import StrengthButton from "./StrengthButton";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { buzz, withTransition } from "./motion";
@@ -18,6 +19,7 @@ import SideRaces, { type SideRaceRow } from "./SideRaces";
 import PlanCalendar from "./PlanCalendar";
 import Fold, { useFold } from "./Fold";
 import Debriefs from "./Debriefs";
+import { calibLabel } from "@/lib/engine/calibration";
 import type { RaceRoute, WeatherAdjust } from "@/lib/engine/strategy";
 
 type Verdict = "solide" | "ambitieux" | "risque" | "court";
@@ -25,7 +27,7 @@ interface PlanWeek { monday: string; phase: string; minutes: number; longMin: nu
 interface RacePlan {
   generatedOn: string;
   race: { name: string; date: string; distanceKm: number; gainM: number; effortKm: number; daysTo: number; assumed: boolean };
-  estimate: { low: number; high: number }; estimateFrom?: "vo2" | "niveau";
+  estimate: { low: number; high: number }; estimateFrom?: "vo2" | "niveau"; calib?: { factor: number; n: number } | null;
   demands: { weeklyMin: number; longMin: number; weeklyGain: number; backToBack: boolean };
   current: { weeklyMin: number; longestMin: number; weeklyGain: number; hasHistory: boolean };
   reach: { weeklyMin: number; longMin: number };
@@ -155,7 +157,7 @@ export default function Planning({ me, refresh, toast, go }: Ctx) {
           <WeekList sessions={v.sessions} weeks={p.weeks} today={v.today} doneByWeek={v.doneByWeek} onStatus={setStatus} targets={me.targets} onWhere={whereTo} onMove={move} />
         </PlanBoard>
       </section>
-      <RaceWeather key={v.goal.route?.uploadedAt ?? 0} toast={toast} onAdjust={setWx} />
+      <RaceWeather key={v.goal.route?.uploadedAt ?? 0} toast={toast} onAdjust={setWx} daysTo={p.race.daysTo} />
       <RaceStrategy raceName={v.goal.name} raceDate={v.goal.date} route={v.goal.route ?? null} estimate={p.estimate} weather={wx} toast={toast} onChanged={async () => { await Promise.all([load(), refresh()]); }} />
       <SideRaces races={v.races} today={v.today} mainDate={v.goal.date} toast={toast} onChanged={async () => { await Promise.all([load(), refresh()]); }} />
       <div className="grid g2 folds" style={{ marginTop: 14 }}>
@@ -218,6 +220,7 @@ function RaceHeader({ p }: { p: RacePlan }) {
           <small>Temps estimé pour finir</small>
           <b>{fmtDur(p.estimate.low)} – {fmtDur(p.estimate.high)}</b>
           <span>{p.estimateFrom === "vo2" ? "d’après ta VO2max" : "à ton niveau actuel"}</span>
+          {calibLabel(p.calib) && <span className="calib">{calibLabel(p.calib)}</span>}
         </div>
       </div>
       <div className="race-verdict">
@@ -434,7 +437,7 @@ function WeekList({ sessions, weeks, today, doneByWeek, onStatus, targets, onWhe
                         <button className="iconbtn" title="Rétablir" aria-label="Rétablir la séance" onClick={() => onStatus(s, "planned")}><IconUndo /></button>
                       )}
                     </div>
-                    {detail === s.id && <div className="details"><SessionTarget targets={targets} template={s.template} rpe={s.rpe_target} duration={s.duration_min} title={s.title} gain={s.gain_m} sport={s.sport} day={s.date >= today ? dayOf(fc, s.date) : null} /><p style={{ margin: 0 }}>{s.description}</p>{s.template !== "race" && s.date >= today && <div className="row" style={{ gap: 8 }}><button className="btn ghost sm where" onClick={() => onWhere(s)}><IconTerrain />Où la faire ?</button>{s.template !== "strength" && <button className="btn ghost sm where" onClick={() => downloadWorkout(s, targets)}><IconWatch />Sur ma montre</button>}</div>}</div>}
+                    {detail === s.id && <div className="details"><SessionTarget targets={targets} template={s.template} rpe={s.rpe_target} duration={s.duration_min} title={s.title} gain={s.gain_m} sport={s.sport} day={s.date >= today ? dayOf(fc, s.date) : null} /><p style={{ margin: 0 }}>{s.description}</p>{s.template !== "race" && s.date >= today && <div className="row" style={{ gap: 8 }}><button className="btn ghost sm where" onClick={() => onWhere(s)}><IconTerrain />Où la faire ?</button>{s.template !== "strength" && <button className="btn ghost sm where" onClick={() => downloadWorkout(s, targets)}><IconWatch />Sur ma montre</button>}<StrengthButton s={s} onDone={s.template === "strength" && movable(s, today) ? () => onStatus(s, "done") : undefined} /></div>}</div>}
                   </li>
                 ))}
               </ul>

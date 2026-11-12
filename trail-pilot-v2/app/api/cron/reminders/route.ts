@@ -71,8 +71,8 @@ export async function GET(request: Request) {
       }
       sent += await pushToUser(u.user_id, {
         title: `${first ? `${first}, ton` : "Ton"} check-in du matin`,
-        body: u.title ? `Aujourd’hui : ${u.title}. 10 secondes pour savoir si c’est OK, allège ou récup.` : "10 secondes pour savoir quoi faire aujourd’hui.",
-        url: "/espace#today", tag: `checkin-${today}`,
+        body: u.title ? `Aujourd’hui : ${u.title}. Réponds d’un geste ci-dessous, ou ouvre l’appli pour le check-in complet.` : "10 secondes pour savoir quoi faire aujourd’hui.",
+        url: "/espace#today", tag: `checkin-${today}`, checkin: true,
       });
     } catch (e) { await logError("cron", e, { url: "/api/cron/reminders", userId: u.user_id }); }
   }

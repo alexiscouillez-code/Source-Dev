@@ -1,6 +1,7 @@
 "use client";
 
 import Fold from "./Fold";
+import Feedback from "./Feedback";
 import { useEffect, useState } from "react";
 import type { Ctx } from "./AppShell";
 import { api, DAYS } from "./client";
@@ -15,6 +16,7 @@ export default function Account({ me, refresh, toast, go }: Ctx) {
         <ProfileCard me={me} refresh={refresh} toast={toast} />
         <ShoesCard toast={toast} />
         <HomeCard toast={toast} />
+        <Feedback toast={toast} page="compte" />
         <ReminderCard me={me} refresh={refresh} toast={toast} />
         <CalendarCard toast={toast} />
         <StravaCard me={me} refresh={refresh} toast={toast} />
@@ -172,7 +174,7 @@ function ReminderCard({ me, refresh, toast }: P) {
   const on = me.settings.reminder && here;
   return (
     <Fold id="acc-reminder" title="Rappel du check-in" aside={<><span className={`chip ${on ? "ok" : "dim"}`}><span className="dot" />{on ? "Activé" : "Désactivé"}</span></>}>
-      <p className="soft" style={{ margin: 0 }}>Chaque matin vers 7 h, une notification te rappelle ton check-in s’il n’est pas encore fait, avec la séance prévue ce jour-là.</p>
+      <p className="soft" style={{ margin: 0 }}>Chaque matin vers 7 h, une notification te rappelle ton check-in s’il n’est pas encore fait, avec la séance prévue ce jour-là. Tu peux répondre directement depuis la notification (« En forme », « Fatigué ») : la décision du jour s’affiche sans ouvrir l’appli. Les boutons de réponse n’existent pas sur iPhone : là, toucher la notification ouvre le check-in.</p>
       {!me.push ? <p className="muted small" style={{ margin: 0 }}>Les notifications ne sont pas encore activées sur le site.</p>
         : support === "ios" ? <p className="note small" style={{ margin: 0 }}>Sur iPhone, ajoute d’abord Trail Pilot à l’écran d’accueil (bouton Partager, puis « Sur l’écran d’accueil »), ouvre-le depuis l’icône et reviens ici.</p>
         : support === "no" ? <p className="muted small" style={{ margin: 0 }}>Ce navigateur ne gère pas les notifications.</p>

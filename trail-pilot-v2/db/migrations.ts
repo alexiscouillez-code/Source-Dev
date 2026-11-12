@@ -193,4 +193,13 @@ export const MIGRATIONS: { tag: string; statements: string[] }[] = [
         PRIMARY KEY (user_id, race_key))`,
     ],
   },
+  {
+    tag: "013_feedback",
+    statements: [
+      // Retours envoyés depuis l’appli (bouton « Un retour ? »).
+      `CREATE TABLE IF NOT EXISTS feedback (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER REFERENCES app_users(id) ON DELETE SET NULL,
+        kind TEXT NOT NULL, page TEXT, text TEXT NOT NULL, created_at INTEGER NOT NULL)`,
+    ],
+  },
 ];

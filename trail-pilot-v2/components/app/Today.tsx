@@ -1,5 +1,6 @@
 "use client";
 
+import StrengthButton from "./StrengthButton";
 import { useState } from "react";
 import type { Ctx } from "./AppShell";
 import InfoTip, { EXPLAIN } from "./InfoTip";
@@ -136,6 +137,7 @@ export function SessionBlock({ s, targets }: { s: PlanSession; targets?: Me["tar
       </div>
       <SessionTarget targets={targets} template={s.template} rpe={s.rpe_target} duration={s.duration_min} title={s.title} gain={s.gain_m} sport={s.sport} day={dayOf(fc, s.date)} />
       <p className="soft small" style={{ margin: 0 }}>{s.description}</p>
+      <div className="row"><StrengthButton s={s} /></div>
       {original && <p className="muted small" style={{ margin: 0 }}>Prévu initialement : {original.title}, {fmtDur(original.durationMin)}.</p>}
     </div>
   );

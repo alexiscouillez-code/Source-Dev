@@ -8,6 +8,7 @@ import { parseAnalysis } from "./engine/streams";
 import { estimateVo2 } from "./engine/vo2";
 import { loadGoal, loadState, readPlanMeta, toVo2Run, type ActivityRow } from "./service";
 import { reanalyze } from "./strava";
+import { loadCalibration } from "./calibration";
 
 /**
  * Débriefs des courses des 90 derniers jours (course principale et courses de préparation).
@@ -18,19 +19,21 @@ import { reanalyze } from "./strava";
 interface Row { planned: string | null; rpe: number | null; tags: string | null; note: string | null; tried: number }
 const WINDOW = 90;
 
-async function plannedFor(userId: number, key: string, race: { name: string; date: string; distanceKm: number | null; gainM: number | null }, main: { estimate: { low: number; high: number } | null; route: RaceRoute | null } | null): Promise<PlannedRace> {
+async function plannedFor(userId: number, key: string, race: { name: string; date: string; distanceKm: number | null; gainM: number | null }, main: { estimate: { low: number; high: number } | null; modelMid: number | null; calib: number | null; route: RaceRoute | null } | null): Promise<PlannedRace> {
   const row = await one<{ planned: string | null }>("SELECT planned FROM race_debriefs WHERE user_id = ? AND race_key = ?", [userId, key]);
   if (row?.planned) { try { return JSON.parse(row.planned) as PlannedRace; } catch { /* instantané illisible : recalculé */ } }
-  let estimate = main?.estimate ?? null;
+  let estimate = main?.estimate ?? null, modelMid = main?.modelMid ?? null, calib = main?.calib ?? null;
   if (!estimate && race.distanceKm) {
     // Forme de la veille de la course : la course elle-même n’entre pas dans son propre « prévu ».
     const eve = addDays(race.date, -1);
     const { profile, acts, tl } = await loadState(userId, eve);
     const vdot = estimateVo2(acts.filter((a) => a.date <= eve).map(toVo2Run), eve, { hrMax: profile.hr_max, hrRest: profile.hr_rest, watch: profile.vo2_watch }).paceVdot;
-    const e = raceDemands({ name: race.name, date: race.date, distanceKm: race.distanceKm, gainM: race.gainM }, profile.level, tl.ctl, vdot).estimate;
-    estimate = { low: Math.round(e.low), high: Math.round(e.high) };
+    // Calibrage connu avant cette course (les autres courses débriefées), comme l’aurait affiché l’appli la veille.
+    const c = (await loadCalibration(userId, race.date, key)).factor;
+    const d = raceDemands({ name: race.name, date: race.date, distanceKm: race.distanceKm, gainM: race.gainM }, profile.level, tl.ctl, vdot, c);
+    estimate = { low: Math.round(d.estimate.low), high: Math.round(d.estimate.high) }; modelMid = d.modelMid; calib = c;
   }
-  const planned: PlannedRace = { ...race, estimate };
+  const planned: PlannedRace = { ...race, estimate, modelMid, calib };
   if (main?.route && estimate) {
     try { planned.sections = buildStrategy(main.route, estimate).sections.map((s) => ({ label: s.label, from: s.from, to: s.to, gain: s.gain, loss: s.loss, low: s.minutes.low, high: s.minutes.high })); } catch { /* tracé inexploitable */ }
   }
@@ -61,7 +64,7 @@ export async function loadDebriefs(userId: number, today: string) {
     const meta = r.main ? readPlanMeta(goal) : null;
     let route: RaceRoute | null = null;
     if (r.main) { try { route = goal?.route ? JSON.parse(goal.route) : null; } catch { route = null; } }
-    const planned = await plannedFor(userId, r.key, { name: r.name, date: r.date, distanceKm: r.distanceKm, gainM: r.gainM }, r.main ? { estimate: meta?.estimate ? { low: Math.round(meta.estimate.low), high: Math.round(meta.estimate.high) } : null, route } : null);
+    const planned = await plannedFor(userId, r.key, { name: r.name, date: r.date, distanceKm: r.distanceKm, gainM: r.gainM }, r.main ? { estimate: meta?.estimate ? { low: Math.round(meta.estimate.low), high: Math.round(meta.estimate.high) } : null, modelMid: meta?.modelMid ?? null, calib: meta?.calib?.factor ?? 1, route } : null);
     const row = await one<Row>("SELECT planned, rpe, tags, note, tried FROM race_debriefs WHERE user_id = ? AND race_key = ?", [userId, r.key]);
     // Temps de passage manquants sur une sortie Strava importée avant cette version : une relecture, une seule fois.
     if (planned.sections?.length && !parseAnalysis(act.analysis)?.km && act.strava_id && !row?.tried) {
