@@ -1,5 +1,6 @@
 "use client";
 
+import WatchHelp from "./WatchHelp";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { api, localToday, type Me } from "./client";
@@ -159,6 +160,7 @@ export default function AppShell({ user }: { user: { name: string | null; email:
       </aside>
 
       <main className="main" ref={mainRef}>
+        <WatchHelp />
         {!online && (
           <div className="offline-bar" role="status">
             <b>Hors ligne</b>

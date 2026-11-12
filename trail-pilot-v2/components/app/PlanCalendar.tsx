@@ -169,7 +169,7 @@ export default function PlanCalendar({ today, rev, targets, onStatus, onWhere, o
                     <button className="btn ghost sm" onClick={() => onStatus(s, "skipped")}><IconSkip />Sauter</button>
                     <button className="btn ghost sm" onClick={() => setMoving(s)} aria-pressed={moving?.id === s.id}>Déplacer</button>
                     <button className="btn ghost sm where" onClick={() => onWhere(s)}><IconTerrain />Où la faire ?</button>
-                    {s.template !== "strength" && s.template !== "recovery" && <button className="btn ghost sm where" onClick={() => downloadWorkout(s, targets)}><IconWatch />Sur ma montre</button>}
+                    {s.template !== "strength" && s.template !== "recovery" && <button className="btn ghost sm where" onClick={() => downloadWorkout(s, targets)}><IconWatch />Sur ma montre</button>}{s.template !== "strength" && s.template !== "recovery" && <button className="iconbtn sm" aria-label="Comment mettre la séance sur ma montre" onClick={() => window.dispatchEvent(new CustomEvent("tp-watch-help", { detail: "" }))}>?</button>}
                     <StrengthButton s={s} onDone={s.template === "strength" ? () => onStatus(s, "done") : undefined} />
                   </>
                 )}

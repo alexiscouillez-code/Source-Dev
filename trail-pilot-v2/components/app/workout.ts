@@ -114,5 +114,9 @@ export function downloadWorkout(s: PlanSession, targets?: Targets) {
   a.href = url; a.download = `${s.date}-${slug || "seance"}.fit`;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 2000);
-  window.dispatchEvent(new CustomEvent("tp-toast", { detail: "Séance téléchargée (.fit). Sur une Garmin, copie le fichier dans le dossier GARMIN/NewFiles de la montre (câble USB) : elle apparaît dans Entraînement › Séances." }));
+  // Premier téléchargement : le mode d’emploi s’ouvre ; ensuite, un simple rappel.
+  let seen = false;
+  try { seen = localStorage.getItem("tp-watch-help") === "1"; localStorage.setItem("tp-watch-help", "1"); } catch { /* stockage indisponible */ }
+  if (seen) window.dispatchEvent(new CustomEvent("tp-toast", { detail: "Séance téléchargée. Copie-la dans GARMIN/NewFiles sur la montre (câble USB). Aide : bouton « ? » à côté de « Sur ma montre »." }));
+  else window.dispatchEvent(new CustomEvent("tp-watch-help", { detail: a.download }));
 }
