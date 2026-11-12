@@ -25,7 +25,7 @@ export default function OgImage() {
           <span>Je sais quoi faire</span>
           <span style={{ color: "#ff6a2b" }}>aujourd’hui.</span>
         </div>
-        <div style={{ display: "flex", fontSize: 30, color: "#b7c0c8" }}>Check-in du soir → OK · allège · récup</div>
+        <div style={{ display: "flex", fontSize: 30, color: "#b7c0c8" }}>Check-in du matin → OK · allège · récup</div>
       </div>
     ),
     size,

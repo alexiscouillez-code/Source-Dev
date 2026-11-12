@@ -146,7 +146,7 @@ function DecisionCard({ me, onEdit }: { me: Me; onEdit: () => void }) {
   const v = VERDICT[d.verdict];
   return (
     <section className="card verdict" style={{ ["--accent" as string]: v.color }} aria-live="polite">
-      <div className="row between"><span className="eyebrow">Décision pour demain</span><button className="link small" onClick={onEdit}>Modifier mon check-in</button></div>
+      <div className="row between"><span className="eyebrow">Décision du jour</span><button className="link small" onClick={onEdit}>Modifier mon check-in</button></div>
       <div className="verdict-row">
         <div className="verdict-big verdict-stamp" key={d.verdict}>{v.label}</div>
         <FormGauge score={d.score} />
@@ -154,6 +154,7 @@ function DecisionCard({ me, onEdit }: { me: Me; onEdit: () => void }) {
       <div className="meter" role="img" aria-label={`Forme ressentie ${d.score} sur 100`}><i style={{ width: `${d.score}%` }} /></div>
       <p style={{ margin: 0, fontSize: 18 }}>{v.line}</p>
       <ul className="reasons">{d.reasons.map((r) => <li key={r}>{r}</li>)}</ul>
+      {me.checkin?.note && <p className="ci-said"><small>Ton commentaire</small>{me.checkin.note}</p>}
     </section>
   );
 }
@@ -182,6 +183,7 @@ function CheckinCard({ me, onDone, onCancel }: { me: Me; onDone: (msg: string) =
   const [v, setV] = useState({ sleep: me.checkin?.sleep ?? 3, legs: me.checkin?.legs ?? 3, motivation: me.checkin?.motivation ?? 3, pain: me.checkin?.pain ?? 0 });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [note, setNote] = useState(me.checkin?.note ?? "");
   const [zones, setZones] = useState<string[]>(() => { try { return me.checkin?.pain_zones ? JSON.parse(me.checkin.pain_zones) : []; } catch { return []; } });
   const [consent, setConsent] = useState(me.settings.healthConsent);
   const s = (v: number | null | undefined) => (v == null ? "" : String(v).replace(".", ","));
@@ -194,17 +196,17 @@ function CheckinCard({ me, onDone, onCancel }: { me: Me; onDone: (msg: string) =
     try {
       // Un court temps d’analyse : la décision se lit mieux quand elle arrive.
       const [r] = await Promise.all([
-        api<{ decision: { verdict: keyof typeof VERDICT } }>("/api/checkins", { method: "POST", body: { ...v, painZones: v.pain > 0 && consent ? zones : [], healthConsent: consent && !me.settings.healthConsent, sleepH: w.sleepH, rhr: consent ? w.rhr : "", hrv: consent ? w.hrv : "" } }),
+        api<{ decision: { verdict: keyof typeof VERDICT } }>("/api/checkins", { method: "POST", body: { ...v, note, today: me.today, painZones: v.pain > 0 && consent ? zones : [], healthConsent: consent && !me.settings.healthConsent, sleepH: w.sleepH, rhr: consent ? w.rhr : "", hrv: consent ? w.hrv : "" } }),
         new Promise((ok) => setTimeout(ok, window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : analyzeDelay())),
       ]);
-      await onDone(`Décision pour demain : ${VERDICT[r.decision.verdict].label}.`);
+      await onDone(`Décision du jour : ${VERDICT[r.decision.verdict].label}.`);
     } catch (e2) { setErr(e2 instanceof Error ? e2.message : "Erreur"); setBusy(false); }
   }
 
   return (
     <section className="card ci-card" aria-labelledby="ci-title" aria-busy={busy}>
-      {busy && <div className="analyzing" role="status"><span className="az-core"><span className="ring" /><i style={{ ["--a" as string]: "-90deg" }}>{v.sleep}</i><i style={{ ["--a" as string]: "30deg" }}>{v.legs}</i><i style={{ ["--a" as string]: "150deg" }}>{v.motivation}</i></span><b>Analyse de ta forme…</b><ul><li>Sommeil et jambes</li><li>Charge des 7 derniers jours</li><li>Séance de demain</li></ul></div>}
-      <div className="row between"><div><span className="eyebrow">10 secondes</span><h2 id="ci-title" style={{ marginTop: 4 }}>Check-in du soir</h2></div>{onCancel && <button className="link small" onClick={onCancel}>Annuler</button>}</div>
+      {busy && <div className="analyzing" role="status"><span className="az-core"><span className="ring" /><i style={{ ["--a" as string]: "-90deg" }}>{v.sleep}</i><i style={{ ["--a" as string]: "30deg" }}>{v.legs}</i><i style={{ ["--a" as string]: "150deg" }}>{v.motivation}</i></span><b>Analyse de ta forme…</b><ul><li>Sommeil et jambes</li><li>Charge des 7 derniers jours</li><li>Séance du jour</li></ul></div>}
+      <div className="row between"><div><span className="eyebrow">10 secondes</span><h2 id="ci-title" style={{ marginTop: 4 }}>Check-in du matin</h2></div>{onCancel && <button className="link small" onClick={onCancel}>Annuler</button>}</div>
       <form className="form" onSubmit={submit}>
         {SCALES.map((s) => (
           <fieldset key={s.key} className="scale">
@@ -260,6 +262,10 @@ function CheckinCard({ me, onDone, onCancel }: { me: Me; onDone: (msg: string) =
           )}
           <small className="muted">Après 4 matins mesurés, Trail Pilot compare chaque valeur à ta référence des 14 derniers jours : une FC au réveil qui monte ou une VFC qui baisse signalent une récupération incomplète.</small>
         </details>
+        <label className="field ci-note">Commentaire <small className="muted">facultatif</small>
+          <textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} rows={2} placeholder="Nuit hachée, grosse journée de travail, mollet raide au réveil…" />
+          <small className="muted">Pour toi : il s’affiche dans le calendrier, au jour concerné, et le coach en tient compte si tu lui poses une question.</small>
+        </label>
         {err && <p className="note err" role="alert">{err}</p>}
         <button className="btn" type="submit" disabled={busy}>{busy ? "Analyse…" : "Voir ma décision"}</button>
       </form>
@@ -267,7 +273,7 @@ function CheckinCard({ me, onDone, onCancel }: { me: Me; onDone: (msg: string) =
   );
 }
 
-/** Le temps d’analyse du check-in : mis en scène les premières fois, puis court pour ne pas faire attendre chaque soir. */
+/** Le temps d’analyse du check-in : mis en scène les premières fois, puis court pour ne pas faire attendre chaque matin. */
 function analyzeDelay() {
   try { const n = Number(localStorage.getItem("tp-ci-count") || 0) + 1; localStorage.setItem("tp-ci-count", String(n)); return n <= 3 ? 1100 : 450; } catch { return 700; }
 }

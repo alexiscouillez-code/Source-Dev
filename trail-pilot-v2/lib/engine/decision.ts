@@ -19,7 +19,7 @@ export function watchBaseline(rows: { rhr: number | null; hrv: number | null }[]
 }
 
 /**
- * Décision du lendemain. Règles, dans l’ordre :
+ * Décision du jour (check-in du matin). Règles, dans l’ordre :
  *  1. douleur marquée → récup, toujours ;
  *  2. score de forme ressentie 0-100 (sommeil, jambes, motivation) ;
  *  3. corrections par la charge : ratio fatigue/forme > 1,5 (−25), > 1,3 (−12), < 0,8 (+5) ;
@@ -42,8 +42,8 @@ export function decide(c: CheckIn, load: LoadState, today: string, goalDate?: st
   if (c.pain === 1) {
     score -= 15;
     const z = c.zones ?? [];
-    if (z.some((x) => DESCENT_ZONES.includes(x))) reasons.push("Gêne aux cuisses, genoux ou tibias : évite les descentes rapides demain.");
-    else if (z.some((x) => CLIMB_ZONES.includes(x))) reasons.push("Gêne aux mollets, chevilles ou fessiers : pas de côtes ni de terrain technique demain.");
+    if (z.some((x) => DESCENT_ZONES.includes(x))) reasons.push("Gêne aux cuisses, genoux ou tibias : évite les descentes rapides aujourd’hui.");
+    else if (z.some((x) => CLIMB_ZONES.includes(x))) reasons.push("Gêne aux mollets, chevilles ou fessiers : pas de côtes ni de terrain technique aujourd’hui.");
     else reasons.push("Petite gêne : on reste prudent.");
     if (z.length) reasons.push("Si la gêne revient deux jours de suite, fais-la examiner.");
   }
@@ -106,6 +106,6 @@ export function adapt(p: PlannedLike, v: Verdict): PlannedLike {
   }
   return {
     ...p, title: "Repos actif", sport: "autre", template: "recovery", durationMin: 20, rpeTarget: 1, gainM: null,
-    description: "Récupération : 20 minutes de marche ou de mobilité douce, hydratation, coucher tôt. La séance prévue est reportée.",
+    description: "Récupération : 20 minutes de marche ou de mobilité douce, hydratation, coucher tôt. La séance prévue saute : on ne la rattrape pas.",
   };
 }

@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Trail Pilot", short_name: "Trail Pilot",
-    description: "Check-in du soir, décision du lendemain : OK, allège ou récup.",
+    description: "Check-in du matin, décision du jour : OK, allège ou récup.",
     start_url: "/espace", scope: "/", display: "standalone", orientation: "portrait",
     background_color: "#0b0f14", theme_color: "#0b0f14", lang: "fr",
     icons: [

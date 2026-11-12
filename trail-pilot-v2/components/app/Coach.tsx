@@ -6,7 +6,7 @@ import { api } from "./client";
 interface Msg { role: "user" | "assistant"; content: string; at: number }
 const IDEAS = [
   "Je peux décaler ma sortie longue à samedi ?",
-  "Je suis fatigué ce soir, je fais quoi demain ?",
+  "Je suis fatigué ce matin, je fais quoi aujourd’hui ?",
   "Que manger pendant ma sortie longue ?",
   "Comment progresser en descente ?",
 ];

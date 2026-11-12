@@ -77,7 +77,7 @@ export default function Hero() {
             <br />
             <span className="word"><em style={{ ["--i" as string]: 4 }}>aujourd’hui.</em></span>
           </h1>
-          <p className="hero-sub">Un check-in de dix secondes le soir. Le lendemain, une consigne claire : maintenir, alléger ou récupérer.</p>
+          <p className="hero-sub">Un check-in de dix secondes au réveil. Dans la foulée, une consigne claire : maintenir, alléger ou récupérer.</p>
           <div className="hero-cta">
             <a className="btn" href="/connexion?mode=inscription">Ouvrir mon espace <span className="arr">↗</span></a>
             <a className="btn btn-ghost" href="#decision">Comment ça marche</a>

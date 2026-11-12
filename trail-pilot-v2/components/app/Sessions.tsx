@@ -47,10 +47,11 @@ export default function Sessions({ me, refresh, toast }: Ctx) {
 
   const load = useCallback(async () => { const r = await api<{ activities: Activity[]; shoes?: MiniShoe[] }>("/api/activities"); setActs(r.activities); setShoes(r.shoes ?? []); }, []);
   useEffect(() => { load().catch((e) => toast(e.message)); }, [load, toast]);
+  useEffect(() => { const on = () => { load().catch(() => {}); }; window.addEventListener("tp-synced", on); return () => window.removeEventListener("tp-synced", on); }, [load]);
 
   async function sync() {
     setSyncing(true);
-    try { const r = await api<{ imported: number }>("/api/strava/sync", { method: "POST" }); await Promise.all([load(), refresh()]); toast(r.imported ? `${r.imported} activité(s) synchronisée(s).` : "Tout est déjà à jour."); }
+    try { const r = await api<{ imported: number; added?: number }>("/api/strava/sync", { method: "POST" }); await Promise.all([load(), refresh()]); toast(r.added ? `${r.added} nouvelle${r.added > 1 ? "s" : ""} sortie${r.added > 1 ? "s" : ""} importée${r.added > 1 ? "s" : ""}.` : "Tout est déjà à jour."); }
     catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }
     finally { setSyncing(false); }
   }
@@ -202,7 +203,7 @@ function Freshness({ s }: { s: Me["strava"] }) {
   const a = s.analyzed;
   return (
     <p className={`fresh${s.lastError ? " err" : ""}`}>
-      {s.lastError ? `Dernière synchro en erreur : ${s.lastError}` : s.lastSyncAt ? `Strava synchronisé ${ago(s.lastSyncAt)}` : "Strava pas encore synchronisé"}
+      {s.lastError ? `Dernière synchro en erreur : ${s.lastError}` : s.lastSyncAt ? `Strava synchronisé ${ago(s.lastSyncAt)}` : "Strava pas encore synchronisé"}{!s.lastError && " (automatique à chaque ouverture)"}
       {a && a.total > 0 && <> · <b>{a.done}</b> sortie{a.done > 1 ? "s" : ""} analysée{a.done > 1 ? "s" : ""} seconde par seconde sur {a.total}{a.done < a.total ? " (le reste arrive aux prochaines synchros)" : ""}</>}
     </p>
   );

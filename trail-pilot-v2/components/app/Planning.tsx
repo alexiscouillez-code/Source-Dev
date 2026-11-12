@@ -15,6 +15,7 @@ import type { Targets } from "./client";
 import RaceStrategy from "./RaceStrategy";
 import RaceWeather from "./RaceWeather";
 import SideRaces, { type SideRaceRow } from "./SideRaces";
+import PlanCalendar from "./PlanCalendar";
 import type { RaceRoute, WeatherAdjust } from "@/lib/engine/strategy";
 
 type Verdict = "solide" | "ambitieux" | "risque" | "court";
@@ -56,8 +57,10 @@ export default function Planning({ me, refresh, toast, go }: Ctx) {
   const [wx, setWx] = useState<WeatherAdjust | null>(null);
 
   // Avec `morph`, la liste se réorganise en transition de vue : chaque séance glisse vers sa nouvelle place.
-  const load = useCallback(async (morph = false) => { const d = await api<View>("/api/plan"); if (morph) withTransition(() => flushSync(() => setV(d))); else setV(d); }, []);
+  const [rev, setRev] = useState(0);
+  const load = useCallback(async (morph = false) => { const d = await api<View>("/api/plan"); if (morph) withTransition(() => flushSync(() => setV(d))); else setV(d); setRev((n) => n + 1); }, []);
   useEffect(() => { load().catch((e) => toast(e.message)); }, [load, toast]);
+  useEffect(() => { const on = () => { load().catch(() => {}); }; window.addEventListener("tp-synced", on); return () => window.removeEventListener("tp-synced", on); }, [load]);
 
   async function recalc() {
     setBusy(true);
@@ -85,6 +88,16 @@ export default function Planning({ me, refresh, toast, go }: Ctx) {
       toast(`${a.title} déplacée au ${dayLabel(b.date, { weekday: "long", day: "numeric", month: "long" })}.`);
     } catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }
   }
+  // Calendrier : la séance va au jour touché ; si une séance déplaçable s’y trouve, elles échangent leurs jours.
+  async function moveTo(a: Session, date: string, swap: Session | null) {
+    try {
+      await api(`/api/plan/${a.id}`, { method: "PATCH", body: { date } });
+      if (swap) await api(`/api/plan/${swap.id}`, { method: "PATCH", body: { date: a.date } });
+      buzz([10, 40, 10]);
+      await Promise.all([load(), refresh()]);
+      toast(`${a.title} déplacée au ${dayLabel(date, { weekday: "long", day: "numeric", month: "long" })}.`);
+    } catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }
+  }
   const [away, setAway] = useState(false);
   const saved = async (msg: string) => { setEditing(false); await Promise.all([load(), refresh()]); toast(msg); };
 
@@ -102,7 +115,9 @@ export default function Planning({ me, refresh, toast, go }: Ctx) {
             <LearningCard l={v.learning} onToggle={async (off) => { try { await api("/api/plan", { method: "PATCH", body: { learningOff: off, today: v.today } }); await Promise.all([load(), refresh()]); toast(off ? "Plan d’origine rétabli, sans ajustement." : "Ajustements réactivés."); } catch (e) { toast(e instanceof Error ? e.message : "Erreur"); } }} />
       {away && <AbsenceSheet a={v.absence ?? null} today={v.today} onClose={() => setAway(false)} onSaved={async (msg) => { setAway(false); await Promise.all([load(), refresh()]); toast(msg); }} />}
             <p className="muted small" style={{ margin: 0 }}>Sans course choisie, Trail Pilot te propose 3 semaines pour garder ta forme, à partir de ce que tu fais en ce moment.</p>
-            <WeekList sessions={v.sessions} weeks={[]} today={me.today} doneByWeek={v.doneByWeek} onStatus={setStatus} targets={me.targets} onWhere={whereTo} onMove={move} />
+            <PlanBoard today={v.today} rev={rev} targets={me.targets} onStatus={setStatus} onWhere={whereTo} onMoveTo={moveTo}>
+              <WeekList sessions={v.sessions} weeks={[]} today={me.today} doneByWeek={v.doneByWeek} onStatus={setStatus} targets={me.targets} onWhere={whereTo} onMove={move} />
+            </PlanBoard>
           </section>
         )}
         {!editing && <SideRaces races={v.races} today={v.today} mainDate={null} toast={toast} onChanged={async () => { await Promise.all([load(), refresh()]); }} />}
@@ -124,6 +139,11 @@ export default function Planning({ me, refresh, toast, go }: Ctx) {
       <LearningCard l={v.learning} onToggle={async (off) => { try { await api("/api/plan", { method: "PATCH", body: { learningOff: off, today: v.today } }); await Promise.all([load(), refresh()]); toast(off ? "Plan d’origine rétabli, sans ajustement." : "Ajustements réactivés."); } catch (e) { toast(e instanceof Error ? e.message : "Erreur"); } }} />
       {away && <AbsenceSheet a={v.absence ?? null} today={v.today} onClose={() => setAway(false)} onSaved={async (msg) => { setAway(false); await Promise.all([load(), refresh()]); toast(msg); }} />}
       <RaceHeader p={p} />
+      <section className="card plan-board" style={{ marginTop: 14 }}>
+        <PlanBoard today={v.today} rev={rev} targets={me.targets} onStatus={setStatus} onWhere={whereTo} onMoveTo={moveTo}>
+          <WeekList sessions={v.sessions} weeks={p.weeks} today={v.today} doneByWeek={v.doneByWeek} onStatus={setStatus} targets={me.targets} onWhere={whereTo} onMove={move} />
+        </PlanBoard>
+      </section>
       <RaceWeather key={v.goal.route?.uploadedAt ?? 0} toast={toast} onAdjust={setWx} />
       <RaceStrategy raceName={v.goal.name} raceDate={v.goal.date} route={v.goal.route ?? null} estimate={p.estimate} weather={wx} toast={toast} onChanged={async () => { await Promise.all([load(), refresh()]); }} />
       <SideRaces races={v.races} today={v.today} mainDate={v.goal.date} toast={toast} onChanged={async () => { await Promise.all([load(), refresh()]); }} />
@@ -138,13 +158,26 @@ export default function Planning({ me, refresh, toast, go }: Ctx) {
           </div>
         </section>
       </div>
-      <section className="card" style={{ marginTop: 14, paddingTop: 4 }}>
-        <WeekList sessions={v.sessions} weeks={p.weeks} today={v.today} doneByWeek={v.doneByWeek} onStatus={setStatus} targets={me.targets} onWhere={whereTo} onMove={move} />
-      </section>
       <p className="muted small" style={{ marginTop: 12, maxWidth: "75ch" }}>
         Le plan part de ta charge réelle (séances des 4 dernières semaines, fatigue et forme de fond) et se recalcule chaque lundi.
-        Chaque check-in du soir adapte la séance du lendemain. Progression de {me.profile.level === "debutant" ? "6" : me.profile.level === "confirme" ? "10" : "8"} % par semaine au plus, une semaine plus légère toutes les quatre.
+        Chaque check-in du matin adapte la séance du jour. Une sortie enregistrée (Strava ou fichier) valide automatiquement la séance prévue ce jour-là. Progression de {me.profile.level === "debutant" ? "6" : me.profile.level === "confirme" ? "10" : "8"} % par semaine au plus, une semaine plus légère toutes les quatre.
       </p>
+    </>
+  );
+}
+
+/** Le planning en deux vues : calendrier du mois (par défaut) ou liste des semaines. Le choix est retenu sur l’appareil. */
+function PlanBoard({ children, ...cal }: { children: React.ReactNode } & React.ComponentProps<typeof PlanCalendar>) {
+  const [view, setView] = useState<"cal" | "list">("cal");
+  useEffect(() => { try { if (localStorage.getItem("tp-plan-view") === "list") setView("list"); } catch { /* stockage indisponible */ } }, []);
+  const choose = (x: "cal" | "list") => { setView(x); try { localStorage.setItem("tp-plan-view", x); } catch { /* stockage indisponible */ } };
+  return (
+    <>
+      <div className="view-switch" role="tablist" aria-label="Affichage du planning">
+        <button role="tab" aria-selected={view === "cal"} className={view === "cal" ? "on" : ""} onClick={() => choose("cal")}>Calendrier</button>
+        <button role="tab" aria-selected={view === "list"} className={view === "list" ? "on" : ""} onClick={() => choose("list")}>Liste</button>
+      </div>
+      {view === "cal" ? <PlanCalendar {...cal} /> : children}
     </>
   );
 }
@@ -466,7 +499,7 @@ function flyCheck(id: number): Promise<void> {
 }
 
 /** Prévu / réalisé, en une ligne : verdict, durée et part du temps dans la zone visée. */
-function ReviewLine({ r }: { r: Review }) {
+export function ReviewLine({ r }: { r: Review }) {
   const tone = r.verdict === "tenue" ? "ok" : r.verdict === "intense" ? "bad" : "lite";
   return (
     <div className={`review r-${tone}`}>

@@ -202,3 +202,72 @@
 .cond-froid { border-color: color-mix(in srgb, var(--rest) 55%, transparent); }
 .shoe-alert { margin: 0 0 12px; padding: 8px 12px; border-radius: 12px; font-size: 13.5px; border: 1px solid color-mix(in srgb, var(--lite) 50%, transparent); }
 .shoe-alert.w-usee { border-color: color-mix(in srgb, var(--danger) 55%, transparent); }
+
+/* ---------- Planning : vue calendrier ---------- */
+.view-switch { display: inline-flex; padding: 3px; border-radius: 999px; border: 1px solid var(--line); background: var(--ink-2); margin-bottom: 12px; }
+.view-switch button { all: unset; cursor: pointer; padding: 7px 16px; border-radius: 999px; font-size: 13.5px; color: var(--mute); min-height: 30px; display: inline-flex; align-items: center; }
+.view-switch button.on { background: var(--snow); color: var(--ink); font-weight: 600; }
+.view-switch button:focus-visible { outline: 2px solid var(--ember); outline-offset: 2px; }
+.cal { display: grid; gap: 12px; }
+.cal-nav { display: flex; align-items: center; gap: 8px; }
+.cal-nav h2 { margin: 0; font-size: 20px; letter-spacing: -.02em; min-width: 9.5em; text-align: center; }
+.cal-nav .iconbtn { font-size: 22px; line-height: 1; }
+.cal-nav .btn { margin-left: auto; }
+.cal-move { margin: 0; padding: 8px 12px; border-radius: 12px; border: 1px dashed var(--ember); font-size: 13.5px; }
+.cal-grid { display: grid; gap: 4px; }
+.cal-row { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.cal-head span { font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--mute); text-align: center; padding: 2px 0; }
+.cal-sum { display: none; }
+.cal-day { all: unset; box-sizing: border-box; cursor: pointer; min-height: 62px; padding: 5px 4px; border-radius: 10px; border: 1px solid var(--line); background: var(--ink-2); display: flex; flex-direction: column; gap: 3px; min-width: 0; transition: border-color .15s, background .15s; }
+.cal-day:hover { border-color: var(--mute); }
+.cal-day:focus-visible { outline: 2px solid var(--ember); outline-offset: 1px; }
+.cal-day.out { opacity: .42; }
+.cal-day.past:not(.today) .cal-num { color: var(--mute); }
+.cal-day.today { border-color: var(--ember); }
+.cal-day.today .cal-num { color: var(--ember); font-weight: 700; }
+.cal-day.sel { background: var(--ink-3); border-color: var(--snow); }
+.cal-day.abs { background-image: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--rest) 14%, transparent) 6px 12px); }
+.cal-grid.is-moving .cal-day.drop { border-style: dashed; border-color: var(--ember); }
+.cal-grid.is-moving .cal-day:not(.drop) { opacity: .4; }
+.cal-num { font-family: var(--mono); font-size: 12px; display: flex; align-items: center; gap: 3px; line-height: 1; }
+.cal-flag { font-style: normal; color: var(--ember); font-size: 12px; }
+.cal-note { display: inline-block; width: 6px; height: 6px; border-radius: 2px 2px 2px 0; background: var(--rest); margin-left: auto; }
+.cal-evs { display: grid; gap: 2px; min-width: 0; }
+.ev { --c: var(--ok); display: flex; align-items: center; gap: 3px; min-width: 0; padding: 2px 4px; border-radius: 6px; font-size: 10.5px; line-height: 1.25; color: var(--snow); background: color-mix(in srgb, var(--c) 20%, transparent); border-left: 3px solid var(--c); }
+.ev em { font-style: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; display: none; }
+.ev small { font-family: var(--mono); font-size: 10px; white-space: nowrap; }
+.ev b { color: var(--c); font-size: 10px; }
+.ev-endu, .ev-endu-b { --c: var(--ok); } .ev-qual, .ev-qual-b { --c: var(--ember); } .ev-renfo, .ev-renfo-b { --c: var(--lite); } .ev-recup, .ev-recup-b { --c: var(--rest); } .ev-extra, .ev-extra-b { --c: var(--mute); } .ev-race-b { --c: var(--ember); }
+.ev.st-done { background: color-mix(in srgb, var(--c) 38%, transparent); }
+.ev.st-missed, .ev.st-skipped { opacity: .55; background: transparent; }
+.ev.st-missed small, .ev.st-skipped small, .ev.st-missed em, .ev.st-skipped em { text-decoration: line-through; }
+.cal-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--mute); }
+.cal-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.cal-legend i[class^="ev-"] { width: 10px; height: 10px; border-radius: 3px; background: var(--c); }
+.cal-detail { display: grid; gap: 10px; padding-top: 12px; border-top: 1px solid var(--line); scroll-margin: 90px; }
+.cal-detail h3 { margin: 0; font-size: 17px; }
+.cal-detail h3::first-letter { text-transform: uppercase; }
+.cal-sess { display: grid; gap: 8px; padding: 12px; border-radius: 12px; background: var(--ink-2); border: 1px solid var(--line); border-left: 4px solid var(--c, var(--line)); }
+.cal-sess .t { font-size: 16px; } .cal-sess .s { font-size: 13px; color: var(--mute); }
+.cal-sess .btn svg { width: 15px; height: 15px; }
+.cal-real, .cal-race { margin: 0; font-size: 14px; }
+.cal-comment { margin: 0; padding: 10px 12px; border-radius: 12px; border-left: 3px solid var(--rest); background: var(--ink-2); font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.cal-comment small { display: block; font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--mute); margin-bottom: 4px; }
+@media (min-width: 700px) {
+  .cal-day { min-height: 92px; padding: 7px 6px; }
+  .ev { font-size: 11.5px; } .ev em { display: block; flex: 1; }
+}
+@media (min-width: 1000px) {
+  .cal-row { grid-template-columns: repeat(7, minmax(0, 1fr)) 84px; }
+  .cal-sum { display: flex; flex-direction: column; justify-content: center; align-items: flex-end; font-family: var(--mono); font-size: 11.5px; line-height: 1.2; padding-right: 2px; }
+  .cal-head .cal-sum { align-items: flex-end; }
+  .cal-sum small { color: var(--mute); font-size: 9.5px; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 3px; }
+  .cal-sum b.done { color: var(--ok); }
+}
+@media (prefers-reduced-motion: reduce) { .cal-day { transition: none; } }
+
+/* Check-in : commentaire libre */
+.ci-note textarea { width: 100%; min-height: 64px; resize: vertical; }
+.ci-said { margin: 0; padding: 8px 12px; border-left: 3px solid var(--rest); border-radius: 0 10px 10px 0; background: var(--ink-2); font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ci-said small { display: block; font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--mute); }
+@media (max-width: 699px) { .ev { padding: 2px 2px 2px 3px; gap: 2px; overflow: hidden; } .ev small { font-size: 9.5px; letter-spacing: -.02em; } .ev b { font-size: 9px; } }

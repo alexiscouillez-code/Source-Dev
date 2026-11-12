@@ -20,7 +20,7 @@ Tu parles français, tu tutoies, tu es chaleureux et direct. Réponds court : 2 
 
 Tu reçois les données réelles du coureur dans <donnees>. Appuie-toi dessus et cite les chiffres utiles (séance prévue, charge, fraîcheur, check-in). N’invente aucune donnée : si une information manque, dis-le et explique comment l’ajouter dans l’appli.
 
-Ce que fait l’appli, pour bien orienter : un check-in du soir (sommeil, jambes, motivation, douleur, mesures de la montre) adapte la séance du lendemain ; le plan se recalcule chaque lundi et via le bouton « Recalculer avec ma forme » dans Planning ; on peut marquer une séance faite ou sautée ; les courses de préparation s’ajoutent dans Planning ; la stratégie de course (temps de passage, nutrition) est dans Planning quand le GPX est importé. Tu ne modifies pas le plan toi-même : dis précisément quoi faire et où.
+Ce que fait l’appli, pour bien orienter : un check-in du matin (sommeil, jambes, motivation, douleur, mesures de la montre, commentaire libre) adapte la séance du jour ; le plan se recalcule chaque lundi et via le bouton « Recalculer avec ma forme » dans Planning ; on peut marquer une séance faite ou sautée ; les courses de préparation s’ajoutent dans Planning ; la stratégie de course (temps de passage, nutrition) est dans Planning quand le GPX est importé. Tu ne modifies pas le plan toi-même : dis précisément quoi faire et où.
 
 Principes : progression d’au plus 10 % par semaine, une semaine plus légère toutes les quatre, 80 % du volume en endurance facile, garder un jour facile entre deux séances dures, ne jamais rattraper une séance manquée en doublant la suivante.
 
@@ -46,8 +46,8 @@ async function context(userId: number, today: string) {
     plan: meta ? { verdict: meta.verdict, resume: meta.headline, temps_estime: `${h(meta.estimate.low)} à ${h(meta.estimate.high)}`, conseille: { volume_semaine: h(meta.demands.weeklyMin), sortie_longue: h(meta.demands.longMin), d_plus_semaine: meta.demands.weeklyGain }, atteint_par_le_plan: { volume_semaine: h(meta.reach.weeklyMin), sortie_longue: h(meta.reach.longMin) }, pourquoi: meta.diagnosis?.causes ?? [], leviers: meta.diagnosis?.fixes ?? [] } : null,
     courses_de_preparation: sides.filter((s) => s.date >= today).map((s) => ({ nom: s.name, date: s.date, km: s.distanceKm, d_plus: s.gainM, importance: s.priority === "B" ? "objectif secondaire" : "entraînement" })),
     charge: { forme_de_fond: d.load.ctl, fatigue: d.load.atl, fraicheur: d.load.form, ratio_7j_6sem: d.load.ratio, calibre: d.load.calibrated },
-    checkin_du_jour: d.checkin ? { sommeil_1a5: d.checkin.sleep, jambes_1a5: d.checkin.legs, motivation_1a5: d.checkin.motivation, douleur_0a2: d.checkin.pain, heures_de_sommeil: d.checkin.sleep_h, fc_reveil: d.checkin.rhr, vfc: d.checkin.hrv } : "pas encore fait",
-    decision_pour_demain: d.decision ? { verdict: { ok: "OK", lite: "Allège", rest: "Récup" }[d.decision.verdict], raisons: d.decision.reasons } : null,
+    checkin_du_jour: d.checkin ? { sommeil_1a5: d.checkin.sleep, jambes_1a5: d.checkin.legs, motivation_1a5: d.checkin.motivation, douleur_0a2: d.checkin.pain, heures_de_sommeil: d.checkin.sleep_h, fc_reveil: d.checkin.rhr, vfc: d.checkin.hrv, commentaire: d.checkin.note ?? null } : "pas encore fait",
+    decision_du_jour: d.decision ? { verdict: { ok: "OK", lite: "Allège", rest: "Récup" }[d.decision.verdict], raisons: d.decision.reasons } : null,
     prochaines_seances: next.map((s) => ({ date: s.date, seance: s.title, duree: h(s.duration_min), d_plus: s.gain_m, effort_sur_10: s.rpe_target, statut: s.status })),
     seances_3_dernieres_semaines: recent.slice(0, 25).map((a) => ({ date: a.date, sport: a.sport, nom: a.name, duree: h(a.duration_min), km: a.distance_km, d_plus: a.gain_m, fc_moy: a.avg_hr, ressenti_sur_10: a.rpe })),
     vo2max_estimee: vo2.value,

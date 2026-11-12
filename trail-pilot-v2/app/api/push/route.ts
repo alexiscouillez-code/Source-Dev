@@ -20,7 +20,7 @@ export const POST = withUser(async (user, req) => {
     [s.endpoint, user.id, s.keys.p256dh.slice(0, 200), s.keys.auth.slice(0, 100), Date.now()],
   );
   await run("UPDATE profiles SET reminder = 1 WHERE user_id = ?", [user.id]);
-  await pushToUser(user.id, { title: "Rappel activé", body: "Chaque soir vers 20 h, Trail Pilot te rappellera ton check-in s’il n’est pas encore fait.", tag: "test" });
+  await pushToUser(user.id, { title: "Rappel activé", body: "Chaque matin vers 7 h, Trail Pilot te rappellera ton check-in s’il n’est pas encore fait.", tag: "test" });
   return json({ ok: true });
 });
 

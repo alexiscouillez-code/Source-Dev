@@ -63,14 +63,28 @@ export function withLoad(a: ActivityRow, physio: { hrMax: number | null; hrRest:
 /** Lie les séances réalisées au planning et marque les séances manquées. */
 export async function reconcile(userId: number, today: string) {
   await assignShoes(userId);
-  const plans = await all<PlanRow>("SELECT * FROM plan_sessions WHERE user_id = ? AND date <= ? AND status IN ('planned', 'adapted')", [userId, today]);
+  // Séances prévues jusqu’à aujourd’hui, et séances « manquées » des 14 derniers jours : une sortie synchronisée
+  // après coup (montre chargée le lendemain, Strava en retard) valide quand même la séance.
+  const plans = await all<PlanRow>(
+    "SELECT * FROM plan_sessions WHERE user_id = ? AND date <= ? AND (status IN ('planned', 'adapted') OR (status = 'missed' AND date >= ?)) ORDER BY date, id",
+    [userId, today, addDays(today, -14)]);
   if (!plans.length) return;
-  const acts = await all<ActivityRow>("SELECT id, date, sport FROM activities WHERE user_id = ? AND date >= ?", [userId, plans.reduce((m, p) => (p.date < m ? p.date : m), today)]);
+  const since = plans[0].date;
+  const acts = await all<ActivityRow>("SELECT id, date, sport, duration_min FROM activities WHERE user_id = ? AND date >= ? ORDER BY duration_min DESC", [userId, since]);
+  // Une activité ne valide qu’une séance : celles déjà rattachées ne sont pas réutilisées.
+  const used = new Set((await all<{ activity_id: number }>("SELECT activity_id FROM plan_sessions WHERE user_id = ? AND date >= ? AND activity_id IS NOT NULL", [userId, since])).map((r) => r.activity_id));
   for (const p of plans) {
-    const done = acts.find((a) => a.date === p.date && (isFoot(a.sport) || a.sport === p.sport));
-    if (done) await run("UPDATE plan_sessions SET status = 'done', activity_id = ?, updated_at = ? WHERE id = ?", [done.id, Date.now(), p.id]);
-    else if (p.date < today) await run("UPDATE plan_sessions SET status = 'missed', updated_at = ? WHERE id = ?", [Date.now(), p.id]);
+    const done = acts.find((a) => a.date === p.date && !used.has(a.id) && matches(p, a.sport));
+    if (done) { used.add(done.id); await run("UPDATE plan_sessions SET status = 'done', activity_id = ?, updated_at = ? WHERE id = ?", [done.id, Date.now(), p.id]); }
+    else if (p.date < today && p.status !== "missed") await run("UPDATE plan_sessions SET status = 'missed', updated_at = ? WHERE id = ?", [Date.now(), p.id]);
   }
+}
+
+/** Une sortie à pied valide une séance à pied, quelle que soit sa variante ; le renforcement et le vélo demandent une activité du même type. */
+function matches(p: PlanRow, sport: Sport) {
+  if (p.template === "strength" || p.sport === "renfo") return sport === "renfo";
+  if (isFoot(p.sport as Sport) || p.template === "recovery") return isFoot(sport) || sport === p.sport;
+  return sport === p.sport;
 }
 
 /**
@@ -120,7 +134,7 @@ async function loadState(userId: number, today: string) {
   return { profile, acts, physio, tl: timeline(acts.map(toActivityLike), physio, today) };
 }
 
-/** Enregistre le check-in du soir et adapte la prochaine séance prévue. */
+/** Enregistre le check-in du matin (avec son commentaire libre) et adapte la séance du jour. */
 export async function saveCheckin(userId: number, today: string, c: CheckIn & { note?: string | null }, health: { zones: string[]; consent: boolean } = { zones: [], consent: false }, watch: { sleepH: number | null; rhr: number | null; hrv: number | null } = { sleepH: null, rhr: null, hrv: null }) {
   // Les zones douloureuses sont des données de santé : enregistrées seulement avec un accord explicite.
   if (health.consent) await run("UPDATE profiles SET health_consent_at = COALESCE(health_consent_at, ?) WHERE user_id = ?", [Date.now(), userId]);
@@ -136,7 +150,8 @@ export async function saveCheckin(userId: number, today: string, c: CheckIn & { 
   );
   const [{ tl }, goal] = await Promise.all([loadState(userId, today), loadGoal(userId)]);
   const d = decide({ ...c, zones: zones ? health.zones : [], watch: await watchOf(userId, today, { sleep_h: watch.sleepH, rhr, hrv }) }, tl, today, goal?.date);
-  const next = await one<PlanRow>("SELECT * FROM plan_sessions WHERE user_id = ? AND date = ? AND locked = 0 AND status IN ('planned', 'adapted')", [userId, addDays(today, 1)]);
+  // Check-in du matin : la décision porte sur la séance du jour (si elle n’est ni faite, ni verrouillée).
+  const next = await one<PlanRow>("SELECT * FROM plan_sessions WHERE user_id = ? AND date = ? AND locked = 0 AND status IN ('planned', 'adapted') AND template NOT IN ('race', 'strength')", [userId, today]);
   if (next) await applyVerdict(next, d.verdict);
   return d;
 }
@@ -277,6 +292,44 @@ export async function loadLearning(userId: number, today: string): Promise<{ lea
 export async function setLearningOff(userId: number, today: string, off: boolean) {
   await run("INSERT INTO plan_learning(user_id, sig, off, updated_at) VALUES (?, '', ?, ?) ON CONFLICT(user_id) DO UPDATE SET off = excluded.off, updated_at = excluded.updated_at", [userId, off ? 1 : 0, Date.now()]);
   await regeneratePlan(userId, today);
+}
+
+/**
+ * Vue calendrier : tout ce qui s’est passé ou est prévu entre deux dates (semaines entières du mois affiché).
+ * Séances du plan avec leur réalisé, sorties hors plan, check-in du jour avec son commentaire, courses, imprévu.
+ */
+export async function calendarView(userId: number, today: string, from: string, to: string) {
+  await reconcile(userId, today);
+  const prof = await loadProfile(userId);
+  const physio = { hrMax: prof.hr_max, hrRest: prof.hr_rest };
+  const targets = trainingTargets(null, prof.hr_max, prof.hr_rest);
+  const [sessions, acts, checks, goal, sides, absence] = await Promise.all([
+    all<PlanRow & { a_duration: number | null; a_distance: number | null; a_gain: number | null; a_name: string | null; a_analysis: string | null }>(
+      `SELECT p.*, a.duration_min AS a_duration, a.distance_km AS a_distance, a.gain_m AS a_gain, a.name AS a_name, a.analysis AS a_analysis
+       FROM plan_sessions p LEFT JOIN activities a ON a.id = p.activity_id
+       WHERE p.user_id = ? AND p.date BETWEEN ? AND ? ORDER BY p.date, p.id`, [userId, from, to]),
+    all<{ id: number; date: string; sport: Sport; name: string | null; duration_min: number; distance_km: number | null; gain_m: number | null; source: string }>(
+      "SELECT id, date, sport, name, duration_min, distance_km, gain_m, source FROM activities WHERE user_id = ? AND date BETWEEN ? AND ? ORDER BY date, id", [userId, from, to]),
+    all<{ date: string; sleep: number; legs: number; motivation: number; pain: number; note: string | null }>(
+      "SELECT date, sleep, legs, motivation, pain, note FROM checkins WHERE user_id = ? AND date BETWEEN ? AND ?", [userId, from, to]),
+    loadGoal(userId), loadSideRaces(userId), loadAbsence(userId, today),
+  ]);
+  const attached = new Set(sessions.map((p) => p.activity_id).filter((x): x is number => x != null));
+  return {
+    today, from, to,
+    sessions: sessions.map(({ a_analysis, ...p }) => ({
+      ...p,
+      review: p.status === "done" && p.a_duration != null ? reviewSession(p, { duration_min: p.a_duration, gain_m: p.a_gain }, parseAnalysis(a_analysis), targets, physio) : null,
+    })),
+    // Sorties qui ne valident aucune séance du plan (jour de repos, deuxième sortie, vélo…).
+    extras: acts.filter((a) => !attached.has(a.id)),
+    checkins: checks.map((c) => ({ date: c.date, note: c.note, score: Math.max(0, Math.min(100, Math.round(((c.sleep + c.legs + c.motivation - 3) / 12) * 100 - c.pain * 12))) })),
+    races: [
+      ...(goal && goal.date >= from && goal.date <= to ? [{ date: goal.date, name: goal.name, main: true }] : []),
+      ...sides.filter((r) => r.date >= from && r.date <= to).map((r) => ({ date: r.date, name: r.name, main: false })),
+    ],
+    absence,
+  };
 }
 
 /** Le plan suit la charge réelle : il se recalcule automatiquement chaque nouvelle semaine. */

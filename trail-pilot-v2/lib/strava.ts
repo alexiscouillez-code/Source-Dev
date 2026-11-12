@@ -120,6 +120,7 @@ async function upsertActivity(userId: number, a: StravaActivity) {
 
 // ---------- Analyse seconde par seconde ----------
 type StreamSet = Partial<Record<"time" | "heartrate" | "velocity_smooth" | "grade_smooth" | "altitude" | "distance", { data: number[] }>>;
+export const AUTO_SYNC_GAP = 3 * 60000;
 const STREAMS_PER_SYNC = 25; // Strava limite les appels : on rattrape l’historique par lots, des plus récentes aux plus anciennes
 
 /** Télécharge les flux d’une activité, en tire le résumé d’analyse et l’enregistre. Renvoie false si la limite d’appels est atteinte. */
@@ -150,15 +151,20 @@ async function analyzePending(token: string, userId: number, limit = STREAMS_PER
 }
 
 /** Importe les activités depuis la dernière synchro (120 jours au premier passage). */
-export async function syncUser(userId: number) {
+export async function syncUser(userId: number, opts: { auto?: boolean } = {}) {
   const link = await one<Link>("SELECT * FROM strava_links WHERE user_id = ?", [userId]);
   if (!link) throw new StravaError(404, "Aucun compte Strava relié.");
+  // Synchro automatique (ouverture de l’appli, retour sur l’onglet, tâche du matin) : au plus une toutes les
+  // 3 minutes par compte, pour rester sous les limites d’appels de Strava.
+  if (opts.auto && link.last_sync_at && Date.now() - link.last_sync_at < AUTO_SYNC_GAP) return { imported: 0, added: 0, analyzed: 0, skipped: true };
   try {
     const token = await accessToken(link);
     // Une fois par compte, on repasse sur 120 jours pour récupérer les tracés GPS des sorties déjà importées.
     const backfilled = await one<{ value: string }>("SELECT value FROM app_kv WHERE key = ?", [`tracks:${userId}`]);
     const after = Math.floor((link.last_sync_at && backfilled ? link.last_sync_at - 3 * 86400000 : Date.now() - 120 * 86400000) / 1000);
     let imported = 0;
+    const count = async () => (await one<{ n: number }>("SELECT COUNT(*) AS n FROM activities WHERE user_id = ? AND strava_id IS NOT NULL", [userId]))?.n ?? 0;
+    const before = await count();
     for (let page = 1; page <= 8; page++) {
       const list = await api<StravaActivity[]>(token, `/athlete/activities?after=${after}&per_page=100&page=${page}`);
       for (const a of list) { await upsertActivity(userId, a); imported++; }
@@ -167,8 +173,9 @@ export async function syncUser(userId: number) {
     await run("UPDATE strava_links SET last_sync_at = ?, last_error = NULL WHERE user_id = ?", [Date.now(), userId]);
     if (!backfilled) await run("INSERT OR REPLACE INTO app_kv(key, value, updated_at) VALUES (?, '1', ?)", [`tracks:${userId}`, Date.now()]);
     // L’analyse fine ne doit jamais faire échouer la synchro elle-même.
-    const analyzed = await analyzePending(token, userId).catch(() => 0);
-    return { imported, analyzed };
+    const analyzed = await analyzePending(token, userId, opts.auto ? 8 : STREAMS_PER_SYNC).catch(() => 0);
+    // `added` : sorties réellement nouvelles (la fenêtre de synchro repasse aussi sur les 3 derniers jours).
+    return { imported, added: Math.max(0, (await count()) - before), analyzed, skipped: false };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Erreur Strava";
     await run("UPDATE strava_links SET last_error = ? WHERE user_id = ?", [message, userId]);

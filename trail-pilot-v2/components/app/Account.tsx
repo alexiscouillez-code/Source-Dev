@@ -137,7 +137,7 @@ const b64ToBytes = (b64: string) => {
   return Uint8Array.from(s, (c) => c.charCodeAt(0));
 };
 
-/** Rappel du check-in du soir par notification. */
+/** Rappel du check-in du matin par notification. */
 function ReminderCard({ me, refresh, toast }: P) {
   const [support, setSupport] = useState<"ok" | "ios" | "no" | null>(null);
   const [perm, setPerm] = useState<NotificationPermission | null>(null);
@@ -176,7 +176,7 @@ function ReminderCard({ me, refresh, toast }: P) {
   return (
     <section className="card">
       <div className="card-head"><h2>Rappel du check-in</h2><span className={`chip ${on ? "ok" : "dim"}`}><span className="dot" />{on ? "Activé" : "Désactivé"}</span></div>
-      <p className="soft" style={{ margin: 0 }}>Chaque soir vers 20 h, une notification te rappelle ton check-in s’il n’est pas encore fait, avec la séance prévue le lendemain.</p>
+      <p className="soft" style={{ margin: 0 }}>Chaque matin vers 7 h, une notification te rappelle ton check-in s’il n’est pas encore fait, avec la séance prévue ce jour-là.</p>
       {!me.push ? <p className="muted small" style={{ margin: 0 }}>Les notifications ne sont pas encore activées sur le site.</p>
         : support === "ios" ? <p className="note small" style={{ margin: 0 }}>Sur iPhone, ajoute d’abord Trail Pilot à l’écran d’accueil (bouton Partager, puis « Sur l’écran d’accueil »), ouvre-le depuis l’icône et reviens ici.</p>
         : support === "no" ? <p className="muted small" style={{ margin: 0 }}>Ce navigateur ne gère pas les notifications.</p>
@@ -261,7 +261,7 @@ function HealthCard({ me, refresh, toast }: P) {
   return (
     <section className="card">
       <div className="card-head"><h2>Données de santé</h2><span className={`chip ${me.settings.healthConsent ? "ok" : "dim"}`}><span className="dot" />{me.settings.healthConsent ? "Accord donné" : "Pas d’accord"}</span></div>
-      <p className="soft" style={{ margin: 0 }}>Au check-in, tu peux indiquer où tu as mal (genou, mollet…) et noter ta FC au réveil et ta VFC, pour que l’X-Ray et la séance du lendemain en tiennent compte. Ces informations ne sont enregistrées qu’avec ton accord et ne sont jamais partagées.</p>
+      <p className="soft" style={{ margin: 0 }}>Au check-in, tu peux indiquer où tu as mal (genou, mollet…) et noter ta FC au réveil et ta VFC, pour que l’X-Ray et la séance du jour en tiennent compte. Ces informations ne sont enregistrées qu’avec ton accord et ne sont jamais partagées.</p>
       {err && <p className="note err">{err}</p>}
       {me.settings.healthConsent
         ? <button className="btn danger" style={{ justifySelf: "start" }} disabled={busy} onClick={() => { if (confirm("Retirer ton accord ? Les zones douloureuses, FC au réveil et VFC déjà enregistrées seront effacées.")) run(async () => { await api("/api/health", { method: "DELETE" }); await refresh(); }, "Accord retiré, données effacées."); }}>Retirer mon accord et effacer</button>

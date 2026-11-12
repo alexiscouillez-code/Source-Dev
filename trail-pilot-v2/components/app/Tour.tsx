@@ -5,7 +5,7 @@ import type { Tab } from "./AppShell";
 
 const KEY = "tp-tour-v1";
 const STEPS: { tab: Tab; title: string; text: string }[] = [
-  { tab: "today", title: "Chaque soir, ton check-in", text: "Dix secondes pour dire comment tu te sens : Trail Pilot décide si demain on fait la séance prévue, si on allège ou si on récupère." },
+  { tab: "today", title: "Chaque matin, ton check-in", text: "Dix secondes pour dire comment tu te sens : Trail Pilot décide si aujourd’hui on fait la séance prévue, si on allège ou si on récupère." },
   { tab: "plan", title: "Ton plan jusqu’au jour J", text: "Les semaines se recalculent avec ta forme. Maintiens une séance pour la glisser à un autre jour, touche-la pour voir le détail ou l’envoyer sur ta montre." },
   { tab: "terrains", title: "Où courir", text: "Boucles à la bonne distance, côtes, descentes, pistes et points d’eau autour de toi, prêts à télécharger en GPX." },
   { tab: "analysis", title: "Ta progression", text: "Charge, VO2max, volume mois par mois et records. Le bilan de la semaine arrive chaque dimanche soir." },

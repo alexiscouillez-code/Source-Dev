@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { api, type Me } from "./client";
+import { api, localToday, type Me } from "./client";
 import { IconChart, IconPlan, IconRuns, IconTerrain, IconToday, IconUser, Logo } from "./icons";
 import Today from "./Today";
 import Planning from "./Planning";
@@ -77,6 +77,32 @@ export default function AppShell({ user }: { user: { name: string | null; email:
     if (s && STRAVA_MSG[s]) { toast(STRAVA_MSG[s]); url.searchParams.delete("strava"); window.history.replaceState(null, "", url.pathname + url.hash); }
     refresh();
   }, [refresh, toast]);
+
+  // Synchro Strava automatique : à l’ouverture de l’appli, à chaque retour sur l’onglet et toutes les 10 minutes
+  // tant qu’elle reste ouverte. Le serveur limite la fréquence réelle ; les séances du jour sont validées dans la foulée.
+  const linked = !!me?.strava.connected;
+  useEffect(() => {
+    if (!linked) return;
+    let busy = false, last = 0;
+    const sync = async () => {
+      if (busy || document.visibilityState !== "visible" || !navigator.onLine || Date.now() - last < 60000) return;
+      busy = true; last = Date.now();
+      try {
+        const r = await api<{ added?: number; analyzed?: number; skipped?: boolean }>(`/api/strava/sync?auto=1&today=${localToday()}`, { method: "POST" });
+        if (!r.skipped) {
+          await refresh();
+          window.dispatchEvent(new CustomEvent("tp-synced", { detail: r.added ?? 0 }));
+          if (r.added) toast(`${r.added} nouvelle${r.added > 1 ? "s" : ""} sortie${r.added > 1 ? "s" : ""} Strava importée${r.added > 1 ? "s" : ""}. Ton planning est à jour.`);
+        }
+      } catch { /* la synchro automatique reste silencieuse : l’état s’affiche dans Séances */ }
+      finally { busy = false; }
+    };
+    sync();
+    const onVis = () => { if (document.visibilityState === "visible") sync(); };
+    document.addEventListener("visibilitychange", onVis); window.addEventListener("focus", onVis);
+    const timer = window.setInterval(sync, 10 * 60000);
+    return () => { document.removeEventListener("visibilitychange", onVis); window.removeEventListener("focus", onVis); window.clearInterval(timer); };
+  }, [linked, refresh, toast]);
 
   // Indicateur d’onglet qui glisse sous l’onglet actif (barre latérale et barre du bas).
   const sideNav = useRef<HTMLElement>(null), tabNav = useRef<HTMLElement>(null), mainRef = useRef<HTMLElement>(null);

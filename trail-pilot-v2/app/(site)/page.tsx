@@ -121,7 +121,7 @@ export default function Home() {
 
         <section aria-label="Trail Pilot en chiffres">
           <div className="wrap numbers">
-            <div className="num" data-count="10" data-suffix=" s"><b data-n>0 s</b><span>pour le check-in du soir</span></div>
+            <div className="num" data-count="10" data-suffix=" s"><b data-n>0 s</b><span>pour le check-in du matin</span></div>
             <div className="num" data-count="3"><b data-n>0</b><span>réponses possibles : OK, allège, récup</span></div>
             <div className="num" data-count="0" data-suffix=" €"><b data-n>0 €</b><span>aucune carte bancaire, jamais demandée</span></div>
           </div>
@@ -146,7 +146,7 @@ export default function Home() {
               </li>
               <li className="step">
                 <span className="dot">03</span>
-                <div><h3>Check-in, puis décision</h3><p>Sommeil, jambes, motivation, douleur. Ta consigne pour demain, et ton planning s’adapte.</p></div>
+                <div><h3>Check-in, puis décision</h3><p>Sommeil, jambes, motivation, douleur. Ta consigne du jour, et ton planning s’adapte.</p></div>
               </li>
               </ol>
             </div>
@@ -165,7 +165,7 @@ export default function Home() {
             </div>
             <div className="free-card reveal" style={{ ["--d" as string]: "120ms" }}>
               <ul>
-                <li>Check-in du soir et décision du lendemain</li>
+                <li>Check-in du matin et décision du jour</li>
                 <li>Import automatique depuis Strava, ou trace GPX</li>
                 <li>Moteur de charge : forme, fatigue, fraîcheur</li>
                 <li>Planning sur 3 semaines, recalculé selon ta forme</li>
@@ -194,8 +194,8 @@ export default function Home() {
         <section className="final" data-io aria-labelledby="final-title">
           <div className="final-bg" aria-hidden="true"><img src={PHOTOS.dolomites.src} alt="" loading="lazy" decoding="async" /></div>
           <div className="wrap">
-            <span className="kicker reveal">Ce soir</span>
-            <h2 id="final-title" className="mask" style={{ marginTop: 20 }}>Ton prochain sommet<br />se prépare <span className="out">ce soir.</span></h2>
+            <span className="kicker reveal">Demain matin</span>
+            <h2 id="final-title" className="mask" style={{ marginTop: 20 }}>Ton prochain sommet<br />se prépare <span className="out">dès demain matin.</span></h2>
             <a className="btn" href="/connexion?mode=inscription">Faire mon premier check-in <span className="arr">↗</span></a>
             <p>Gratuit · compatible Strava · mobile et ordinateur</p>
           </div>

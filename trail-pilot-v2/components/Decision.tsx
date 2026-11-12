@@ -65,7 +65,7 @@ export default function Decision() {
       <div className="decide-stage">
         <div className="wrap decide-grid">
           <div>
-            <span className="kicker" id="decide-title">Le check-in du soir</span>
+            <span className="kicker" id="decide-title">Le check-in du matin</span>
             <div className="decide-states" aria-live="polite">
               {STATES.map((st, i) => (
                 <div key={st.key} className={`dstate ${st.cls} ${i === idx ? "on" : ""}`} aria-hidden={i !== idx}>
@@ -111,7 +111,7 @@ export default function Decision() {
                 <circle cx="100" cy="90" r="8" fill="#f4efe6" />
               </svg>
               <div className="verdict">
-                <small className="mono">Demain</small>
+                <small className="mono">Aujourd’hui</small>
                 <b>{s.label}</b>
                 <small>{s.advice}</small>
               </div>
