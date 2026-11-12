@@ -16,7 +16,7 @@ import RaceStrategy from "./RaceStrategy";
 import RaceWeather from "./RaceWeather";
 import SideRaces, { type SideRaceRow } from "./SideRaces";
 import PlanCalendar from "./PlanCalendar";
-import Fold from "./Fold";
+import Fold, { useFold } from "./Fold";
 import type { RaceRoute, WeatherAdjust } from "@/lib/engine/strategy";
 
 type Verdict = "solide" | "ambitieux" | "risque" | "court";
@@ -29,7 +29,7 @@ interface RacePlan {
   current: { weeklyMin: number; longestMin: number; weeklyGain: number; hasHistory: boolean };
   reach: { weeklyMin: number; longMin: number };
   verdict: Verdict; headline: string; notes: string[]; weeks: PlanWeek[];
-  diagnosis?: { causes: string[]; fixes: string[] };
+  diagnosis?: { causes: string[]; fixes: string[]; gaps?: { key: string; label: string; reach: number; need: number; unit: "min" | "m" }[]; options?: { title: string; text: string }[]; keep?: string };
 }
 type Session = PlanSession;
 interface View { today: string; goal: { name: string; date: string; distance_km: number | null; gain_m: number | null; route?: RaceRoute | null } | null; plan: RacePlan | null; sessions: Session[]; doneByWeek: Record<string, number>; races: SideRaceRow[]; absence?: Absence | null; learning?: { items: { kind: string; text: string; changes: boolean }[]; off: boolean } }
@@ -194,6 +194,8 @@ function Head({ sub, action }: { sub?: string; action?: React.ReactNode }) {
 // ---------- En-tête de course ----------
 function RaceHeader({ p }: { p: RacePlan }) {
   const vd = VERDICT[p.verdict];
+  const g = p.diagnosis?.gaps, opts = p.diagnosis?.options;
+  const [fixOpen, setFixOpen] = useFold("plan-risk-fix", false);
   return (
     <section className="card race" style={{ ["--accent" as string]: vd.color }}>
       <div className="race-top">
@@ -216,9 +218,34 @@ function RaceHeader({ p }: { p: RacePlan }) {
       <div className="race-verdict">
         <span className="chip" style={{ color: vd.color, borderColor: `color-mix(in srgb, ${vd.color} 45%, transparent)` }}><span className="dot" />{vd.label}</span>
         <p>{p.headline}</p>
-        {p.notes.length > 0 && <ul className="reasons">{p.notes.map((n) => <li key={n}>{n}</li>)}</ul>}
+        {g && g.length > 0 && (
+          <ul className="gaps" aria-label="Ce que le plan atteint par rapport à ce que demande la course">
+            {g.map((x) => {
+              const pct = Math.round((x.reach / Math.max(1, x.need)) * 100), f = (n: number) => (x.unit === "min" ? fmtDur(n) : `${fmtNum(n)} m`);
+              return (
+                <li key={x.key}>
+                  <span className="gap-k">{x.label}</span>
+                  <span className="gap-v"><b>{f(x.reach)}</b> sur {f(x.need)} · {pct} %</span>
+                  <i className="gap-bar" role="img" aria-label={`${pct} % de ce que demande la course`}><i style={{ width: `${Math.min(100, pct)}%` }} /></i>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {p.notes.length > 0 && <ul className="race-notes">{p.notes.map((n) => <li key={n}>{n}</li>)}</ul>}
+        {opts && opts.length > 0 && (
+          <div className="risk-fix">
+            <button className="btn ghost sm" aria-expanded={fixOpen} onClick={() => setFixOpen(!fixOpen)}>{fixOpen ? "Masquer les pistes" : `Comment ${p.verdict === "risque" ? "réduire le risque" : "gagner de la marge"} · ${opts.length} piste${opts.length > 1 ? "s" : ""}`}</button>
+            {fixOpen && (
+              <>
+                <ol className="fix-list">{opts.map((o) => <li key={o.title}><b>{o.title}</b><span>{o.text}</span></li>)}</ol>
+                {p.diagnosis?.keep && <p className="fix-keep"><b>Si tu gardes cette course.</b> {p.diagnosis.keep}</p>}
+              </>
+            )}
+          </div>
+        )}
       </div>
-      {p.diagnosis && (p.diagnosis.causes.length > 0 || p.diagnosis.fixes.length > 0) && (
+      {!g && p.diagnosis && (p.diagnosis.causes.length > 0 || p.diagnosis.fixes.length > 0) && (
         <div className="diag">
           {p.diagnosis.causes.length > 0 && (
             <div><h3>Pourquoi c’est {p.verdict === "risque" ? "risqué" : "ambitieux"}</h3><ul>{p.diagnosis.causes.map((c) => <li key={c}>{c}</li>)}</ul></div>

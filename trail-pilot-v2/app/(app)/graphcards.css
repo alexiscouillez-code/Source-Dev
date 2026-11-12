@@ -301,3 +301,23 @@ form.cal-comment { display: grid; gap: 8px; white-space: normal; }
 .cal-ai { margin: 0; font-size: 13.5px; color: var(--soft); }
 .cal-ai.ok { padding: 8px 10px; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--ok) 45%, transparent); }
 .ci-said em { display: block; font-style: normal; font-size: 12.5px; color: var(--mute); margin-top: 4px; }
+
+/* ---------- Verdict de l’objectif : écarts chiffrés et pistes ---------- */
+.race-verdict > p { font-size: 16px; }
+.gaps { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-width: 640px; }
+.gaps li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: baseline; font-size: 14px; }
+.gap-k { color: var(--soft); }
+.gap-v { color: var(--mute); text-align: right; } .gap-v b { color: var(--snow); }
+.gap-bar { grid-column: 1; display: block; height: 6px; border-radius: 99px; background: var(--ink-3); overflow: hidden; }
+.gap-bar i { display: block; height: 100%; border-radius: inherit; background: var(--accent, var(--ember)); }
+.gap-p { font-size: 12px; color: var(--mute); text-align: right; }
+.race-notes { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13px; color: var(--mute); max-width: 70ch; }
+.risk-fix { display: grid; gap: 10px; justify-items: start; }
+.fix-list { margin: 0; padding: 0; list-style: none; counter-reset: fix; display: grid; gap: 8px; width: 100%; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+.fix-list li { counter-increment: fix; display: grid; gap: 2px; padding: 10px 12px 10px 38px; border-radius: 12px; border: 1px solid var(--line); background: var(--ink); position: relative; font-size: 13.5px; }
+.fix-list li::before { content: counter(fix); position: absolute; left: 12px; top: 10px; font-family: var(--mono); font-weight: 700; color: var(--ok); }
+.fix-list li b { font-size: 14.5px; } .fix-list li span { color: var(--soft); }
+.fix-keep { margin: 0; font-size: 13.5px; color: var(--soft); max-width: 75ch; }
+.gap-bar { grid-column: 1 / -1; }
+.gaps::before { content: "Ce que le plan atteint, sur ce que demande la course"; font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--mute); }
+.race-verdict > .chip { justify-self: start; }

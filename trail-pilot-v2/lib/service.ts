@@ -407,7 +407,7 @@ export async function planView(userId: number, today: string) {
   await reconcile(userId, today);
   let goal = await loadGoal(userId);
   let meta = readPlanMeta(goal);
-  if (goal && goal.date > today && (!meta || mondayOf(meta.generatedOn) < mondayOf(today) || meta.race.date !== goal.date || ((meta.verdict === "risque" || meta.verdict === "ambitieux") && !meta.diagnosis))) {
+  if (goal && goal.date > today && (!meta || mondayOf(meta.generatedOn) < mondayOf(today) || meta.race.date !== goal.date || ((meta.verdict === "risque" || meta.verdict === "ambitieux") && !meta.diagnosis?.gaps))) {
     await regeneratePlan(userId, today);
     goal = await loadGoal(userId);
     meta = readPlanMeta(goal);

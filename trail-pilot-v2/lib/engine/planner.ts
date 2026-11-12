@@ -37,7 +37,15 @@ export interface RacePlan {
   reach: { weeklyMin: number; longMin: number };
   verdict: Verdict; headline: string; notes: string[];
   /** Pourquoi l’objectif est ambitieux ou risqué, et comment le rendre atteignable. */
-  diagnosis?: { causes: string[]; fixes: string[] };
+  diagnosis?: {
+    causes: string[]; fixes: string[];
+    /** Écarts chiffrés entre ce que le plan atteint et ce que la course demande */
+    gaps?: { key: "volume" | "long" | "gain" | "time"; label: string; reach: number; need: number; unit: "min" | "m" }[];
+    /** Pistes pour réduire le risque, de la plus efficace à la plus simple */
+    options?: { title: string; text: string }[];
+    /** Conseils de course si l’objectif est gardé tel quel */
+    keep?: string;
+  };
   weeks: PlanWeek[];
 }
 
@@ -186,13 +194,14 @@ export function buildRacePlan(input: { today: string; profile: PlannerProfile; g
     headline = "Faisable : tu as le temps de construire le volume et la sortie longue qu’il faut pour finir.";
   } else if (score >= 0.75) {
     verdict = "ambitieux";
-    headline = "Jouable pour finir : le plan te rapproche du volume idéal sans l’atteindre. Pars prudemment et marche les montées dès le début.";
+    headline = "Jouable pour finir, mais sans marge : le plan s’approche de ce que demande la course sans l’atteindre tout à fait.";
   } else {
     verdict = "risque";
-    headline = "Risqué : l’écart entre ta charge actuelle et ce que demande la course est grand. Envisage un format plus court ou une course plus tard dans la saison.";
+    headline = "L’écart est grand entre ce que le plan peut t’amener à faire d’ici là et ce que demande cette course.";
   }
   if (!hasHistory) notes.unshift("Peu de séances sur les 4 dernières semaines : le plan part d’un volume type pour ton niveau. Connecte Strava ou ajoute tes sorties pour l’affiner.");
-  if (cap < d.weeklyMin) notes.push(`Ton temps disponible (${fmtH(cap)} par semaine) est en dessous du volume conseillé pour cette course (${fmtH(d.weeklyMin)}).`);
+  // Avec un diagnostic (objectif ambitieux ou risqué), le temps disponible figure déjà dans les écarts chiffrés.
+  if (cap < d.weeklyMin && score >= 0.95) notes.push(`Ton temps disponible (${fmtH(cap)} par semaine) est en dessous du volume conseillé pour cette course (${fmtH(d.weeklyMin)}).`);
   if (d.assumed) notes.push("Distance et dénivelé non renseignés : le plan suppose 25 km et 875 m D+. Complète-les pour un plan plus juste.");
   if (d.backToBack) notes.push("Format long : des enchaînements de sorties sur deux jours arrivent en phase spécifique, pour habituer les jambes à courir fatiguées.");
 
@@ -236,11 +245,19 @@ function diagnose(o: {
 }) {
   const { d, profile } = o;
   const causes: string[] = [], fixes: string[] = [];
+  const gaps: NonNullable<NonNullable<RacePlan["diagnosis"]>["gaps"]> = [];
+  const options: { title: string; text: string }[] = [];
   const pct = (a: number, b: number) => Math.round((a / Math.max(1, b)) * 100);
   const peakWeekly = Math.min(d.weeklyMin, o.cap);
   if (o.reachWeekly < d.weeklyMin * 0.95) causes.push(`Volume : le plan t’amène à ${fmtH(o.reachWeekly)} par semaine au plus haut, la course en demande environ ${fmtH(d.weeklyMin)} (${pct(o.reachWeekly, d.weeklyMin)} %). Tu pars de ${fmtH(o.base)} par semaine.`);
   if (o.reachLong < d.longMin * 0.95) causes.push(`Sortie longue : ${fmtH(o.reachLong)} au plus long d’ici la course, contre ${fmtH(d.longMin)} conseillées pour ce format (${pct(o.reachLong, d.longMin)} %). Ta plus longue sortie récente : ${fmtH(o.longest)}.`);
   if (o.peakGain < d.weeklyGain * 0.8) causes.push(`Dénivelé : environ ${o.peakGain} m de D+ par semaine au plus haut, contre ${d.weeklyGain} m conseillés. Les montées et surtout les descentes de la course risquent de te coûter cher.`);
+  // Quand c’est le temps disponible qui plafonne le volume, une seule ligne le dit (au lieu de deux lignes aux mêmes chiffres).
+  const capped = o.cap < d.weeklyMin && o.reachWeekly >= o.cap * 0.95;
+  if (o.reachWeekly < d.weeklyMin * 0.95) gaps.push({ key: "volume", label: capped ? "Volume par semaine, plafonné par ton temps disponible" : "Volume par semaine", reach: o.reachWeekly, need: d.weeklyMin, unit: "min" });
+  if (o.reachLong < d.longMin * 0.95) gaps.push({ key: "long", label: "Sortie longue", reach: o.reachLong, need: d.longMin, unit: "min" });
+  if (o.peakGain < d.weeklyGain * 0.8) gaps.push({ key: "gain", label: "Dénivelé par semaine", reach: o.peakGain, need: d.weeklyGain, unit: "m" });
+  if (o.cap < d.weeklyMin && !gaps.some((x) => x.key === "volume")) gaps.push({ key: "time", label: "Temps disponible", reach: o.cap, need: d.weeklyMin, unit: "min" });
   if (o.cap < d.weeklyMin) causes.push(`Temps disponible : tu as fixé ${fmtH(o.cap)} par semaine au maximum, en dessous des ${fmtH(d.weeklyMin)} conseillées.`);
 
   // 1. Plus de temps : combien de semaines faudrait-il pour atteindre volume et sortie longue ?
@@ -250,6 +267,7 @@ function diagnose(o: {
   const needWeeks = Math.ceil(Math.max(wVol, wLong) * lightShare) + (d.effortKm >= 130 ? 3 : d.effortKm >= 80 ? 2 : 1) + 1;
   const okDate = addDays(o.firstMonday, needWeeks * 7 - 1);
   if (okDate > o.goal.date && diffDays(o.today, okDate) <= MAX_PLAN_DAYS) fixes.push(`Viser une course plus tard : à partir du ${frDate(okDate)} environ, la progression a le temps d’atteindre ce que demande ce format sans brûler les étapes.`);
+  if (okDate > o.goal.date && diffDays(o.today, okDate) <= MAX_PLAN_DAYS) options.push({ title: "Viser une course plus tard", text: `À partir du ${frDate(okDate)} environ, la progression a le temps d’y arriver sans brûler les étapes.` });
 
   // 2. Un format plus court, à la même date : le plus long que le plan permet d’atteindre.
   const ratio = d.gainM / Math.max(1, d.distanceKm);
@@ -258,6 +276,10 @@ function diagnose(o: {
     const t = raceDemands({ ...o.goal, distanceKm: km, gainM: Math.round(km * ratio) }, profile.level, o.ctl, o.vdot);
     if (o.reachWeekly >= Math.min(t.weeklyMin, o.cap) * 0.95 && o.reachLong >= t.longMin * 0.95) { best = { km, gain: Math.round((km * ratio) / 50) * 50 }; break; }
   }
+  if (best) options.push({ title: "Choisir un format plus court", text: `À cette date, le plan te prépare correctement jusqu’à environ ${best.km} km et ${best.gain} m D+.` });
+  if (o.cap < d.weeklyMin) options.push({ title: "Libérer du temps", text: `Passer ton maximum de ${fmtH(o.cap)} à ${fmtH(d.weeklyMin)} par semaine, dans Compte.` });
+  if (profile.daysPerWeek < 5 && o.reachWeekly < d.weeklyMin * 0.95) options.push({ title: "Ajouter une séance par semaine", text: `Passer de ${profile.daysPerWeek} à ${profile.daysPerWeek + 1} séances : plus de volume sans allonger chaque sortie.` });
+  if (o.peakGain < d.weeklyGain * 0.8) options.push({ title: "Chercher du dénivelé", text: "Sorties longues sur parcours vallonnés et une séance de côtes par semaine ; en ville, escaliers ou tapis incliné." });
   if (best) fixes.push(`Choisir un format plus court à cette date : jusqu’à environ ${best.km} km et ${best.gain} m D+, le plan te prépare correctement.`);
 
   // 3. Les leviers d’entraînement.
@@ -265,7 +287,8 @@ function diagnose(o: {
   if (profile.daysPerWeek < 5 && o.reachWeekly < d.weeklyMin * 0.95) fixes.push(`Ajouter une séance par semaine (${profile.daysPerWeek} → ${profile.daysPerWeek + 1}) : plus de volume sans allonger chaque sortie, donc moins de risque de blessure.`);
   if (o.peakGain < d.weeklyGain * 0.8) fixes.push("Chercher du dénivelé : fais tes sorties longues sur des parcours vallonnés et garde une séance de côtes par semaine ; en ville, l’escalier ou le tapis incliné dépannent.");
   fixes.push("Si tu gardes cette course : pars nettement plus lentement que tes sensations, marche toutes les montées dès le départ, mange et bois dès la première heure, et repère les barrières horaires pour savoir où tu peux t’arrêter.");
-  return { causes, fixes };
+  const keep = "Pars plus lentement que tes sensations, marche les montées dès le départ, mange et bois dès la première heure, et repère les barrières horaires.";
+  return { causes, fixes, gaps, options, keep };
 }
 
 // ---------- Répartition des séances dans la semaine ----------
