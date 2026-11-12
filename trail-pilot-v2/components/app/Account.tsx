@@ -19,6 +19,7 @@ export default function Account({ me, refresh, toast, go }: Ctx) {
         <Feedback toast={toast} page="compte" />
         <ReminderCard me={me} refresh={refresh} toast={toast} />
         <CalendarCard toast={toast} />
+        <ShareCard toast={toast} />
         <StravaCard me={me} refresh={refresh} toast={toast} />
         <EmailCard me={me} toast={toast} />
         <HealthCard me={me} refresh={refresh} toast={toast} />
@@ -223,6 +224,47 @@ function CalendarCard({ toast }: Pick<Ctx, "toast">) {
         <>
           {err && <p className="note err">{err}</p>}
           <button className="btn" style={{ justifySelf: "start" }} disabled={busy} onClick={() => run(async () => setUrl((await api<{ url: string }>("/api/calendar", { method: "POST" })).url), "Lien d’agenda créé.")}>Relier mon agenda</button>
+        </>
+      )}
+    </Fold>
+  );
+}
+
+/** Partage du planning en lecture seule (coach, ami, club), par un lien secret révocable. */
+function ShareCard({ toast }: Pick<Ctx, "toast">) {
+  const [url, setUrl] = useState<string | null | undefined>(undefined);
+  const { busy, err, run } = useSubmit(toast);
+  useEffect(() => { api<{ url: string | null }>("/api/share").then((r) => setUrl(r.url)).catch(() => setUrl(null)); }, []);
+  async function copy() {
+    try { await navigator.clipboard.writeText(url!); toast("Lien copié."); } catch { toast("Copie impossible : sélectionne le lien à la main."); }
+  }
+  async function send() {
+    // Sur téléphone : la feuille de partage du système (messages, WhatsApp, e-mail…).
+    try { await navigator.share({ title: "Mon plan Trail Pilot", text: "Voici mon plan d’entraînement, en lecture seule :", url: url! }); }
+    catch (e) { if ((e as Error).name !== "AbortError") copy(); }
+  }
+  const canShare = typeof navigator !== "undefined" && "share" in navigator;
+  return (
+    <Fold id="acc-share" title="Partager mon plan" aside={<span className={`chip ${url ? "ok" : "dim"}`}><span className="dot" />{url ? "Lien actif" : "Non partagé"}</span>}>
+      <p className="soft" style={{ margin: 0 }}>Envoie un lien à ton coach, un ami ou ton club : il voit ta course, ton calendrier, tes prochaines séances (faites ou non) et ta stratégie de course, sans compte et sans pouvoir rien modifier.</p>
+      <p className="muted small" style={{ margin: 0 }}>Jamais partagés : ton check-in, tes commentaires, tes douleurs et mesures de santé, ton e-mail, et le détail de tes sorties.</p>
+      {url === undefined ? null : url ? (
+        <>
+          <div className="row">
+            {canShare && <button className="btn" onClick={send}>Envoyer le lien</button>}
+            <a className="btn ghost" href={url} target="_blank" rel="noopener noreferrer">Voir comme eux</a>
+          </div>
+          <div className="cal-url"><input readOnly value={url} aria-label="Lien de partage" onFocus={(e) => e.currentTarget.select()} /><button className="btn ghost sm" type="button" onClick={copy}>Copier</button></div>
+          {err && <p className="note err">{err}</p>}
+          <div className="row">
+            <button className="btn ghost sm" disabled={busy} onClick={() => { if (confirm("Créer un nouveau lien ? L’ancien cessera de fonctionner pour ceux qui l’ont.")) run(async () => setUrl((await api<{ url: string }>("/api/share", { method: "POST" })).url), "Nouveau lien créé."); }}>Nouveau lien</button>
+            <button className="btn danger sm" disabled={busy} onClick={() => { if (confirm("Arrêter le partage ? Le lien cessera de fonctionner.")) run(async () => { await api("/api/share", { method: "DELETE" }); setUrl(null); }, "Partage arrêté."); }}>Arrêter le partage</button>
+          </div>
+        </>
+      ) : (
+        <>
+          {err && <p className="note err">{err}</p>}
+          <button className="btn" style={{ justifySelf: "start" }} disabled={busy} onClick={() => run(async () => setUrl((await api<{ url: string }>("/api/share", { method: "POST" })).url), "Lien de partage créé.")}>Créer un lien de partage</button>
         </>
       )}
     </Fold>

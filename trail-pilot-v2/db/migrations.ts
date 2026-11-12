@@ -202,4 +202,9 @@ export const MIGRATIONS: { tag: string; statements: string[] }[] = [
         kind TEXT NOT NULL, page TEXT, text TEXT NOT NULL, created_at INTEGER NOT NULL)`,
     ],
   },
+  {
+    tag: "014_share_link",
+    // Lien de partage du planning en lecture seule (empreinte du jeton ; le lien chiffré est gardé dans app_kv).
+    statements: [`ALTER TABLE profiles ADD COLUMN share_token TEXT`, `CREATE INDEX IF NOT EXISTS profiles_share ON profiles(share_token)`],
+  },
 ];

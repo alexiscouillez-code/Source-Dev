@@ -375,3 +375,11 @@ form.cal-comment { display: grid; gap: 8px; white-space: normal; }
 .wh { gap: 12px; } .wh section { display: grid; gap: 4px; } .wh h3 { margin: 0; font-size: 15px; }
 .wh ol { margin: 0; padding-left: 20px; display: grid; gap: 4px; font-size: 14px; color: var(--soft); } .wh p { margin: 0; font-size: 14px; color: var(--soft); }
 .iconbtn.sm { font-weight: 700; }
+
+/* ---------- Planning partagé (lecture seule) ---------- */
+.share-page { max-width: 1080px; margin: 0 auto; padding: 28px 16px 48px; display: grid; gap: 14px; min-height: 100vh; background: var(--ink); color: var(--snow); }
+.share-head h1 { margin: 6px 0 4px; font-size: clamp(26px, 5vw, 38px); letter-spacing: -.03em; }
+.share-page .cal-day { cursor: default; }
+.share-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.share-list li { display: grid; gap: 4px; padding: 10px 12px; border-radius: 12px; background: var(--ink-2); border: 1px solid var(--line); border-left: 4px solid var(--c, var(--line)); }
+.share-foot { text-align: center; margin: 8px 0 0; }

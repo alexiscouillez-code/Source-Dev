@@ -18,6 +18,8 @@ export default function Page() {
       <p>Si tu connectes Strava (avec ton accord), nous lisons uniquement tes activités : date, sport, durée, distance, dénivelé, fréquence cardiaque et tracé simplifié. Les jetons d’accès sont chiffrés. La synchronisation se fait automatiquement à l’ouverture de l’appli et une fois chaque matin. Tu peux déconnecter Strava à tout moment depuis ton compte.</p>
       <h2>Fichiers importés</h2>
       <p>Les fichiers GPX, FIT ou TCX que tu importes sont lus directement dans ton navigateur. Seuls les chiffres calculés (distance, dénivelé, durée, fréquence cardiaque) et un tracé GPS simplifié, pour la carte de tes sorties, sont conservés. Pour ta course, nous gardons le tracé simplifié et son profil (distance et altitude).</p>
+      <h2>Partage du planning</h2>
+      <p>Si tu crées un lien de partage (rubrique Compte), toute personne qui a ce lien voit, sans compte, ton prénom, ta course, ton calendrier de séances avec leur statut, tes courses de préparation et ta stratégie de course. Ton check-in, tes commentaires, tes données de santé, ton e-mail et le détail de tes sorties n’y figurent jamais. Tu peux arrêter le partage ou changer de lien à tout moment.</p>
       <h2>Retours</h2>
       <p>Les messages envoyés avec le bouton « Un retour ? » sont enregistrés avec ton numéro de compte pour pouvoir y donner suite, et peuvent être transmis par e-mail à l’éditeur. Si tu supprimes ton compte, ils sont gardés sans lien avec toi.</p>
       <h2>Coach IA</h2>
