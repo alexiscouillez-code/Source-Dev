@@ -2,10 +2,30 @@ import { body, HttpError, isoDate, json, num, text, withUser } from "@/lib/api";
 import { all, one, run } from "@/db/client";
 import { diffDays } from "@/lib/engine/dates";
 import { MAX_PLAN_DAYS } from "@/lib/engine/planner";
-import { loadSideRaces, regeneratePlan, resolveToday } from "@/lib/service";
+import { loadSideRaces, regeneratePlan, resolveToday, setSideRacePlace, sideRaceGuides } from "@/lib/service";
 
 /** Courses de préparation (objectifs secondaires ou courses d’entraînement). */
-export const GET = withUser(async (user) => json({ races: await loadSideRaces(user.id) }));
+export const GET = withUser(async (user, req) => {
+  const q = new URL(req.url).searchParams;
+  // ?guides=1 : météo annoncée, temps visé et consignes pour chaque course à venir.
+  if (q.get("guides") === "1") return json({ guides: await sideRaceGuides(user.id, resolveToday(q.get("today"))) });
+  return json({ races: await loadSideRaces(user.id) });
+});
+
+/** Lieu de départ d’une course de préparation (pour sa météo), ou { clear: true } pour revenir au lieu d’entraînement. */
+export const PATCH = withUser(async (user, req) => {
+  const b = await body(req);
+  const id = Number(b.id);
+  if (!Number.isInteger(id)) throw new HttpError(400, "Course inconnue.");
+  let place = null;
+  if (b.clear !== true) {
+    const lat = Number(b.lat), lon = Number(b.lon), name = text(b.name, 120);
+    if (!name || !(Math.abs(lat) <= 90) || !(Math.abs(lon) <= 180)) throw new HttpError(400, "Lieu invalide.");
+    place = { name, lat, lon };
+  }
+  if (!(await setSideRacePlace(user.id, id, place))) throw new HttpError(404, "Course inconnue.");
+  return json({ ok: true });
+});
 
 export const POST = withUser(async (user, req) => {
   const b = await body(req);

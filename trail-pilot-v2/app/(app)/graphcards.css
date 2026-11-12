@@ -321,3 +321,12 @@ form.cal-comment { display: grid; gap: 8px; white-space: normal; }
 .gap-bar { grid-column: 1 / -1; }
 .gaps::before { content: "Ce que le plan atteint, sur ce que demande la course"; font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--mute); }
 .race-verdict > .chip { justify-self: start; }
+
+/* Courses de préparation : météo et guidage */
+.race-guide { grid-column: 1 / -1; display: grid; gap: 6px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--ink); font-size: 13.5px; }
+.race-guide.tone-chaud, .race-guide.tone-tres-chaud { border-color: color-mix(in srgb, var(--lite) 55%, transparent); }
+.race-guide.tone-froid { border-color: color-mix(in srgb, var(--rest) 55%, transparent); }
+.rg-line { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: space-between; align-items: baseline; }
+.rg-line > span:first-child { color: var(--soft); }
+.rg-place { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; }
+.race-guide .reasons li { font-size: 13.5px; }

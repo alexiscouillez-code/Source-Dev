@@ -9,9 +9,11 @@ import { applyLearning, learn, type Learning, type Past } from "./engine/learn";
 import { assignShoes } from "./shoes";
 import { cleanSignals, noteCap, type NoteSignals } from "./engine/note";
 import { analyzeNote } from "./note-ai";
+import { raceWeather, type Place } from "./weather";
+import { weatherAdjust } from "./engine/strategy";
 import { trainingTargets } from "./engine/paces";
 import { estimateVo2, type Vo2Run } from "./engine/vo2";
-import { buildRacePlan, maintenancePlan, phaseFor, type Level, type RacePlan } from "./engine/planner";
+import { buildRacePlan, maintenancePlan, phaseFor, raceDemands, type Level, type RacePlan } from "./engine/planner";
 import { withSideRaces, withStrength, type SideRace } from "./engine/extras";
 import { timeline, weeklySummary } from "./engine/timeline";
 import { HttpError } from "./api";
@@ -400,6 +402,48 @@ export async function calendarView(userId: number, today: string, from: string, 
     ],
     absence,
   };
+}
+
+/**
+ * Courses de préparation à venir, avec pour chacune : la météo annoncée (au lieu choisi, sinon au lieu d’entraînement),
+ * un temps visé d’après ta forme, les besoins en eau et les consignes selon son importance (objectif secondaire ou entraînement).
+ */
+export async function sideRaceGuides(userId: number, today: string) {
+  const [rows, { profile, acts, tl }, prof] = await Promise.all([
+    all<SideRace & { id: number; place: string | null }>("SELECT id, name, date, distance_km AS distanceKm, gain_m AS gainM, priority, place FROM side_races WHERE user_id = ? AND date >= ? ORDER BY date", [userId, today]),
+    loadState(userId, today),
+    one<{ home: string | null }>("SELECT home FROM profiles WHERE user_id = ?", [userId]),
+  ]);
+  const read = (v: string | null): Place | null => { try { return v ? JSON.parse(v) : null; } catch { return null; } };
+  const home = read(prof?.home ?? null);
+  const vdot = estimateVo2(acts.map(toVo2Run), today, { hrMax: profile.hr_max, hrRest: profile.hr_rest, watch: profile.vo2_watch }).paceVdot;
+  return Promise.all(rows.map(async (r) => {
+    const own = read(r.place), place = own ?? home;
+    const wx = place ? await raceWeather(place.lat, place.lon, r.date, today) : null;
+    const adj = wx?.status === "ok" ? weatherAdjust(wx.weather) : null;
+    // Temps visé : estimation d’après la forme, allongée par la chaleur ; une course d’entraînement se court 5 à 10 % en dedans.
+    const est = r.distanceKm ? raceDemands({ name: r.name, date: r.date, distanceKm: r.distanceKm, gainM: r.gainM }, profile.level, tl.ctl, vdot).estimate : null;
+    const k = (adj?.timeFactor ?? 1) * (r.priority === "C" ? 1.07 : 1);
+    const tips = [
+      r.priority === "B"
+        ? "Objectif secondaire : cours-la sérieusement, mais sans aller chercher tes limites. Le but est de tester ton allure, ton matériel et ton alimentation en conditions réelles."
+        : "Course d’entraînement : effort contrôlé du début à la fin, tu dois pouvoir parler dans les montées. Elle remplace ta sortie longue, pas ta course objectif.",
+      ...(adj?.tips ?? []),
+      ...(est && est.low * k >= 90 ? [`Sur cette durée, mange dès la première heure : 40 à 60 g de glucides par heure, et ${adj ? `${adj.water[0]}–${adj.water[1]}` : "500–750"} ml d’eau par heure.`] : []),
+    ];
+    return {
+      id: r.id, place, placeAssumed: !own && !!home,
+      weather: !place ? { status: "noplace" as const } : wx,
+      tone: adj?.tone ?? "normal",
+      estimate: est ? { low: Math.round((est.low * k) / 5) * 5, high: Math.round((est.high * k) / 5) * 5 } : null,
+      water: adj ? adj.water : null, tips,
+    };
+  }));
+}
+
+export async function setSideRacePlace(userId: number, id: number, place: Place | null) {
+  const { changes } = await run("UPDATE side_races SET place = ? WHERE id = ? AND user_id = ?", [place ? JSON.stringify(place) : null, id, userId]);
+  return changes > 0;
 }
 
 /** Le plan suit la charge réelle : il se recalcule automatiquement chaque nouvelle semaine. */

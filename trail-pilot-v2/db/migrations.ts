@@ -178,4 +178,9 @@ export const MIGRATIONS: { tag: string; statements: string[] }[] = [
          SELECT user_id, date, note, NULL, created_at FROM checkins WHERE note IS NOT NULL AND TRIM(note) != ''`,
     ],
   },
+  {
+    tag: "011_side_race_place",
+    // Lieu de départ d’une course de préparation, pour sa météo.
+    statements: [`ALTER TABLE side_races ADD COLUMN place TEXT`],
+  },
 ];
