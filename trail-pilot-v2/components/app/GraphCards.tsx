@@ -127,7 +127,7 @@ function IntensityCard({ v }: { v: GraphData["intensity"] }) {
             <circle className="gc-track" cx="50" cy="50" r="40" />
             {segs.map((s, i) => {
               const len = (s.minutes / total) * C, off = acc; acc += len;
-              return len > 0.5 ? <circle key={s.key} className={`gc-seg ${s.cls}${hov.i === i ? " on" : ""}`} cx="50" cy="50" r="40" strokeDasharray={`${Math.max(0, len - 1.5)} ${C}`} strokeDashoffset={-off} onPointerEnter={hov.on(i)} onPointerLeave={hov.off} onClick={hov.tap(i)} /> : null;
+              return len > 0.5 ? <circle key={s.key} className={`gc-seg ${s.cls}${hov.i === i ? " on" : ""}`} cx="50" cy="50" r="40" strokeDasharray={`${Math.max(0, len - 1.5)} ${C}`} strokeDashoffset={-off} style={{ ["--C" as string]: C, ["--i" as string]: i }} onPointerEnter={hov.on(i)} onPointerLeave={hov.off} onClick={hov.tap(i)} /> : null;
             })}
           </svg>
           <div className="gc-ring-mid"><b>{sel ? `${pct(sel.minutes)} %` : fmtDur(total)}</b><small>{sel ? `${sel.key} · ${fmtDur(sel.minutes)}` : "au total"}</small></div>
@@ -182,6 +182,7 @@ function RecoveryCard({ days, form }: { days: GraphData["recovery"]; form: numbe
         <svg viewBox="0 0 100 58" aria-hidden="true">
           <path className="gc-track" d="M10 52 A40 40 0 0 1 90 52" />
           <path className="gc-gauge-val" d="M10 52 A40 40 0 0 1 90 52" strokeDasharray={c} strokeDashoffset={off} style={{ ["--off" as string]: off, ["--c" as string]: c }} />
+          {score != null && <g className="gc-needle" style={{ ["--a" as string]: `${-90 + (180 * score) / 100}deg` }}><line x1="50" y1="52" x2="50" y2="20" /><circle cx="50" cy="52" r="3.2" /></g>}
         </svg>
         <div className="gc-gauge-mid"><b>{form > 0 ? "+" : ""}{fmtNum(form)}</b><small>fraîcheur</small></div>
       </div>

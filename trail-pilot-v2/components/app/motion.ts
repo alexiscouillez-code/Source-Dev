@@ -85,23 +85,27 @@ export function startCountUps(root: HTMLElement) {
  * entièrement sorti de l’écran, pour que l’animation rejoue au retour. Sans JavaScript ou avec « réduire les
  * animations », rien n’est masqué : la classe « mo » sur <html> conditionne tous les états de départ.
  */
-const REVEAL = "svg.chart, .radar, .month-bars, .week-bars, .gaps, .zbar, .ready-plot, .shoe-list";
+const REVEAL = "svg.chart, .radar, .month-bars, .week-bars, .gaps, .zbar, .ready-plot, .shoe-list, .gc-gauge, .gc-ring, .vo2-scale, .cal-grid";
 export function startReveals(root: HTMLElement) {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || !("IntersectionObserver" in window)) return () => {};
   document.documentElement.classList.add("mo");
+  // Éléments actuellement à l'écran : React peut réécrire leur attribut class (survol, déplacement…) et effacer « is-in ».
+  const shown = new WeakSet<Element>();
   const io = new IntersectionObserver((entries) => {
     for (const e of entries) {
-      if (e.isIntersecting && (e.intersectionRatio >= 0.2 || e.intersectionRect.height >= window.innerHeight * 0.4)) e.target.classList.add("is-in");
-      else if (!e.isIntersecting) e.target.classList.remove("is-in");
+      if (e.isIntersecting && (e.intersectionRatio >= 0.2 || e.intersectionRect.height >= window.innerHeight * 0.4)) { shown.add(e.target); e.target.classList.add("is-in"); }
+      else if (!e.isIntersecting) { shown.delete(e.target); e.target.classList.remove("is-in"); }
     }
   }, { threshold: [0, 0.2] });
+  const keep = new MutationObserver((list) => { for (const m of list) { const t = m.target as Element; if (shown.has(t) && !t.classList.contains("is-in")) t.classList.add("is-in"); } });
+  keep.observe(root, { subtree: true, attributes: true, attributeFilter: ["class"] });
   const seen = new WeakSet<Element>();
   let raf = 0;
   const scan = () => { raf = 0; root.querySelectorAll(REVEAL).forEach((el) => { if (!seen.has(el)) { seen.add(el); io.observe(el); } }); };
   const mo = new MutationObserver(() => { if (!raf) raf = requestAnimationFrame(scan); });
   mo.observe(root, { subtree: true, childList: true });
   scan();
-  return () => { mo.disconnect(); io.disconnect(); cancelAnimationFrame(raf); document.documentElement.classList.remove("mo"); };
+  return () => { mo.disconnect(); io.disconnect(); keep.disconnect(); cancelAnimationFrame(raf); document.documentElement.classList.remove("mo"); };
 }
 
 /** Vrai si l’appareil accepte les animations. */

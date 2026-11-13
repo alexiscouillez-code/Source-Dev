@@ -305,14 +305,19 @@ function WeekChart({ weeks, done, today }: { weeks: PlanWeek[]; done: Record<str
   const y = (m: number) => H - P.b - (m / max) * (H - P.t - P.b);
   const cur = monday(today);
   const every = Math.max(1, Math.ceil(weeks.length / 6));
+  const [hi, setHi] = useState<number | null>(null);
+  const scrub = (e: React.PointerEvent<SVGSVGElement>) => { const r = e.currentTarget.getBoundingClientRect(); const px = ((e.clientX - r.left) / r.width) * W; setHi(Math.max(0, Math.min(weeks.length - 1, Math.floor((px - P.l) / bw)))); };
+  const hw = hi != null ? weeks[hi] : null;
+  const tipW = 150, tipX = hi != null ? Math.max(P.l, Math.min(W - P.r - tipW, P.l + hi * bw + bw / 2 - tipW / 2)) : 0;
   return (
-    <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Volume prévu et réalisé par semaine jusqu’à la course">
+    <svg className={`chart scrub${hw ? " is-scrub" : ""}`} viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Volume prévu et réalisé par semaine jusqu’à la course"
+      onPointerMove={scrub} onPointerDown={scrub} onPointerLeave={() => setHi(null)} onPointerCancel={() => setHi(null)} style={{ touchAction: "pan-y" }}>
       {weeks.map((w, i) => {
         const x = P.l + i * bw;
         const d = done[w.monday];
         const isCur = w.monday === cur;
         return (
-          <g key={w.monday}>
+          <g key={w.monday} className={hi === i ? "wk-on" : hi != null ? "wk-off" : undefined}>
             <rect className="ch-bar wave" x={x + bw * 0.12} width={bw * 0.76} y={y(w.minutes)} height={Math.max(1, H - P.b - y(w.minutes))} rx={Math.min(3, bw / 4)}
               style={{ fill: PHASE_COLOR[w.phase] ?? "var(--chart-bar-2)", opacity: w.monday < cur ? 0.45 : w.light ? 0.6 : 1, ["--d" as string]: (i / Math.max(1, weeks.length - 1)).toFixed(3) }}>
               <title>{`Semaine du ${dayLabel(w.monday, { day: "numeric", month: "short" })} · ${w.phase} · ${fmtDur(w.minutes)} prévues${d ? `, ${fmtDur(d)} faites` : ""}`}</title>
@@ -323,7 +328,12 @@ function WeekChart({ weeks, done, today }: { weeks: PlanWeek[]; done: Record<str
           </g>
         );
       })}
-      <text x={W - P.r} y={10} textAnchor="end" style={{ fill: "var(--ember)" }}>Jour J ⚑</text>
+      {!hw && <text x={W - P.r} y={10} textAnchor="end" style={{ fill: "var(--ember)" }}>Jour J ⚑</text>}
+      {hw && <g className="wk-tip" key={hi} transform={`translate(${tipX}, 0)`}>
+        <rect width={tipW} height={30} rx={6} style={{ fill: "var(--snow)", opacity: 0.96 }} />
+        <text x={8} y={12} className="wk-tip-t" style={{ fill: "var(--ink)", fontSize: 8.5, opacity: 0.7 }}>{`Sem. du ${dayLabel(hw.monday, { day: "numeric", month: "short" })} · ${hw.phase}`}</text>
+        <text x={8} y={25} className="wk-tip-v" style={{ fill: "var(--ink)", fontSize: 10, fontWeight: 600 }}>{`${fmtDur(hw.minutes)} prévues${done[hw.monday] ? ` · ${fmtDur(done[hw.monday])} faites` : ""}`}</text>
+      </g>}
     </svg>
   );
 }

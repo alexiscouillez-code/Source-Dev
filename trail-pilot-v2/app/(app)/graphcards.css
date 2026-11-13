@@ -565,3 +565,81 @@ form.cal-comment { display: grid; gap: 8px; white-space: normal; }
   /* --- Chiffres : léger éclat quand une carte de données arrive --- */
   .ready-now b, .records b, .db-top b { font-variant-numeric: tabular-nums; }
 }
+
+/* ================= Motion, passe 5 : lecture au doigt, jauges, compte à rebours ================= */
+/* Repère qui suit le doigt sur les courbes */
+.chart.scrub { cursor: crosshair; }
+.sc-mark line { stroke: color-mix(in srgb, var(--snow) 45%, transparent); stroke-width: 1; stroke-dasharray: 3 3; }
+.sc-dot { fill: var(--ember); stroke: var(--snow); stroke-width: 2; }
+.sc-halo { fill: color-mix(in srgb, var(--ember) 30%, transparent); }
+.wk-tip rect { fill: var(--snow); }
+.wk-tip text { fill: var(--ink); font-family: var(--mono); }
+.wk-tip-t { font-size: 8.5px; opacity: .7; } .wk-tip-v { font-size: 10px; font-weight: 600; }
+.chart .wk-off rect { opacity: .35 !important; }
+.chart .wk-on .ch-bar.wave { filter: brightness(1.25) drop-shadow(0 0 6px color-mix(in srgb, var(--ember) 60%, transparent)); }
+/* Aiguille de la jauge de fraîcheur */
+.gc-needle { transform: rotate(var(--a)); transform-origin: 50px 52px; }
+.gc-needle line { stroke: var(--snow); stroke-width: 2.4; stroke-linecap: round; }
+.gc-needle circle { fill: var(--snow); stroke: var(--ink-2); stroke-width: 1.5; }
+.gc-gauge svg { overflow: visible; }
+/* Progression : une couleur par mesure, qui change en douceur */
+.month-bars i { transition: height .75s cubic-bezier(.3, 1.35, .5, 1), background-color .5s ease; }
+.month-bars[data-m="gain"] i { background-color: var(--lite); }
+.month-bars[data-m="minutes"] i { background-color: var(--ok); }
+/* Profil de course : ravitos */
+.profile-aid .aid-ring { fill: none; stroke: var(--snow); stroke-width: 1.5; opacity: 0; }
+.profile-aid.wait > circle:last-child { opacity: .35; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .sc-mark { transition: transform .12s ease-out; }
+  .sc-mark .sc-halo { transform-box: fill-box; transform-origin: center; animation: sc-halo 1.2s ease-in-out infinite; }
+  @keyframes sc-halo { 50% { transform: scale(1.5); opacity: .5; } }
+  .chart.is-scrub .ch-line { transition: opacity .2s; }
+  .wk-tip { animation: wk-tip .18s ease-out both; }
+  @keyframes wk-tip { from { opacity: 0; transform: translateY(4px); } }
+
+  /* Jauge : l'arc se remplit et l'aiguille vient se poser en oscillant, rejoué à chaque retour à l'écran */
+  @keyframes needle { 0% { transform: rotate(-90deg); } 55% { transform: rotate(calc(var(--a) + 14deg)); } 75% { transform: rotate(calc(var(--a) - 6deg)); } 90% { transform: rotate(calc(var(--a) + 2deg)); } 100% { transform: rotate(var(--a)); } }
+  .mo .gc-gauge:not(.is-in) .gc-needle { transform: rotate(-90deg); }
+  .mo .gc-gauge:not(.is-in) .gc-gauge-val { animation: none; stroke-dashoffset: var(--c); }
+  .mo .gc-gauge.is-in .gc-needle { animation: needle 1.6s .25s ease-out both; }
+  .mo .gc-gauge.is-in .gc-gauge-val { animation: gc-gauge 1.2s .3s var(--ease) both; }
+  .mo .gc-gauge.is-in .gc-gauge-mid b { animation: val-drop .5s 1.1s var(--ease) both; }
+
+  /* Anneau d'intensité : facile, puis modéré, puis intense */
+  @keyframes ring-seg { from { stroke-dasharray: 0 var(--C); } }
+  .mo .gc-ring:not(.is-in) .gc-seg { stroke-dasharray: 0 var(--C); }
+  .mo .gc-ring.is-in .gc-seg { animation: ring-seg .7s calc(var(--i, 0) * .55s + .15s) var(--ease) both; }
+  .mo .gc-ring.is-in .gc-ring-mid { animation: chip-pop .5s 1.6s var(--ease) both; }
+
+  /* Curseur VO2max : glisse jusqu'à ta valeur avec un dépassement, la fourchette s'ouvre depuis le centre */
+  @keyframes vo2-in { from { left: 0; opacity: 0; } 30% { opacity: 1; } }
+  @keyframes range-open { from { transform: scaleX(0); opacity: 0; } }
+  .mo .vo2-scale:not(.is-in) > b { animation: none; left: 0 !important; opacity: 0; }
+  .mo .vo2-scale:not(.is-in) .range { animation: none; transform: scaleX(0); }
+  .mo .vo2-scale.is-in > b { animation: vo2-in 1.5s .2s cubic-bezier(.3, 1.4, .5, 1) both; }
+  .mo .vo2-scale.is-in .range { animation: range-open .7s 1.1s var(--ease) both; }
+
+  /* Compte à rebours qui défile : les tuiles basculent vite pendant le défilement */
+  .flap.rolling .flap-d { animation-duration: .16s; animation-delay: 0s; }
+
+  /* Calendrier : un tampon « fait » s'imprime sur chaque séance validée */
+  @keyframes stamp { 0% { transform: scale(2.6) rotate(-25deg); opacity: 0; } 60% { transform: scale(.85) rotate(4deg); opacity: 1; } 100% { transform: none; opacity: 1; } }
+  .mo .cal-grid:not(.is-in) .ev.st-done > b { opacity: 0; }
+  .mo .cal-grid.is-in .ev.st-done > b { display: inline-block; animation: stamp .5s cubic-bezier(.3, 1.4, .5, 1) both; animation-delay: .25s; }
+  .mo .cal-grid.is-in .cal-day:nth-child(2) .ev.st-done > b { animation-delay: .33s; } .mo .cal-grid.is-in .cal-day:nth-child(3) .ev.st-done > b { animation-delay: .41s; }
+  .mo .cal-grid.is-in .cal-day:nth-child(4) .ev.st-done > b { animation-delay: .49s; } .mo .cal-grid.is-in .cal-day:nth-child(5) .ev.st-done > b { animation-delay: .57s; }
+  .mo .cal-grid.is-in .cal-day:nth-child(6) .ev.st-done > b { animation-delay: .65s; } .mo .cal-grid.is-in .cal-day:nth-child(7) .ev.st-done > b { animation-delay: .73s; }
+  .mo .cal-grid.is-in .cal-day.today { animation: today-ring 2s 1s ease-in-out 3; }
+  @keyframes today-ring { 50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--ember) 45%, transparent); } }
+
+  /* Progression : les valeurs retombent à chaque changement de mesure */
+  .month-bars .mb-v { animation: val-drop .45s var(--ease) both; }
+
+  /* Profil de course : la zone se remplit derrière le coureur, chaque ravito s'allume à son passage */
+  .profile-aid > circle:last-child { transition: opacity .3s; }
+  .profile-aid.lit .aid-ring { transform-box: fill-box; transform-origin: center; animation: aid-ping .9s ease-out both; }
+  @keyframes aid-ping { 0% { opacity: .9; transform: scale(1); } 100% { opacity: 0; transform: scale(4); } }
+  .profile-aid.lit > circle:last-child { transform-box: fill-box; transform-origin: center; animation: chip-pop .4s var(--ease) both; }
+}
+.chart .wk-tip > rect { animation: none !important; transform: none !important; }

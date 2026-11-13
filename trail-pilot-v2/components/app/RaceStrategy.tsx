@@ -1,7 +1,7 @@
 "use client";
 
 import Fold from "./Fold";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useId } from "react";
 import { motionOk } from "./motion";
 import RaceDay from "./RaceDay";
 import dynamic from "next/dynamic";
@@ -196,6 +196,7 @@ function Profile({ route, aid, strat }: { route: RaceRoute; aid: number[]; strat
   };
   const kmTicks = Array.from({ length: 6 }, (_, i) => Math.round((route.distanceKm * i) / 5));
   const svg = useRef<SVGSVGElement>(null);
+  const clip = `pf${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
   const [km, setKm] = useState<number | null>(null);
   const [intro, setIntro] = useState(false);
   // Le coureur parcourt le profil une fois à l’ouverture.
@@ -232,9 +233,10 @@ function Profile({ route, aid, strat }: { route: RaceRoute; aid: number[]; strat
       <svg ref={svg} className="chart profile" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Profil de la course : ${fmtKm(route.distanceKm)} km, ${fmtNum(route.gainM)} m de D+`}
         onPointerMove={pick} onPointerDown={pick} onPointerLeave={() => { if (!intro) setKm(null); }} style={{ touchAction: "pan-y" }}>
         {[lo, (lo + hi) / 2, hi].map((t) => <g key={t}><line x1={P.l} x2={W - P.r} y1={y(t)} y2={y(t)} style={{ stroke: "var(--line)" }} /><text x={P.l - 6} y={y(t) + 3} textAnchor="end">{Math.round(t)}</text></g>)}
-        <path d={`${line} L${x(route.distanceKm)} ${H - P.b} L${x(0)} ${H - P.b} Z`} style={{ fill: "color-mix(in srgb, var(--ember) 16%, transparent)" }} />
+        {intro && km != null && <defs><clipPath id={clip}><rect x={0} y={0} width={x(km)} height={H} /></clipPath></defs>}
+        <path d={`${line} L${x(route.distanceKm)} ${H - P.b} L${x(0)} ${H - P.b} Z`} style={{ fill: "color-mix(in srgb, var(--ember) 16%, transparent)" }} clipPath={intro && km != null ? `url(#${clip})` : undefined} className={intro ? "profile-fill run" : "profile-fill"} />
         <path d={line} fill="none" className="profile-line" style={{ stroke: "var(--ember)" }} strokeWidth={1.8} strokeLinejoin="round" pathLength={1} />
-        {aid.map((k) => <g key={k}><line x1={x(k)} x2={x(k)} y1={y(ele(k))} y2={H - P.b} style={{ stroke: "var(--snow)" }} strokeDasharray="2 3" /><circle cx={x(k)} cy={y(ele(k))} r={3.5} style={{ fill: "var(--snow)" }} /></g>)}
+        {aid.map((k) => <g key={k} className={`profile-aid${intro && km != null ? (km >= k ? " lit" : " wait") : ""}`}><line x1={x(k)} x2={x(k)} y1={y(ele(k))} y2={H - P.b} style={{ stroke: "var(--snow)" }} strokeDasharray="2 3" /><circle className="aid-ring" cx={x(k)} cy={y(ele(k))} r={3.5} /><circle cx={x(k)} cy={y(ele(k))} r={3.5} style={{ fill: "var(--snow)" }} /></g>)}
         {kmTicks.map((k, i) => <text key={i} x={x(k)} y={H - 6} textAnchor={i === 0 ? "start" : i === 5 ? "end" : "middle"}>{k} km</text>)}
         {km != null && info && (
           <g className="runner" style={{ transform: `translate(${x(km)}px, ${y(info.e)}px)` }}>

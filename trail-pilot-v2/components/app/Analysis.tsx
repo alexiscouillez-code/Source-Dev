@@ -173,15 +173,20 @@ function Vo2History({ months }: { months: Vo2["months"] }) {
   const y = (v: number) => P.t + (1 - (v - lo) / Math.max(1, hi - lo)) * (H - P.t - P.b);
   const d = months.map((m, i) => `${i ? "L" : "M"}${x(i).toFixed(1)} ${y(m.value).toFixed(1)}`).join(" ");
   const ticks = months.length <= 4 ? months.map((_, i) => i) : [0, Math.floor((months.length - 1) / 2), months.length - 1];
+  const [hi2, setHi] = useState<number | null>(null);
+  const scrub = (e: React.PointerEvent<SVGSVGElement>) => { const r = e.currentTarget.getBoundingClientRect(); const px = ((e.clientX - r.left) / r.width) * W; setHi(Math.max(0, Math.min(months.length - 1, Math.round(((px - P.l) / (W - P.l - P.r)) * (months.length - 1))))); };
+  const hm = hi2 != null ? months[hi2] : null;
   return (
     <div style={{ display: "grid", gap: 4 }}>
-      <div className="row between small"><span className="muted">Mois par mois, sur tout ton historique</span><span className="mono muted">{dec(Math.min(...vals))} – {dec(Math.max(...vals))}</span></div>
-      <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Évolution de ta VO2max sur ${months.length} mois`}>
+      <div className="row between small"><span className="muted">{hm ? <><b className="mono" style={{ color: "var(--snow)" }}>{dec(hm.value)}</b> en {monthLabel(hm.month)} · {hm.sessions} sortie{hm.sessions > 1 ? "s" : ""}</> : "Mois par mois, sur tout ton historique"}</span><span className="mono muted">{dec(Math.min(...vals))} – {dec(Math.max(...vals))}</span></div>
+      <svg className={`chart scrub${hm ? " is-scrub" : ""}`} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Évolution de ta VO2max sur ${months.length} mois`}
+        onPointerMove={scrub} onPointerDown={scrub} onPointerLeave={() => setHi(null)} onPointerCancel={() => setHi(null)}>
         <path className="ch-area" d={`${d} L${x(months.length - 1).toFixed(1)} ${H - P.b} L${x(0).toFixed(1)} ${H - P.b} Z`} fill="color-mix(in srgb, var(--ember) 14%, transparent)" />
         <path className="ch-line ch-glow" pathLength={1} d={d} fill="none" stroke="var(--ember)" strokeWidth={2} strokeLinejoin="round" />
         <circle className="ch-beacon" cx={x(months.length - 1)} cy={y(months[months.length - 1].value)} r={7} fill="var(--ember)" />
         {months.map((m, i) => <circle key={m.month} className="ch-dot" style={{ ["--d" as string]: (i / Math.max(1, months.length - 1)).toFixed(3) }} cx={x(i)} cy={y(m.value)} r={months.length > 24 ? 1.6 : 2.6} fill="var(--ember)"><title>{`${monthLabel(m.month)} : ${dec(m.value)} (${m.sessions} sortie(s))`}</title></circle>)}
         {ticks.map((i) => <text key={i} x={x(i)} y={H - 5} textAnchor={i === 0 ? "start" : i === months.length - 1 ? "end" : "middle"}>{monthLabel(months[i].month)}</text>)}
+        {hm && <g className="sc-mark" style={{ transform: `translate(${x(hi2!)}px, 0)` }}><line x1={0} x2={0} y1={P.t - 6} y2={H - P.b} /><circle className="sc-halo" cx={0} cy={y(hm.value)} r={8} /><circle className="sc-dot" cx={0} cy={y(hm.value)} r={4} /></g>}
       </svg>
     </div>
   );
@@ -207,9 +212,10 @@ function FitnessChart({ points }: { points: Data["points"] }) {
   const h = hover != null ? points[hover] : null;
   return (
     <div className="chart-wrap">
-      <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Évolution de la forme, de la fatigue et de la fraîcheur"
+      <svg className={`chart scrub${h ? " is-scrub" : ""}`} viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Évolution de la forme, de la fatigue et de la fraîcheur"
         onPointerMove={(e) => { const r = (e.currentTarget as SVGSVGElement).getBoundingClientRect(); const px = ((e.clientX - r.left) / r.width) * W; setHover(Math.max(0, Math.min(points.length - 1, Math.round(((px - P.l) / (W - P.l - P.r)) * (points.length - 1))))); }}
-        onPointerLeave={() => setHover(null)}>
+        onPointerDown={(e) => { const r = (e.currentTarget as SVGSVGElement).getBoundingClientRect(); const px = ((e.clientX - r.left) / r.width) * W; setHover(Math.max(0, Math.min(points.length - 1, Math.round(((px - P.l) / (W - P.l - P.r)) * (points.length - 1))))); }}
+        onPointerLeave={() => setHover(null)} onPointerCancel={() => setHover(null)} style={{ touchAction: "pan-y" }}>
         {ticks.map((t) => <g key={t}><line x1={P.l} x2={W - P.r} y1={y(t)} y2={y(t)} stroke={t === 0 ? "#ffffff30" : "#ffffff12"} /><text x={P.l - 6} y={y(t) + 3} textAnchor="end">{Math.round(t)}</text></g>)}
         <rect className="ch-scan" x={P.l} y={P.t} width={46} height={H - P.t - P.b} style={{ ["--w" as string]: `${W - P.l - P.r - 46}px` }} />
         {points.map((p, i) => p.load > 0 && <rect key={p.date} className="ch-bar" style={{ ["--d" as string]: (i / Math.max(1, points.length - 1)).toFixed(3) }} x={x(i) - 1.5} width={3} y={H - P.b - (p.load / loadMax) * 46} height={(p.load / loadMax) * 46} fill="#243241" rx={1} />)}
@@ -219,7 +225,7 @@ function FitnessChart({ points }: { points: Data["points"] }) {
         <circle className="ch-beacon late" cx={x(points.length - 1)} cy={y(points[points.length - 1].ctl)} r={8} fill="var(--snow)" />
         <circle className="ch-end" cx={x(points.length - 1)} cy={y(points[points.length - 1].ctl)} r={3.5} fill="var(--snow)" />
         {[0, Math.floor(points.length / 2), points.length - 1].map((i) => <text key={i} x={x(i)} y={H - 6} textAnchor={i === 0 ? "start" : i === points.length - 1 ? "end" : "middle"}>{dayLabel(points[i].date, { day: "numeric", month: "short" })}</text>)}
-        {h && <g><line x1={x(hover!)} x2={x(hover!)} y1={P.t} y2={H - P.b} stroke="#ffffff40" /><circle cx={x(hover!)} cy={y(h.ctl)} r={3.5} fill="var(--snow)" /><circle cx={x(hover!)} cy={y(h.atl)} r={3.5} fill="var(--ember)" /></g>}
+        {h && <g className="sc-mark" style={{ transform: `translate(${x(hover!)}px, 0)` }}><line x1={0} x2={0} y1={P.t} y2={H - P.b} /><circle className="sc-halo" cx={0} cy={y(h.ctl)} r={8} style={{ fill: "color-mix(in srgb, var(--snow) 30%, transparent)" }} /><circle cx={0} cy={y(h.ctl)} r={4} fill="var(--snow)" /><circle cx={0} cy={y(h.atl)} r={3.5} fill="var(--ember)" /><circle cx={0} cy={y(h.form)} r={3} fill="var(--ok)" /></g>}
       </svg>
       {h && <div className="tip" style={{ left: `${(x(hover!) / W) * 100}%`, top: `${(y(Math.max(h.ctl, h.atl)) / H) * 100}%` }}>
         {dayLabel(h.date, { weekday: "short", day: "numeric", month: "short" })}<br />Forme {h.ctl} · Fatigue {h.atl}<br />Fraîcheur {h.form > 0 ? "+" : ""}{h.form} · Charge {h.load}

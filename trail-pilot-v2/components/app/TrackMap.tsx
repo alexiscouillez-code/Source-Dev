@@ -82,6 +82,25 @@ export default function TrackMap({ lines, markers = NO_MARKERS, height = 320, on
       drawn.current = true;
       // Leaflet ne crée les éléments SVG qu’une fois la vue définie : on les récupère après le recadrage.
       const drawnLines: import("leaflet").Polyline[] = [], dots: import("leaflet").CircleMarker[] = [];
+      // Un point « coureur » parcourt le tracé à vitesse régulière, du départ à l’arrivée.
+      const runTracer = (L: typeof import("leaflet"), m: import("leaflet").Map, pts: import("leaflet").LatLng[], D: number) => {
+        tracer.current?.remove();
+        const dot = L.circleMarker(pts[0], { radius: 6, color: "#fff", weight: 3, fillColor: "#ff6a2b", fillOpacity: 1, interactive: false, className: "tm-tracer" }).addTo(m);
+        tracer.current = dot;
+        // Distances cumulées : le point avance à vitesse régulière le long du tracé.
+        const cum = [0]; for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + pts[i - 1].distanceTo(pts[i]));
+        const total = cum[cum.length - 1] || 1, t0 = performance.now();
+        const ease = (k: number) => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
+        const step = (now: number) => {
+          if (tracer.current !== dot) return;
+          const k = Math.min(1, (now - t0) / D), d = ease(k) * total;
+          let i = 1; while (i < cum.length - 1 && cum[i] < d) i++;
+          const f = (d - cum[i - 1]) / Math.max(1e-6, cum[i] - cum[i - 1]);
+          dot.setLatLng([pts[i - 1].lat + (pts[i].lat - pts[i - 1].lat) * f, pts[i - 1].lng + (pts[i].lng - pts[i - 1].lng) * f]);
+          if (k < 1) requestAnimationFrame(step); else setTimeout(() => { if (tracer.current === dot) { dot.remove(); tracer.current = null; } }, 500);
+        };
+        requestAnimationFrame(step);
+      };
       for (const l of sorted) {
         let pts: LatLon[] = [];
         try { pts = decodePolyline(l.poly); } catch { continue; }
@@ -114,22 +133,7 @@ export default function TrackMap({ lines, markers = NO_MARKERS, height = 320, on
             if (!path || pts.length < 2 || !path.isConnected) return;
             const len = path.getTotalLength(), D = Math.min(2200, Math.max(900, len * 2.2));
             path.animate([{ strokeDasharray: `${len} ${len}`, strokeDashoffset: len }, { strokeDasharray: `${len} ${len}`, strokeDashoffset: 0 }], { duration: D, easing: "cubic-bezier(.45, 0, .2, 1)" });
-            tracer.current?.remove();
-            const dot = L.circleMarker(pts[0], { radius: 6, color: "#fff", weight: 3, fillColor: "#ff6a2b", fillOpacity: 1, interactive: false, className: "tm-tracer" }).addTo(m);
-            tracer.current = dot;
-            // Distances cumulées : le point avance à vitesse régulière le long du tracé.
-            const cum = [0]; for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + pts[i - 1].distanceTo(pts[i]));
-            const total = cum[cum.length - 1] || 1, t0 = performance.now();
-            const ease = (k: number) => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
-            const step = (now: number) => {
-              if (tracer.current !== dot) return;
-              const k = Math.min(1, (now - t0) / D), d = ease(k) * total;
-              let i = 1; while (i < cum.length - 1 && cum[i] < d) i++;
-              const f = (d - cum[i - 1]) / Math.max(1e-6, cum[i] - cum[i - 1]);
-              dot.setLatLng([pts[i - 1].lat + (pts[i].lat - pts[i - 1].lat) * f, pts[i - 1].lng + (pts[i].lng - pts[i - 1].lng) * f]);
-              if (k < 1) requestAnimationFrame(step); else setTimeout(() => { if (tracer.current === dot) { dot.remove(); tracer.current = null; } }, 500);
-            };
-            requestAnimationFrame(step);
+            runTracer(L, m, pts, D);
           });
         }
       }
@@ -153,6 +157,11 @@ export default function TrackMap({ lines, markers = NO_MARKERS, height = 320, on
           el.classList.add("tm-draw");
           // Une fois dessiné, on retire le pointillé : au zoom, Leaflet recalcule le tracé.
           el.addEventListener("animationend", () => { el.classList.remove("tm-draw"); el.style.removeProperty("--len"); el.style.animationDelay = ""; }, { once: true });
+          // Parcours unique (course, sortie) : le coureur part dès que le tracé commence à se dessiner.
+          if (!many && i === 0 && drawnLines[0]) {
+            const pts = (drawnLines[0].getLatLngs() as import("leaflet").LatLng[]).flat() as import("leaflet").LatLng[];
+            if (pts.length > 1) window.setTimeout(() => { if (map.current && el.isConnected) runTracer(L, map.current, pts, 1400); }, 120);
+          }
         })));
       }
     })();

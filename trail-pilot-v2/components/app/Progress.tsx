@@ -22,10 +22,10 @@ export default function Progress() {
           {([["km", "Distance"], ["gain", "D+"], ["minutes", "Temps"]] as const).map(([k, l]) => <button key={k} className={metric === k ? "on" : ""} onClick={() => setMetric(k)}>{l}</button>)}
         </div>
       </div>
-      <div className="month-bars" role="img" aria-label={`Volume par mois sur 12 mois (${metric === "km" ? "distance" : metric === "gain" ? "dénivelé" : "temps"})`}>
+      <div className="month-bars" data-m={metric} role="img" aria-label={`Volume par mois sur 12 mois (${metric === "km" ? "distance" : metric === "gain" ? "dénivelé" : "temps"})`}>
         {d.months.map((m, i) => (
           <div key={m.month} title={`${monthShort(m.month)} : ${fmt(m[metric])}`}>
-            <span className="mb-v">{m[metric] ? fmt(m[metric]).replace(" km", "").replace(" m", "") : ""}</span>
+            <span className="mb-v" key={metric}>{m[metric] ? fmt(m[metric]).replace(" km", "").replace(" m", "") : ""}</span>
             <i style={{ ["--h" as string]: `${(m[metric] / max) * 100}%`, ["--d" as string]: `${i * 35}ms` }} />
             <small><span className="mfull">{monthShort(m.month)}</span><span className="m1">{monthShort(m.month).charAt(0).toUpperCase()}</span></small>
           </div>
