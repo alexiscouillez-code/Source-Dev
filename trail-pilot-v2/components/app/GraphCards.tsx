@@ -113,14 +113,17 @@ function IntensityCard({ v }: { v: GraphData["intensity"] }) {
   ];
   const total = segs.reduce((t, s) => t + s.minutes, 0);
   const pct = (m: number) => (total ? Math.round((m / total) * 100) : 0);
-  const alert = total >= 120 && pct(v.hard) > 25;
+  // Repère du trail : environ 80 % du temps en facile. Trop d’intense fatigue, trop de modéré (« zone grise ») ne fait ni progresser l’endurance ni la vitesse.
+  const easyPct = pct(v.easy), hardPct = pct(v.hard), enough = total >= 120;
+  const verdict = !total ? "À construire" : !enough ? "Peu de données" : hardPct > 25 ? "Trop d’intense" : easyPct < 65 ? "Pas assez de facile" : easyPct < 75 ? "Correcte" : "Équilibrée";
+  const alert = enough && (hardPct > 25 || easyPct < 65);
   const C = 2 * Math.PI * 40;
   let acc = 0;
   const sel = hov.i != null ? segs[hov.i] : null;
   return (
     <Card kicker="Intensité · 28 jours" title={<><b className="gc-big">{pct(v.easy)} %</b> en facile</>} alert={alert}
-      status={!total ? "À construire" : alert ? "Trop d’intense" : "Équilibrée"}
-      back={<><p>La part de ton temps d’entraînement passée en facile, modéré et intense, d’après l’effort de chaque séance.</p><p><b>Repère :</b> environ 80 % en facile et 20 % plus dur. Au-delà de 25 % en intense, la fatigue s’installe sans faire progresser davantage.</p></>}>
+      status={verdict}
+      back={<><p>La part de ton temps d’entraînement passée en facile, modéré et intense, d’après l’effort de chaque séance.</p><p><b>Repère :</b> environ 80 % en facile et 20 % plus dur. Au-delà de 25 % en intense, la fatigue s’installe sans faire progresser davantage. Sous 65 % de facile, trop de séances se courent à une allure « moyenne » : trop dure pour bâtir l’endurance, trop facile pour gagner en vitesse. Ralentis tes footings.</p></>}>
       {!total ? <Empty>Pas encore de séance sur 28 jours.</Empty> : (
         <div className="gc-ring">
           <svg viewBox="0 0 100 100" role="img" aria-label={segs.map((s) => `${s.key} ${pct(s.minutes)} %`).join(", ")}>

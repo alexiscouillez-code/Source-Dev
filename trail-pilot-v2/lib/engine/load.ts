@@ -59,11 +59,14 @@ export function effort(a: ActivityLike, p: Physio = {}): { rpe: number; source: 
     const spiky = a.maxHr && a.maxHr >= 0.93 * max && a.maxHr - hr >= 22 ? 1 : 0;
     if (rest && rest < hr) {
       const r = (hr - rest) / (max - rest); // réserve cardiaque (Karvonen)
-      const rpe = r < 0.5 ? 3 : r < 0.6 ? 4 : r < 0.7 ? 5 : r < 0.78 ? 6 : r < 0.85 ? 7 : r < 0.9 ? 8 : 9;
+      // Mêmes bornes que les zones cardiaques affichées (Z1 < 60 %, Z2 60-70 %, Z3 70-80 %, Z4 80-90 %, Z5 au-delà) :
+      // une sortie en Z2 est une sortie facile, pas un effort modéré.
+      const rpe = r < 0.6 ? 3 : r < 0.7 ? 4 : r < 0.75 ? 5 : r < 0.8 ? 6 : r < 0.85 ? 7 : r < 0.9 ? 8 : 9;
       return { rpe: Math.min(9, rpe + (rpe <= 6 ? spiky : 0)), source: "fc" };
     }
     const f = hr / max;
-    const rpe = f < 0.68 ? 3 : f < 0.74 ? 4 : f < 0.8 ? 5 : f < 0.85 ? 6 : f < 0.89 ? 7 : f < 0.93 ? 8 : 9;
+    // Sans FC de repos : bornes des zones en % de FC max (0,64 / 0,73 / 0,82 / 0,91).
+    const rpe = f < 0.64 ? 3 : f < 0.73 ? 4 : f < 0.775 ? 5 : f < 0.82 ? 6 : f < 0.865 ? 7 : f < 0.91 ? 8 : 9;
     return { rpe: Math.min(9, rpe + (rpe <= 6 ? spiky : 0)), source: "fc" };
   }
   return { rpe: IMPACT[a.sport].rpe, source: "estimé" };

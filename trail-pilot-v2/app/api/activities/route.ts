@@ -12,7 +12,7 @@ export const GET = withUser(async (user, req) => {
   const since = url.searchParams.get("since") ?? addDays(today, -90);
   const shoes = await listShoes(user.id);
   const [acts, p, tracks] = await Promise.all([
-    loadActivities(user.id, isoDate(since)), loadProfile(user.id),
+    loadActivities(user.id, isoDate(since), true), loadProfile(user.id),
     all<{ id: number; track: string | null; shoe_id: number | null }>("SELECT id, track, shoe_id FROM activities WHERE user_id = ? AND date >= ?", [user.id, isoDate(since)]),
   ]);
   const byId = new Map(tracks.map((t) => [t.id, t]));

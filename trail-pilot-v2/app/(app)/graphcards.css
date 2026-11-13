@@ -525,11 +525,11 @@ form.cal-comment { display: grid; gap: 8px; white-space: normal; }
   .mo svg.chart.is-in .ch-bar { animation: ch-bar .6s var(--ease) calc(var(--d, 0) * .9s) both; }
   .mo svg.chart.is-in .ch-bar.wave { animation-duration: .75s; animation-delay: calc(var(--d, 0) * 1.1s); }
   .mo svg.chart.is-in .ch-bar.done { animation-delay: calc(var(--d, 0) * 1.1s + .45s); }
-  .mo svg.chart.is-in .ch-now { animation: ch-now 1.8s ease-in-out 1.4s infinite; }
+  .mo svg.chart.is-in .ch-now { animation: ch-now 1.8s ease-in-out 1.4s 4; }
   /* --- Points : ils s’allument le long de la courbe ; le dernier point pulse en continu --- */
   .mo svg.chart.is-in .ch-dot { animation: ch-pop .5s var(--ease) calc(var(--d, 0) * 1.3s + .15s) both; }
   .mo svg.chart.is-in .ch-end { animation: ch-pop .5s var(--ease) 2.5s both; }
-  .mo svg.chart.is-in .ch-beacon { animation: ch-beacon 1.8s ease-out 1.6s infinite; }
+  .mo svg.chart.is-in .ch-beacon { animation: ch-beacon 1.8s ease-out 1.6s 4; }
   .mo svg.chart.is-in .ch-beacon.late { animation-delay: 2.7s; }
   /* --- Balayage lumineux pendant le tracé du graphique de forme --- */
   .mo svg.chart.is-in .ch-scan { animation: ch-scan 2.3s var(--ease) .3s both; }
@@ -559,7 +559,7 @@ form.cal-comment { display: grid; gap: 8px; white-space: normal; }
   .mo .ready-plot:not(.is-in) .gc-line { animation: none; stroke-dashoffset: 1; }
   .mo .ready-plot:not(.is-in) :is(.gc-area, .gc-dot) { opacity: 0; }
   .mo .ready-plot.is-in .gc-line { animation: gc-draw 1.6s var(--ease) .1s both; filter: drop-shadow(0 0 5px var(--ember)); }
-  .mo .ready-plot.is-in .gc-dot.now { box-shadow: 0 0 0 0 var(--ember); animation: halo-ring 1.8s ease-out 1.6s infinite; }
+  .mo .ready-plot.is-in .gc-dot.now { box-shadow: 0 0 0 0 var(--ember); animation: halo-ring 1.8s ease-out 1.6s 4; }
   @keyframes halo-ring { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ember) 60%, transparent); } 100% { box-shadow: 0 0 0 12px transparent; } }
 
   /* --- Chiffres : léger éclat quand une carte de données arrive --- */
@@ -644,3 +644,24 @@ form.cal-comment { display: grid; gap: 8px; white-space: normal; }
   .profile-aid.lit > circle:last-child { transform-box: fill-box; transform-origin: center; animation: chip-pop .4s var(--ease) both; }
 }
 .chart .wk-tip > rect { animation: none !important; transform: none !important; }
+
+/* ---------- Séances à vérifier (doublons, chrono oublié, vitesse impossible) ---------- */
+.card.suspects { margin-bottom: 14px; border-color: color-mix(in srgb, var(--lite) 45%, var(--line)); display: grid; gap: 10px; }
+.sus-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.sus-list li { display: grid; gap: 4px; padding: 11px 12px; border-radius: 12px; background: var(--ink-3); box-shadow: inset 0 0 0 1px var(--line); }
+.sus-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.sus-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.chip.sus-doublon, .chip.sus-chrono { color: var(--lite); border-color: color-mix(in srgb, var(--lite) 40%, transparent); }
+.chip.sus-vitesse, .chip.sus-charge { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+.item.excluded { opacity: .55; }
+.item.excluded .t { text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--mute) 70%, transparent); }
+.excl-note { color: var(--lite) !important; }
+/* Graphique de forme : pic au-delà de l'échelle */
+.ch-peak text { fill: var(--ember) !important; font-family: var(--mono); font-size: 10px; font-weight: 600; }
+.chart .ch-bar.over { fill: var(--ember); opacity: .7; }
+@media (prefers-reduced-motion: no-preference) {
+  .sus-list li { animation: card-in .45s var(--ease) both; }
+  .sus-list li:nth-child(2) { animation-delay: .06s; } .sus-list li:nth-child(3) { animation-delay: .12s; }
+  .sus-list li.out { animation: sus-out .38s var(--ease) both; }
+  @keyframes sus-out { to { opacity: 0; transform: translateX(24px); } }
+}

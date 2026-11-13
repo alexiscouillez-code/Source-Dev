@@ -21,7 +21,7 @@ export const summaryMonday = (today: string) => (weekday(today) === 6 ? mondayOf
 
 async function volume(userId: number, from: string, to: string) {
   return all<{ date: string; name: string | null; duration_min: number; distance_km: number | null; gain_m: number | null }>(
-    "SELECT date, name, duration_min, distance_km, gain_m FROM activities WHERE user_id = ? AND date >= ? AND date <= ? ORDER BY date", [userId, from, to]);
+    "SELECT date, name, duration_min, distance_km, gain_m FROM activities WHERE user_id = ? AND COALESCE(check_state, 0) <> 1 AND date >= ? AND date <= ? ORDER BY date", [userId, from, to]);
 }
 const sum = (rows: { duration_min: number; distance_km: number | null; gain_m: number | null }[]) => ({
   minutes: Math.round(rows.reduce((t, r) => t + r.duration_min, 0)),

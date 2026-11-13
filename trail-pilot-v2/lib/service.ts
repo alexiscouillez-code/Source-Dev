@@ -1,4 +1,5 @@
 import "server-only";
+import { findSuspects } from "./engine/suspects";
 import { all, libsql, one, run } from "@/db/client";
 import { addDays, diffDays, mondayOf, range, todayIn } from "./engine/dates";
 import { adapt, decide, watchBaseline, type CheckIn, type PlannedLike, type Verdict, type Watch } from "./engine/decision";
@@ -22,7 +23,7 @@ import { HttpError } from "./api";
 
 export interface ProfileRow { hr_max: number | null; hr_rest: number | null; vo2_watch: number | null; days_per_week: number; long_day: number; max_weekly_minutes: number | null; level: Level }
 export interface GoalRow { name: string; date: string; distance_km: number | null; gain_m: number | null; plan_meta?: string | null; route?: string | null; gear?: string | null }
-export interface ActivityRow { id: number; date: string; sport: Sport; name: string | null; duration_min: number; distance_km: number | null; gain_m: number | null; loss_m: number | null; avg_hr: number | null; max_hr: number | null; rpe: number | null; source: string; strava_id: string | null; analysis?: string | null }
+export interface ActivityRow { id: number; date: string; sport: Sport; name: string | null; duration_min: number; distance_km: number | null; gain_m: number | null; loss_m: number | null; avg_hr: number | null; max_hr: number | null; rpe: number | null; source: string; strava_id: string | null; analysis?: string | null; check_state?: number | null }
 export interface PlanRow { id: number; date: string; template: string; title: string; sport: string; duration_min: number; gain_m: number | null; rpe_target: number; description: string; phase: string; status: string; activity_id: number | null; locked: number; original: string | null }
 export interface CheckinRow { date: string; sleep: number; legs: number; motivation: number; pain: 0 | 1 | 2; note: string | null; pain_zones?: string | null; sleep_h?: number | null; rhr?: number | null; hrv?: number | null }
 
@@ -55,8 +56,9 @@ export const loadGoal = (userId: number) => one<GoalRow>("SELECT name, date, dis
 export type GearItem = { label: string; checked: boolean };
 export const readGear = (g: { gear?: string | null } | null | undefined): GearItem[] => { try { const a = g?.gear ? JSON.parse(g.gear) : []; return Array.isArray(a) ? a : []; } catch { return []; } };
 export const readPlanMeta = (g: GoalRow | null | undefined): RacePlan | null => { try { return g?.plan_meta ? JSON.parse(g.plan_meta) : null; } catch { return null; } };
-export const loadActivities = (userId: number, since: string) =>
-  all<ActivityRow>("SELECT id, date, sport, name, duration_min, distance_km, gain_m, loss_m, avg_hr, max_hr, rpe, source, strava_id, analysis FROM activities WHERE user_id = ? AND date >= ? ORDER BY date DESC, id DESC", [userId, since]);
+/** Sorties depuis une date. Les séances exclues par l’utilisateur (doublon, chrono oublié…) ne comptent dans aucun calcul, sauf demande explicite. */
+export const loadActivities = (userId: number, since: string, withExcluded = false) =>
+  all<ActivityRow>(`SELECT id, date, sport, name, duration_min, distance_km, gain_m, loss_m, avg_hr, max_hr, rpe, source, strava_id, analysis, check_state FROM activities WHERE user_id = ? AND date >= ?${withExcluded ? "" : " AND COALESCE(check_state, 0) <> 1"} ORDER BY date DESC, id DESC`, [userId, since]);
 
 export function withLoad(a: ActivityRow, physio: { hrMax: number | null; hrRest: number | null }) {
   const l = sessionLoad(toActivityLike(a), physio);
@@ -317,8 +319,10 @@ export async function analysis(userId: number, today: string) {
     const c = checks.find((x) => x.date === date);
     return { date, score: c ? Math.max(0, Math.min(100, Math.round(((c.sleep + c.legs + c.motivation - 3) / 12) * 100 - c.pain * 12))) : null };
   });
+  // Séances à vérifier : on cherche sur toute la période du calcul (y compris celles déjà confirmées, pour repérer leurs doublons).
+  const suspects = findSuspects(acts.map((a) => ({ ...toActivityLike(a), id: a.id, name: a.name, checkState: a.check_state ?? null })), physio);
   return {
-    intensity, recovery,
+    intensity, recovery, suspects,
     points: tl.points.map((p) => ({ date: p.date, load: Math.round(p.load), atl: Math.round(p.atl), ctl: Math.round(p.ctl), form: Math.round(p.form) })),
     weeks: weeklySummary(likes, physio, today, 12),
     sports: Object.fromEntries(bySport),

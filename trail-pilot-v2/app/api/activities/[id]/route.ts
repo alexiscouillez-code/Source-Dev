@@ -1,12 +1,21 @@
 import { body, HttpError, json, num, withUser } from "@/lib/api";
 import { one, run } from "@/db/client";
-import { ownActivity, resolveToday } from "@/lib/service";
+import { ownActivity, regeneratePlan, resolveToday } from "@/lib/service";
 import { parseActivity } from "@/lib/activity-input";
 
 export const PATCH = withUser(async (user, req, ctx) => {
   const id = Number((await ctx.params).id);
   const current = await ownActivity(user.id, id);
   const b = await body(req);
+  // Vérification d’une séance suspecte : exclue des calculs (1), confirmée correcte (2) ou remise à vérifier (0).
+  if (b.checkState !== undefined) {
+    const v = Number(b.checkState);
+    if (![0, 1, 2].includes(v)) throw new HttpError(400, "État de vérification inconnu.");
+    await run("UPDATE activities SET check_state = ?, updated_at = ? WHERE id = ?", [v || null, Date.now(), id]);
+    // La charge change : le plan est recalculé sans (ou avec) cette séance.
+    if (v !== 2) await regeneratePlan(user.id, resolveToday(null)).catch(() => {});
+    if (Object.keys(b).length === 1) return json({ ok: true });
+  }
   // Paire de chaussures (0 = aucune) : modifiable quelle que soit la source.
   if (b.shoeId !== undefined) {
     const shoe = Number(b.shoeId);

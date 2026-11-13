@@ -66,6 +66,10 @@ export default function Sessions({ me, refresh, toast }: Ctx) {
     try { await api(`/api/activities/${a.id}`, { method: "PATCH", body: { shoeId: Number(v) } }); await load(); }
     catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }
   }
+  async function include(a: Activity) {
+    try { await api(`/api/activities/${a.id}`, { method: "PATCH", body: { checkState: 2 } }); await Promise.all([load(), refresh()]); toast("Séance réintégrée dans les calculs."); }
+    catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }
+  }
   async function remove(a: Activity) {
     if (!confirm("Supprimer cette séance ?")) return;
     try { await api(`/api/activities/${a.id}`, { method: "DELETE" }); await Promise.all([load(), refresh()]); }
@@ -117,7 +121,7 @@ export default function Sessions({ me, refresh, toast }: Ctx) {
         {!acts ? <div className="skeleton" /> : !acts.length ? <p className="empty">Aucune séance sur les 90 derniers jours.</p> : (
           <ul className="list">
             {acts.map((a) => (
-              <li key={a.id} className="item run">
+              <li key={a.id} className={`item run${a.check_state === 1 ? " excluded" : ""}`}>
                 <div className="date"><small>{shortDay(a.date)}</small><b>{dayNum(a.date)}</b></div>
                 <div style={{ minWidth: 0 }}>
                   <div className="t">{a.name ?? SPORT_LABEL[a.sport]}</div>
@@ -125,6 +129,7 @@ export default function Sessions({ me, refresh, toast }: Ctx) {
                     {SPORT_LABEL[a.sport]} · {fmtDur(a.duration_min)}{a.distance_km ? ` · ${fmtKm(a.distance_km)} km` : ""}{a.gain_m ? ` · ${fmtNum(a.gain_m)} m D+` : ""}{a.avg_hr ? ` · ${Math.round(a.avg_hr)} bpm` : ""}
                   </div>
                   <div className="s" title={`Effort ${a.effort}/10 d’après ${EFFORT_SOURCE[a.effortSource]}`}>Charge <b className="mono" style={{ color: "var(--snow)" }}>{a.load}</b> · effort {String(a.effort).replace(".", ",")}/10 ({a.effortSource}){a.source === "strava" ? " · Strava" : a.source === "gpx" ? " · GPX" : a.source === "fichier" ? " · fichier montre" : ""}</div>
+                  {a.check_state === 1 && <div className="s excl-note">Exclue des calculs de charge et du plan. <button className="link small" onClick={() => include(a)}>Réintégrer</button></div>}
                   <Insight a={a} />
                 </div>
                 <div className="item-actions">

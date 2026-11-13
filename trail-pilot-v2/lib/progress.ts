@@ -20,9 +20,9 @@ export async function progress(userId: number, today: string): Promise<Progress>
   const since = addDays(today, -366).slice(0, 7) + "-01";
   const [rows, all12, sides, goal] = await Promise.all([
     all<{ id: number; date: string; name: string | null; sport: string; duration_min: number; distance_km: number | null; gain_m: number | null; track: string | null; analysis: string | null }>(
-      "SELECT id, date, name, sport, duration_min, distance_km, gain_m, track, analysis FROM activities WHERE user_id = ? ORDER BY date", [userId]),
+      "SELECT id, date, name, sport, duration_min, distance_km, gain_m, track, analysis FROM activities WHERE user_id = ? AND COALESCE(check_state, 0) <> 1 ORDER BY date", [userId]),
     all<{ month: string; minutes: number; km: number; gain: number; count: number }>(
-      "SELECT substr(date, 1, 7) AS month, ROUND(SUM(duration_min)) AS minutes, ROUND(SUM(COALESCE(distance_km, 0)), 1) AS km, ROUND(SUM(COALESCE(gain_m, 0))) AS gain, COUNT(*) AS count FROM activities WHERE user_id = ? AND date >= ? GROUP BY month ORDER BY month",
+      "SELECT substr(date, 1, 7) AS month, ROUND(SUM(duration_min)) AS minutes, ROUND(SUM(COALESCE(distance_km, 0)), 1) AS km, ROUND(SUM(COALESCE(gain_m, 0))) AS gain, COUNT(*) AS count FROM activities WHERE user_id = ? AND COALESCE(check_state, 0) <> 1 AND date >= ? GROUP BY month ORDER BY month",
       [userId, since]),
     all<{ name: string; date: string; distance_km: number | null; gain_m: number | null }>("SELECT name, date, distance_km, gain_m FROM side_races WHERE user_id = ? AND date <= ? ORDER BY date DESC", [userId, today]),
     one<{ name: string; date: string; distance_km: number | null; gain_m: number | null }>("SELECT name, date, distance_km, gain_m FROM goals WHERE user_id = ? AND date <= ?", [userId, today]),

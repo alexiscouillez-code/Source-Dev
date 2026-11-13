@@ -218,4 +218,9 @@ export const MIGRATIONS: { tag: string; statements: string[] }[] = [
       `ALTER TABLE goals ADD COLUMN gear TEXT`,
     ],
   },
+  {
+    tag: "016_activity_check",
+    // Séance repérée comme suspecte (doublon, chrono oublié, trajet motorisé) : NULL = non vérifiée, 1 = exclue des calculs, 2 = confirmée correcte.
+    statements: [`ALTER TABLE activities ADD COLUMN check_state INTEGER`],
+  },
 ];

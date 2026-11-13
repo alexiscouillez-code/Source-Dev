@@ -7,7 +7,8 @@ import { TargetsTable } from "./Targets";
 import TrailProfile from "./TrailProfile";
 import Progress from "./Progress";
 import GraphCards, { type GraphData } from "./GraphCards";
-import { api, dayLabel, fmtDur, fmtNum, SPORT_LABEL } from "./client";
+import { api, dayLabel, fmtDur, fmtKm, fmtNum, SPORT_LABEL } from "./client";
+import type { Suspect } from "@/lib/engine/suspects";
 
 interface Data {
   points: { date: string; load: number; atl: number; ctl: number; form: number }[];
@@ -15,12 +16,14 @@ interface Data {
   sports: Record<string, number>;
   summary: { atl: number; ctl: number; form: number; ratio: number | null; monotony: number | null; calibrated: boolean; historyDays: number };
   intensity: GraphData["intensity"];
+  suspects?: Suspect[];
   recovery: GraphData["recovery"];
 }
 
 export default function Analysis({ me, toast, go }: Ctx) {
   const [d, setD] = useState<Data | null>(null);
-  useEffect(() => { api<Data>("/api/analysis").then(setD).catch((e) => toast(e.message)); }, [toast]);
+  const [tick, setTick] = useState(0);
+  useEffect(() => { api<Data>("/api/analysis").then(setD).catch((e) => toast(e.message)); }, [toast, tick]);
   if (!d) return <><Head /><div className="skeleton" /></>;
   const s = d.summary;
   const sportTotal = Object.values(d.sports).reduce((a, b) => a + b, 0);
@@ -29,6 +32,7 @@ export default function Analysis({ me, toast, go }: Ctx) {
       <Head />
       <h2 className="q-head" id="q-forme"><span>1</span>Suis-je en forme ?</h2>
       {d.intensity && d.recovery && <GraphCards d={d} />}
+      {!!d.suspects?.length && <SuspectsCard list={d.suspects} toast={toast} onDone={() => setTick((t) => t + 1)} />}
       {!s.calibrated && <p className="note" style={{ marginBottom: 14 }}>Calibrage en cours : {s.historyDays} jours d’historique sur 28. Les indicateurs se fiabilisent au fil des séances.</p>}
       <section className="card">
         <div className="card-head"><h2 className="tip-label">Forme, fatigue et fraîcheur<InfoTip title="Forme, fatigue et fraîcheur"><span className="p"><em>Forme de fond</em> (trait épais) : ta charge moyenne sur 6 semaines, ton niveau d’entraînement. <em>Fatigue</em> : ta charge des 7 derniers jours. <em>Fraîcheur</em> : la différence entre les deux.</span></InfoTip></h2></div>
@@ -46,12 +50,12 @@ export default function Analysis({ me, toast, go }: Ctx) {
       </section>
 
       <h2 className="q-head" id="q-progres"><span>2</span>Est-ce que je progresse ?</h2>
-      <Vo2Card go={go} targets={me.targets} />
-      <Progress />
+      <Vo2Card key={`v${tick}`} go={go} targets={me.targets} />
+      <Progress key={`p${tick}`} />
 
       <h2 className="q-head" id="q-pret"><span>3</span>Suis-je prêt pour ma course ?</h2>
-      <Readiness go={go} />
-      <TrailProfile go={go} />
+      <Readiness key={`r${tick}`} go={go} />
+      <TrailProfile key={`t${tick}`} go={go} />
     </>
   );
 }
@@ -192,20 +196,77 @@ function Vo2History({ months }: { months: Vo2["months"] }) {
   );
 }
 
+const KIND_LABEL: Record<Suspect["kind"], string> = { doublon: "Doublon probable", chrono: "Chrono resté allumé ?", vitesse: "Vitesse impossible à pied", charge: "Charge hors norme" };
+
+/** Séances qui faussent probablement la charge : le coureur les exclut des calculs ou confirme qu’elles sont justes. */
+function SuspectsCard({ list, toast, onDone }: { list: Suspect[]; toast: Ctx["toast"]; onDone: () => void }) {
+  const [busy, setBusy] = useState<number | null>(null);
+  const [gone, setGone] = useState<number[]>([]);
+  const act = async (s: Suspect, checkState: 1 | 2) => {
+    setBusy(s.id);
+    try {
+      await api(`/api/activities/${s.id}`, { method: "PATCH", body: { checkState } });
+      setGone((g) => [...g, s.id]);
+      toast(checkState === 1 ? "Séance exclue : charge et plan recalculés." : "C’est noté, la séance reste comptée.");
+      window.setTimeout(onDone, 380);
+    } catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }
+    finally { setBusy(null); }
+  };
+  return (
+    <section className="card suspects" aria-labelledby="sus-title">
+      <div className="card-head"><div><span className="eyebrow">Vérification</span><h2 id="sus-title" style={{ marginTop: 4 }}>{list.length > 1 ? `${list.length} séances à vérifier` : "Une séance à vérifier"}</h2></div></div>
+      <p className="soft small" style={{ margin: 0 }}>Une seule séance mal enregistrée peut multiplier ta fatigue affichée et fausser le plan pendant des semaines. Exclue, elle reste dans ta liste de séances mais ne compte plus dans les calculs.</p>
+      <ul className="sus-list">
+        {list.slice(0, 6).map((s) => (
+          <li key={s.id} className={gone.includes(s.id) ? "out" : undefined}>
+            <div className="sus-top"><span className={`chip sus-${s.kind}`}>{KIND_LABEL[s.kind]}</span><span className="mono muted small">charge {fmtNum(s.load)}</span></div>
+            <b>{s.name ?? SPORT_LABEL[s.sport] ?? s.sport}</b>
+            <span className="muted small">{dayLabel(s.date, { weekday: "long", day: "numeric", month: "long" })} · {fmtDur(Math.round(s.durationMin))}{s.distanceKm ? ` · ${fmtKm(s.distanceKm)} km` : ""}</span>
+            <p className="small" style={{ margin: 0 }}>{s.reason}</p>
+            <div className="sus-actions">
+              <button className="btn sm" disabled={busy === s.id} onClick={() => act(s, 1)}>Exclure du calcul</button>
+              <button className="btn ghost sm" disabled={busy === s.id} onClick={() => act(s, 2)}>Elle est juste</button>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/** Borne haute du graphique : un pic isolé n’écrase plus le reste (même règle que le moteur, partie médiane). */
+function capOf(values: number[], floor = 10) {
+  const v = values.filter((x) => Number.isFinite(x)).sort((a, b) => a - b);
+  if (!v.length) return { top: floor, capped: false };
+  const max = v[v.length - 1], cap = Math.max(floor, v[Math.floor(v.length / 2)] * 2.2);
+  return max > cap * 1.15 ? { top: cap, capped: true } : { top: Math.max(floor, max), capped: false };
+}
+
 const Head = () => <header className="head"><div><span className="eyebrow">Moteur de charge</span><h1>Analyse</h1></div></header>;
 
 
 function FitnessChart({ points }: { points: Data["points"] }) {
   const [hover, setHover] = useState<number | null>(null);
   const W = 720, H = 240, P = { l: 34, r: 8, t: 10, b: 22 };
-  const { max, min, path, x, y, loadMax } = useMemo(() => {
-    const max = Math.max(10, ...points.map((p) => Math.max(p.ctl, p.atl)));
-    const min = Math.min(0, ...points.map((p) => p.form));
-    const loadMax = Math.max(1, ...points.map((p) => p.load));
+  const { max, min, path, x, y, loadMax, peak, dip } = useMemo(() => {
+    // Un pic isolé (séance mal enregistrée, course exceptionnelle) n’écrase plus tout le graphique : on borne l’échelle et on signale le dépassement.
+    const hiCap = capOf(points.flatMap((p) => [p.ctl, p.atl]));
+    const max = hiCap.top;
+    // La fraîcheur descend normalement jusqu’à −30 environ : on ne la borne que si elle plonge bien plus bas que l’échelle de la forme.
+    const rawMin = Math.min(0, ...points.map((p) => p.form));
+    const floorMin = -Math.max(30, max * 0.6);
+    const loCap = { capped: rawMin < floorMin * 1.15 };
+    const min = loCap.capped ? floorMin : rawMin;
+    const loads = points.map((p) => p.load).filter((v) => v > 0);
+    const loadMax = Math.max(1, capOf(loads, 1).top);
     const x = (i: number) => P.l + (i / Math.max(1, points.length - 1)) * (W - P.l - P.r);
-    const y = (v: number) => P.t + (1 - (v - min) / (max - min)) * (H - P.t - P.b);
+    const y = (v: number) => P.t + (1 - (Math.max(min, Math.min(max, v)) - min) / (max - min)) * (H - P.t - P.b);
     const path = (k: "ctl" | "atl" | "form") => points.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)} ${y(p[k]).toFixed(1)}`).join(" ");
-    return { max, min, path, x, y, loadMax };
+    const iMax = points.reduce((b, p, i) => (p.atl > points[b].atl ? i : b), 0);
+    const iMin = points.reduce((b, p, i) => (p.form < points[b].form ? i : b), 0);
+    return { max, min, path, x, y, loadMax,
+      peak: hiCap.capped && points.length ? { i: iMax, v: points[iMax].atl } : null,
+      dip: loCap.capped && points.length ? { i: iMin, v: points[iMin].form } : null };
   }, [points]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!points.length) return <p className="empty">Pas encore de données.</p>;
   const ticks = [min, 0, max / 2, max].filter((v, i, a) => a.indexOf(v) === i);
@@ -218,12 +279,14 @@ function FitnessChart({ points }: { points: Data["points"] }) {
         onPointerLeave={() => setHover(null)} onPointerCancel={() => setHover(null)} style={{ touchAction: "pan-y" }}>
         {ticks.map((t) => <g key={t}><line x1={P.l} x2={W - P.r} y1={y(t)} y2={y(t)} stroke={t === 0 ? "#ffffff30" : "#ffffff12"} /><text x={P.l - 6} y={y(t) + 3} textAnchor="end">{Math.round(t)}</text></g>)}
         <rect className="ch-scan" x={P.l} y={P.t} width={46} height={H - P.t - P.b} style={{ ["--w" as string]: `${W - P.l - P.r - 46}px` }} />
-        {points.map((p, i) => p.load > 0 && <rect key={p.date} className="ch-bar" style={{ ["--d" as string]: (i / Math.max(1, points.length - 1)).toFixed(3) }} x={x(i) - 1.5} width={3} y={H - P.b - (p.load / loadMax) * 46} height={(p.load / loadMax) * 46} fill="#243241" rx={1} />)}
+        {points.map((p, i) => { if (p.load <= 0) return null; const h = Math.min(1, p.load / loadMax) * 46; return <rect key={p.date} className={`ch-bar${p.load > loadMax ? " over" : ""}`} style={{ ["--d" as string]: (i / Math.max(1, points.length - 1)).toFixed(3) }} x={x(i) - 1.5} width={3} y={H - P.b - h} height={h} fill="#243241" rx={1} />; })}
         <path className="ch-line l1" pathLength={1} d={path("form")} fill="none" stroke="var(--ok)" strokeWidth={1.5} opacity={0.85} />
         <path className="ch-line l2" pathLength={1} d={path("atl")} fill="none" stroke="var(--ember)" strokeWidth={1.8} />
         <path className="ch-line l3 ch-glow" pathLength={1} d={path("ctl")} fill="none" stroke="var(--snow)" strokeWidth={2.4} />
         <circle className="ch-beacon late" cx={x(points.length - 1)} cy={y(points[points.length - 1].ctl)} r={8} fill="var(--snow)" />
         <circle className="ch-end" cx={x(points.length - 1)} cy={y(points[points.length - 1].ctl)} r={3.5} fill="var(--snow)" />
+        {peak && <g className="ch-peak"><text x={Math.min(W - P.r - 4, Math.max(P.l + 4, x(peak.i)))} y={P.t + 9} textAnchor={x(peak.i) > W - 80 ? "end" : "start"}>{`↑ pic ${peak.v} hors échelle`}</text></g>}
+        {dip && <g className="ch-peak"><text x={Math.min(W - P.r - 4, Math.max(P.l + 4, x(dip.i)))} y={H - P.b - 4} textAnchor={x(dip.i) > W - 80 ? "end" : "start"}>{`↓ ${dip.v}`}</text></g>}
         {[0, Math.floor(points.length / 2), points.length - 1].map((i) => <text key={i} x={x(i)} y={H - 6} textAnchor={i === 0 ? "start" : i === points.length - 1 ? "end" : "middle"}>{dayLabel(points[i].date, { day: "numeric", month: "short" })}</text>)}
         {h && <g className="sc-mark" style={{ transform: `translate(${x(hover!)}px, 0)` }}><line x1={0} x2={0} y1={P.t} y2={H - P.b} /><circle className="sc-halo" cx={0} cy={y(h.ctl)} r={8} style={{ fill: "color-mix(in srgb, var(--snow) 30%, transparent)" }} /><circle cx={0} cy={y(h.ctl)} r={4} fill="var(--snow)" /><circle cx={0} cy={y(h.atl)} r={3.5} fill="var(--ember)" /><circle cx={0} cy={y(h.form)} r={3} fill="var(--ok)" /></g>}
       </svg>
