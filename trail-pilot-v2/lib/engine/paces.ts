@@ -19,7 +19,8 @@ function speedFor(vo2: number) {
 const secPerKm = (vdot: number, frac: number) => Math.round(60000 / speedFor(vdot * frac));
 
 const PACES: { key: PaceKey; label: string; use: string; lo: number; hi: number }[] = [
-  { key: "E", label: "Endurance", use: "Footings, sorties longues, récupération", lo: 0.62, hi: 0.74 },
+  // Endurance : 62 à 70 % de la VO2max, ce qui recoupe les tables de Daniels (VDOT 50 : 5:08 à 5:40 /km).
+  { key: "E", label: "Endurance", use: "Footings, sorties longues, récupération", lo: 0.62, hi: 0.7 },
   { key: "M", label: "Allure marathon", use: "Rappels d’allure, tempo long", lo: 0.79, hi: 0.84 },
   { key: "T", label: "Seuil", use: "Tempo, blocs de 8 à 20 min", lo: 0.86, hi: 0.89 },
   { key: "I", label: "VMA", use: "Fractionné de 2 à 5 min", lo: 0.96, hi: 1 },

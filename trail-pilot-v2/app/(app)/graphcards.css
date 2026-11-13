@@ -395,3 +395,95 @@ form.cal-comment { display: grid; gap: 8px; white-space: normal; }
   .race-sheet .sheet-gear ul { columns: 2; margin: 4pt 0 0; padding: 0; list-style: none; font-size: 10pt; }
   .race-sheet .sheet-gear { margin-top: 8pt; }
 }
+
+/* ================= Motion, passe 3 : calendrier, cartes déroulantes, verdict, débrief, matériel ================= */
+@media (prefers-reduced-motion: no-preference) {
+  /* Calendrier : les semaines arrivent en cascade à chaque changement de mois, les pastilles suivent */
+  @keyframes cal-row-in { from { opacity: 0; transform: translateY(10px); } }
+  @keyframes ev-in { from { opacity: 0; transform: scaleX(.4); } }
+  @keyframes day-pop { 40% { transform: scale(.94); } 70% { transform: scale(1.03); } }
+  @keyframes today-ring { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ember) 55%, transparent); } 100% { box-shadow: 0 0 0 9px transparent; } }
+  .cal-grid > .cal-row:not(.cal-head) { animation: cal-row-in .45s var(--ease) both; }
+  .cal-grid > .cal-row:nth-child(2) { animation-delay: .03s; } .cal-grid > .cal-row:nth-child(3) { animation-delay: .07s; }
+  .cal-grid > .cal-row:nth-child(4) { animation-delay: .11s; } .cal-grid > .cal-row:nth-child(5) { animation-delay: .15s; }
+  .cal-grid > .cal-row:nth-child(6) { animation-delay: .19s; } .cal-grid > .cal-row:nth-child(7) { animation-delay: .23s; }
+  .cal-grid .ev { transform-origin: left center; animation: ev-in .4s var(--ease) .25s backwards; }
+  .cal-day { transition: border-color .15s, background .2s, transform .18s var(--ease); }
+  .cal-day:active { transform: scale(.95); }
+  .cal-day.sel { animation: day-pop .32s var(--ease); }
+  .cal-day.today { animation: today-ring 1.6s ease-out .5s 2; }
+  .cal-day.today.sel { animation: day-pop .32s var(--ease); }
+  .cal-grid.is-moving .cal-day.drop { animation: tm-pulse 1.1s ease-in-out infinite; }
+  /* Détail du jour : le contenu glisse quand on change de date */
+  .cal-detail-head, .cal-detail-head ~ * { animation: line-in .35s var(--ease) both; }
+  .cal-detail-head ~ *:nth-child(2) { animation-delay: .04s; } .cal-detail-head ~ *:nth-child(3) { animation-delay: .08s; }
+  .cal-detail-head ~ *:nth-child(4) { animation-delay: .12s; } .cal-detail-head ~ *:nth-child(n+5) { animation-delay: .16s; }
+  /* Sélecteur Calendrier / Liste */
+  .view-switch button { transition: background .25s var(--ease), color .2s; }
+  .view-switch button:active { transform: scale(.96); }
+
+  /* Cartes déroulantes : le contenu se déplie en cascade, l’en-tête répond au toucher */
+  .fold-head { transition: opacity .2s; }
+  .fold-head:active { opacity: .7; }
+  .fold-head:active .fold-chev { transform: scale(.88); }
+  .fold.is-open > .fold-head:active .fold-chev { transform: rotate(90deg) scale(.88); }
+  .fold-body > *:nth-child(2) { animation-delay: .04s; } .fold-body > *:nth-child(3) { animation-delay: .08s; }
+  .fold-body > *:nth-child(4) { animation-delay: .12s; } .fold-body > *:nth-child(n+5) { animation-delay: .16s; }
+  .fold-aside .chip { transition: color .3s, border-color .3s; }
+
+  /* Verdict de l’objectif : les jauges se remplissent, les pistes arrivent une à une */
+  .gaps li { animation: line-in .45s var(--ease) both; }
+  .gaps li:nth-child(2) { animation-delay: .08s; } .gaps li:nth-child(3) { animation-delay: .16s; } .gaps li:nth-child(4) { animation-delay: .24s; }
+  .gap-bar > i, .shoe-bar > i, .sg-bar > i { transform-origin: left center; }
+  .gap-bar > i { animation: grow-x .9s var(--ease) .2s backwards; }
+  .shoe-bar > i { animation: grow-x .8s var(--ease) .1s backwards; }
+  .fix-list li { animation: card-in .45s var(--ease) both; }
+  .fix-list li:nth-child(2) { animation-delay: .06s; } .fix-list li:nth-child(3) { animation-delay: .12s; } .fix-list li:nth-child(4) { animation-delay: .18s; } .fix-list li:nth-child(5) { animation-delay: .24s; }
+  .learn-list li { animation: line-in .4s var(--ease) both; }
+  .learn-list li:nth-child(2) { animation-delay: .07s; } .learn-list li:nth-child(3) { animation-delay: .14s; }
+
+  /* Débrief : les trois chiffres, puis les sections une à une ; l’écart « tamponne » */
+  .db-top > div { animation: card-in .5s var(--ease) both; }
+  .db-top > div:nth-child(2) { animation-delay: .08s; } .db-top > div:nth-child(3) { animation-delay: .16s; }
+  .db-sections .db-row:not(.db-head) { animation: line-in .4s var(--ease) both; }
+  .db-sections .db-row:nth-child(3) { animation-delay: .06s; } .db-sections .db-row:nth-child(4) { animation-delay: .12s; }
+  .db-sections .db-row:nth-child(5) { animation-delay: .18s; } .db-sections .db-row:nth-child(n+6) { animation-delay: .24s; }
+  .db-row .t-vite, .db-row .t-lent { animation: chip-pop .5s var(--ease) .35s backwards; }
+  .db-tag { transition: background .2s, color .2s, border-color .2s, transform .15s var(--ease); }
+  .db-tag:active { transform: scale(.94); }
+  .db-tag.on { animation: tick .3s var(--ease); }
+
+  /* Matériel : la case cochée « valide », le texte se barre en douceur */
+  @keyframes gear-ok { 0% { transform: scale(1); } 45% { transform: scale(1.025); border-color: var(--ok); } }
+  .gear-list li { transition: border-color .3s, background .3s; animation: line-in .35s var(--ease) both; }
+  .gear-list li.on { animation: gear-ok .4s var(--ease); border-color: color-mix(in srgb, var(--ok) 40%, var(--line)); }
+  .gear-list li span { transition: color .3s; }
+
+  /* Courses de préparation, chaussures, commentaire, alimentation */
+  .race-guide { animation: fold-in .4s var(--ease) both; }
+  .shoe { animation: card-in .45s var(--ease) both; } .shoe:nth-child(2) { animation-delay: .06s; } .shoe:nth-child(3) { animation-delay: .12s; }
+  .cal-ai.ok, .fuel-feel > small.muted, .cond { animation: bubble-in .4s var(--ease) both; }
+  .cal-comment textarea { transition: border-color .2s, box-shadow .2s; }
+  .cal-comment textarea:focus { box-shadow: 0 0 0 4px color-mix(in srgb, var(--ember) 16%, transparent); }
+
+  /* Renforcement guidé : le compte à rebours bat, l’exercice suivant glisse */
+  @keyframes sg-beat { 50% { transform: scale(1.04); } }
+  .sg-time { animation: sg-beat 1s ease-in-out infinite; }
+  .sg-name { animation: line-in .35s var(--ease) both; }
+  .sg-cues li { animation: line-in .4s var(--ease) both; } .sg-cues li:nth-child(2) { animation-delay: .08s; }
+  .sg-list > li { animation: line-in .35s var(--ease) both; }
+  .sg-list > li:nth-child(2) { animation-delay: .03s; } .sg-list > li:nth-child(3) { animation-delay: .06s; } .sg-list > li:nth-child(4) { animation-delay: .09s; }
+  .sg-list > li:nth-child(5) { animation-delay: .12s; } .sg-list > li:nth-child(n+6) { animation-delay: .15s; }
+  .sg-detail { animation: fold-in .3s var(--ease) both; }
+
+  /* Planning partagé */
+  .share-page > * { animation: card-in .55s var(--ease) both; }
+  .share-page > *:nth-child(2) { animation-delay: .07s; } .share-page > *:nth-child(3) { animation-delay: .14s; } .share-page > *:nth-child(n+4) { animation-delay: .21s; }
+}
+/* Survol : les cartes cliquables se soulèvent légèrement (souris uniquement) */
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .cal-sess, .fix-list li, .shoe, .share-list li { transition: transform .25s var(--ease), border-color .25s; }
+  .cal-sess:hover, .fix-list li:hover, .shoe:hover { transform: translateY(-2px); }
+  .fold.is-closed { transition: border-color .25s, transform .25s var(--ease); }
+  .fold.is-closed:hover { border-color: var(--mute); transform: translateY(-1px); }
+}

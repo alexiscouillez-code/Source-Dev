@@ -37,6 +37,8 @@ export interface RacePlan {
   demands: { weeklyMin: number; longMin: number; weeklyGain: number; backToBack: boolean };
   current: { weeklyMin: number; longestMin: number; weeklyGain: number; hasHistory: boolean };
   reach: { weeklyMin: number; longMin: number };
+  /** Version du moteur qui a produit ce plan : un plan d’une version antérieure est recalculé à l’ouverture. */
+  engine?: number;
   verdict: Verdict; headline: string; notes: string[];
   /** Pourquoi l’objectif est ambitieux ou risqué, et comment le rendre atteignable. */
   diagnosis?: {
@@ -54,10 +56,12 @@ export interface RacePlan {
 const FALLBACK_WEEKLY: Record<Level, number> = { debutant: 120, regulier: 210, confirme: 330 };
 const PACE: Record<Level, number> = { debutant: 7.6, regulier: 6, confirme: 5 }; // min par km-effort sur un format court
 const GROWTH: Record<Level, number> = { debutant: 1.06, regulier: 1.08, confirme: 1.1 };
+const EASY_MAX: Record<Level, number> = { debutant: 75, regulier: 90, confirme: 100 };
 const VOLUME_FACTOR: Record<Level, number> = { debutant: 0.85, regulier: 1, confirme: 1.12 };
 // Jours d’entraînement par semaine, sortie longue en dernier (dimanche = 6), puis décalés vers le jour choisi.
 const SLOTS: Record<number, number[]> = { 2: [2, 6], 3: [1, 3, 6], 4: [1, 3, 4, 6], 5: [0, 1, 3, 4, 6], 6: [0, 1, 2, 3, 4, 6], 7: [0, 1, 2, 3, 4, 5, 6] };
 export const MAX_PLAN_DAYS = 400;
+export const ENGINE = 2;
 
 const round5 = (n: number) => Math.max(20, Math.round(n / 5) * 5);
 const round50 = (n: number) => Math.round(n / 50) * 50;
@@ -82,12 +86,15 @@ const recentGain = (acts: ActivityLike[], today: string) => recentFoot(acts, tod
 /**
  * Temps de course à partir de la VO2max : le km-effort (km + D+/100) couru comme une distance à plat
  * (modèle Daniels), puis trois corrections de terrain : sentier (8 %), raideur du parcours (jusqu’à 6 %)
- * et usure des longues durées (marche, ravitaillements, nuit : +4,5 % par heure au-delà de 4 h).
+ * et usure des longues durées (marche, ravitaillements, nuit) : +4 % par heure de 4 h à 12 h, puis +1,2 % par heure.
+ * Repères de calage (temps de vainqueurs et de milieu de classement publiés) : UTMB ≈ 22 h au niveau élite, ≈ 31 h
+ * pour un coureur à 3 h au marathon ; les formats de moins de 4 h ne sont pas concernés.
  */
 export function trailTime(vdot: number, distanceKm: number, gainM: number) {
   const effortKm = distanceKm + gainM / 100;
   const base = raceTime(vdot, effortKm) * (1.08 + Math.min(0.06, gainM / Math.max(1, distanceKm) / 1000));
-  return base * (1 + 0.045 * Math.max(0, base / 60 - 4));
+  const h = base / 60;
+  return base * (h <= 4 ? 1 : 1 + 0.04 * (Math.min(h, 12) - 4) + 0.012 * Math.max(0, h - 12));
 }
 
 /** `calib` : facteur personnel tiré de tes courses passées (engine/calibration), appliqué au seul temps estimé. */
@@ -145,7 +152,8 @@ export function buildRacePlan(input: { today: string; profile: PlannerProfile; g
   else if (load.ctl - load.atl < -15) { startFactor = 0.85; notes.push("Tu portes de la fatigue en ce moment : la première semaine est allégée."); }
 
   const weeks: PlanWeek[] = [];
-  let level = base * startFactor, lng = longest;
+  // Le temps maximum fixé par le coureur s’applique dès la première semaine, même si son historique récent est plus chargé.
+  let level = Math.min(base * startFactor, cap), lng = longest;
   let peakReached = 0, longReached = 0;
   for (let w = 0; w < nWeeks; w++) {
     const monday = addDays(firstMonday, w * 7);
@@ -167,7 +175,8 @@ export function buildRacePlan(input: { today: string; profile: PlannerProfile; g
       if (!light && w > 0) { level = Math.min(peakWeekly, level * growth); lng = Math.min(d.longMin, lng * 1.1); }
       if (w === 0) lng = Math.min(d.longMin, lng * (startFactor < 1 ? 1 : 1.05));
       minutes = light ? level * 0.8 : level;
-      longMin = Math.min(lng, minutes * 0.5);
+      // Sortie longue : 40 % du volume de la semaine au plus (45 % à 3 séances ou moins, où elle pèse forcément plus).
+      longMin = Math.min(lng, minutes * (profile.daysPerWeek <= 3 ? 0.45 : 0.4));
       if (light) longMin *= 0.75;
       peakReached = Math.max(peakReached, minutes);
       longReached = Math.max(longReached, longMin);
@@ -185,6 +194,22 @@ export function buildRacePlan(input: { today: string; profile: PlannerProfile; g
     const wk = weeks[idx];
     if (wk && !wk.light) { wk.longMin = round5(Math.min(d.longMin, Math.max(wk.longMin, longReached) * 1.05)); wk.focus = "Sortie test : matériel, nutrition et allure de course"; longReached = Math.max(longReached, wk.longMin); }
   }
+
+  // ---------- Séances, puis volume réel ----------
+  // Le volume de chaque semaine est celui des séances réellement placées (le renforcement compte pour moitié) :
+  // si les jours disponibles ne permettent pas de loger tout le volume visé, le verdict le voit.
+  const items = sessionsFor(weeks, { start, goal, profile, raceMin: d.raceMin, dplusPerKm: d.gainM / d.distanceKm, backToBack: d.backToBack, hasRace: true });
+  let realPeak = 0;
+  weeks.forEach((wk) => {
+    const end = addDays(wk.monday, 7);
+    const inWeek = items.filter((x) => x.date >= wk.monday && x.date < end && x.template !== "race");
+    if (!inWeek.length) return;
+    const real = inWeek.reduce((t, x) => t + (x.template === "strength" ? x.durationMin * 0.5 : x.durationMin), 0);
+    // Semaine entamée (le plan démarre en cours de semaine) : l’annonce est gardée, elle n’est pas représentative.
+    const partial = wk.monday < start && inWeek.length < Math.max(2, profile.daysPerWeek - 1);
+    if (!partial) { wk.minutes = round5(real); if (wk.phase !== "Affûtage" && wk.phase !== "Semaine de course") realPeak = Math.max(realPeak, real); }
+  });
+  if (realPeak) peakReached = realPeak;
 
   // ---------- Verdict ----------
   const reachWeekly = round5(peakReached || base);
@@ -215,7 +240,7 @@ export function buildRacePlan(input: { today: string; profile: PlannerProfile; g
     : undefined;
 
   const plan: RacePlan = {
-    generatedOn: today,
+    generatedOn: today, engine: ENGINE,
     race: { name: goal.name, date: goal.date, distanceKm: d.distanceKm, gainM: d.gainM, effortKm: d.effortKm, daysTo, assumed: d.assumed },
     estimate: d.estimate, estimateFrom: d.fromVo2 ? "vo2" : "niveau", modelMid: d.modelMid, calib: input.calib && input.calib.n ? input.calib : null,
     demands: { weeklyMin: d.weeklyMin, longMin: d.longMin, weeklyGain: d.weeklyGain, backToBack: d.backToBack },
@@ -223,7 +248,7 @@ export function buildRacePlan(input: { today: string; profile: PlannerProfile; g
     reach: { weeklyMin: reachWeekly, longMin: reachLong },
     verdict, headline, notes, diagnosis, weeks,
   };
-  return { items: sessionsFor(weeks, { start, goal, profile, raceMin: d.raceMin, dplusPerKm: d.gainM / d.distanceKm, backToBack: d.backToBack, hasRace: true }), plan };
+  return { items, plan };
 }
 
 function focusFor(phase: string, light: boolean, b2b: boolean) {
@@ -331,7 +356,9 @@ function sessionsFor(weeks: PlanWeek[], o: { start: string; goal: PlannerGoal; p
     const b2bMin = b2b ? wk.longMin * 0.55 : 0;
     const strengthMin = strength && firstEasy != null ? 40 : 0;
     const easySlots = slots.filter((s) => s !== longSlot && s !== qualitySlot && s !== quality2Slot && !(b2b && s === dayBefore) && !(strengthMin && s === firstEasy));
-    const easyMin = clamp((wk.minutes - wk.longMin - qMin - q2Min - b2bMin - strengthMin * 0.5) / Math.max(1, easySlots.length), 30, 80);
+    // Footings : 30 min au moins ; au plus 75 (débutant), 90 (régulier) ou 100 min (confirmé). Au-delà, le volume manquant
+    // n’est pas forcé : le volume réel de la semaine (somme des séances) remplace l’annonce, et c’est lui que juge le verdict.
+    const easyMin = clamp((wk.minutes - wk.longMin - qMin - q2Min - b2bMin - strengthMin * 0.5) / Math.max(1, easySlots.length), 30, EASY_MAX[profile.level]);
     const longGain = round50(wk.gainM * (b2b ? 0.45 : 0.55));
     const qGain = round50(wk.gainM * 0.3);
 

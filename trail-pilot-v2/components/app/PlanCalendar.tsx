@@ -109,7 +109,7 @@ export default function PlanCalendar({ today, rev, targets, onStatus, onWhere, o
       </div>
       {moving && <p className="cal-move" role="status">Touche le jour où placer « {moving.title} ». <button className="link" onClick={() => setMoving(null)}>Annuler</button></p>}
       {err ? <p className="empty">Calendrier indisponible. <button className="link" onClick={() => load(month)}>Réessayer</button></p> : !data ? <div className="skeleton" style={{ height: 320 }} /> : (
-        <div className={`cal-grid ${moving ? "is-moving" : ""}`} role="grid" aria-label={`Calendrier de ${monthLabel(month)}`}>
+        <div key={data.month} className={`cal-grid ${moving ? "is-moving" : ""}`} role="grid" aria-label={`Calendrier de ${monthLabel(month)}`}>
           <div className="cal-row cal-head" role="row">{WEEKDAYS.map((w) => <span key={w} role="columnheader">{w}</span>)}<span className="cal-sum" role="columnheader">Semaine</span></div>
           {weeks.map((w) => {
             const ss = w.flatMap((d) => byDay.get(d)?.sessions ?? []).filter((s) => s.template !== "race" && s.status !== "skipped");
@@ -147,7 +147,7 @@ export default function PlanCalendar({ today, rev, targets, onStatus, onWhere, o
 
       {data && (
         <div className="cal-detail" ref={detailRef} aria-live="polite">
-          <div className="row between"><h3>{dayLabel(sel)}{sel === today ? " · aujourd’hui" : ""}</h3>{day?.check && <span className="chip dim" title="Ressenti déclaré au check-in (sommeil, jambes, motivation, douleur)">Ressenti {day.check.score}/100</span>}</div>
+          <div className="row between cal-detail-head" key={sel}><h3>{dayLabel(sel)}{sel === today ? " · aujourd’hui" : ""}</h3>{day?.check && <span className="chip dim" title="Ressenti déclaré au check-in (sommeil, jambes, motivation, douleur)">Ressenti {day.check.score}/100</span>}</div>
           {day?.race && <p className="cal-race">⚑ {day.race.main ? "Jour J" : "Course de préparation"} : <b>{day.race.name}</b></p>}
           {absent && data.absence && <p className="muted small" style={{ margin: 0 }}>{ABSENCE_LABEL[data.absence.kind] ?? "Imprévu"} : séances suspendues ou allégées sur cette période.</p>}
           {day?.sessions.filter((s) => s.template !== "race").map((s) => (

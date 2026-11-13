@@ -15,7 +15,7 @@ import { fuelTarget, type FuelFeel } from "./engine/fuel";
 import { weatherAdjust } from "./engine/strategy";
 import { trainingTargets } from "./engine/paces";
 import { estimateVo2, type Vo2Run } from "./engine/vo2";
-import { buildRacePlan, maintenancePlan, phaseFor, raceDemands, type Level, type RacePlan } from "./engine/planner";
+import { buildRacePlan, ENGINE, maintenancePlan, phaseFor, raceDemands, type Level, type RacePlan } from "./engine/planner";
 import { withSideRaces, withStrength, type SideRace } from "./engine/extras";
 import { timeline, weeklySummary } from "./engine/timeline";
 import { HttpError } from "./api";
@@ -494,7 +494,7 @@ export async function planView(userId: number, today: string) {
   // Un nouveau débrief change le calibrage : l’estimation est refaite tout de suite.
   const calibNow = goal && goal.date > today ? await loadCalibration(userId, today) : null;
   const calibChanged = !!meta && !!calibNow && Math.abs((meta.calib?.factor ?? 1) - calibNow.factor) > 0.001;
-  if (goal && goal.date > today && (!meta || calibChanged || mondayOf(meta.generatedOn) < mondayOf(today) || meta.race.date !== goal.date || ((meta.verdict === "risque" || meta.verdict === "ambitieux") && !meta.diagnosis?.gaps))) {
+  if (goal && goal.date > today && (!meta || meta.engine !== ENGINE || calibChanged || mondayOf(meta.generatedOn) < mondayOf(today) || meta.race.date !== goal.date || ((meta.verdict === "risque" || meta.verdict === "ambitieux") && !meta.diagnosis?.gaps))) {
     await regeneratePlan(userId, today);
     goal = await loadGoal(userId);
     meta = readPlanMeta(goal);
