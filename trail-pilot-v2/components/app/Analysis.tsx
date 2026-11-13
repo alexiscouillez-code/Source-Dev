@@ -177,9 +177,10 @@ function Vo2History({ months }: { months: Vo2["months"] }) {
     <div style={{ display: "grid", gap: 4 }}>
       <div className="row between small"><span className="muted">Mois par mois, sur tout ton historique</span><span className="mono muted">{dec(Math.min(...vals))} – {dec(Math.max(...vals))}</span></div>
       <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Évolution de ta VO2max sur ${months.length} mois`}>
-        <path d={`${d} L${x(months.length - 1).toFixed(1)} ${H - P.b} L${x(0).toFixed(1)} ${H - P.b} Z`} fill="color-mix(in srgb, var(--ember) 14%, transparent)" />
-        <path d={d} fill="none" stroke="var(--ember)" strokeWidth={2} strokeLinejoin="round" />
-        {months.map((m, i) => <circle key={m.month} cx={x(i)} cy={y(m.value)} r={months.length > 24 ? 1.6 : 2.6} fill="var(--ember)"><title>{`${monthLabel(m.month)} : ${dec(m.value)} (${m.sessions} sortie(s))`}</title></circle>)}
+        <path className="ch-area" d={`${d} L${x(months.length - 1).toFixed(1)} ${H - P.b} L${x(0).toFixed(1)} ${H - P.b} Z`} fill="color-mix(in srgb, var(--ember) 14%, transparent)" />
+        <path className="ch-line ch-glow" pathLength={1} d={d} fill="none" stroke="var(--ember)" strokeWidth={2} strokeLinejoin="round" />
+        <circle className="ch-beacon" cx={x(months.length - 1)} cy={y(months[months.length - 1].value)} r={7} fill="var(--ember)" />
+        {months.map((m, i) => <circle key={m.month} className="ch-dot" style={{ ["--d" as string]: (i / Math.max(1, months.length - 1)).toFixed(3) }} cx={x(i)} cy={y(m.value)} r={months.length > 24 ? 1.6 : 2.6} fill="var(--ember)"><title>{`${monthLabel(m.month)} : ${dec(m.value)} (${m.sessions} sortie(s))`}</title></circle>)}
         {ticks.map((i) => <text key={i} x={x(i)} y={H - 5} textAnchor={i === 0 ? "start" : i === months.length - 1 ? "end" : "middle"}>{monthLabel(months[i].month)}</text>)}
       </svg>
     </div>
@@ -210,10 +211,13 @@ function FitnessChart({ points }: { points: Data["points"] }) {
         onPointerMove={(e) => { const r = (e.currentTarget as SVGSVGElement).getBoundingClientRect(); const px = ((e.clientX - r.left) / r.width) * W; setHover(Math.max(0, Math.min(points.length - 1, Math.round(((px - P.l) / (W - P.l - P.r)) * (points.length - 1))))); }}
         onPointerLeave={() => setHover(null)}>
         {ticks.map((t) => <g key={t}><line x1={P.l} x2={W - P.r} y1={y(t)} y2={y(t)} stroke={t === 0 ? "#ffffff30" : "#ffffff12"} /><text x={P.l - 6} y={y(t) + 3} textAnchor="end">{Math.round(t)}</text></g>)}
-        {points.map((p, i) => p.load > 0 && <rect key={p.date} x={x(i) - 1.5} width={3} y={H - P.b - (p.load / loadMax) * 46} height={(p.load / loadMax) * 46} fill="#243241" rx={1} />)}
-        <path d={path("form")} fill="none" stroke="var(--ok)" strokeWidth={1.5} opacity={0.85} />
-        <path d={path("atl")} fill="none" stroke="var(--ember)" strokeWidth={1.8} />
-        <path d={path("ctl")} fill="none" stroke="var(--snow)" strokeWidth={2.4} />
+        <rect className="ch-scan" x={P.l} y={P.t} width={46} height={H - P.t - P.b} style={{ ["--w" as string]: `${W - P.l - P.r - 46}px` }} />
+        {points.map((p, i) => p.load > 0 && <rect key={p.date} className="ch-bar" style={{ ["--d" as string]: (i / Math.max(1, points.length - 1)).toFixed(3) }} x={x(i) - 1.5} width={3} y={H - P.b - (p.load / loadMax) * 46} height={(p.load / loadMax) * 46} fill="#243241" rx={1} />)}
+        <path className="ch-line l1" pathLength={1} d={path("form")} fill="none" stroke="var(--ok)" strokeWidth={1.5} opacity={0.85} />
+        <path className="ch-line l2" pathLength={1} d={path("atl")} fill="none" stroke="var(--ember)" strokeWidth={1.8} />
+        <path className="ch-line l3 ch-glow" pathLength={1} d={path("ctl")} fill="none" stroke="var(--snow)" strokeWidth={2.4} />
+        <circle className="ch-beacon late" cx={x(points.length - 1)} cy={y(points[points.length - 1].ctl)} r={8} fill="var(--snow)" />
+        <circle className="ch-end" cx={x(points.length - 1)} cy={y(points[points.length - 1].ctl)} r={3.5} fill="var(--snow)" />
         {[0, Math.floor(points.length / 2), points.length - 1].map((i) => <text key={i} x={x(i)} y={H - 6} textAnchor={i === 0 ? "start" : i === points.length - 1 ? "end" : "middle"}>{dayLabel(points[i].date, { day: "numeric", month: "short" })}</text>)}
         {h && <g><line x1={x(hover!)} x2={x(hover!)} y1={P.t} y2={H - P.b} stroke="#ffffff40" /><circle cx={x(hover!)} cy={y(h.ctl)} r={3.5} fill="var(--snow)" /><circle cx={x(hover!)} cy={y(h.atl)} r={3.5} fill="var(--ember)" /></g>}
       </svg>

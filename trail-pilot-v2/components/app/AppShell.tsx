@@ -14,7 +14,7 @@ import XRay from "./XRay";
 import Terrains from "./Terrains";
 import ThemeToggle from "@/components/ThemeToggle";
 import Flap from "./Flap";
-import { startCountUps, withTransition } from "./motion";
+import { startCountUps, startReveals, withTransition } from "./motion";
 import Tour from "./Tour";
 
 export type Tab = "today" | "plan" | "terrains" | "xray" | "runs" | "analysis" | "account";
@@ -121,6 +121,7 @@ export default function AppShell({ user }: { user: { name: string | null; email:
     return () => window.removeEventListener("resize", place);
   }, [tab]);
   useEffect(() => (mainRef.current ? startCountUps(mainRef.current) : undefined), []);
+  useEffect(() => (mainRef.current ? startReveals(mainRef.current) : undefined), []);
   useEffect(() => { const el = document.querySelector<HTMLElement>(".side"); return el ? startCountUps(el) : undefined; }, []);
 
   // Changement d’onglet : la vue glisse dans le sens de la navigation (transition de vue native).

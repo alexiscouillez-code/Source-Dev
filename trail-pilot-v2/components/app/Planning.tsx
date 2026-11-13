@@ -313,12 +313,12 @@ function WeekChart({ weeks, done, today }: { weeks: PlanWeek[]; done: Record<str
         const isCur = w.monday === cur;
         return (
           <g key={w.monday}>
-            <rect x={x + bw * 0.12} width={bw * 0.76} y={y(w.minutes)} height={Math.max(1, H - P.b - y(w.minutes))} rx={Math.min(3, bw / 4)}
-              style={{ fill: PHASE_COLOR[w.phase] ?? "var(--chart-bar-2)", opacity: w.monday < cur ? 0.45 : w.light ? 0.6 : 1 }}>
+            <rect className="ch-bar wave" x={x + bw * 0.12} width={bw * 0.76} y={y(w.minutes)} height={Math.max(1, H - P.b - y(w.minutes))} rx={Math.min(3, bw / 4)}
+              style={{ fill: PHASE_COLOR[w.phase] ?? "var(--chart-bar-2)", opacity: w.monday < cur ? 0.45 : w.light ? 0.6 : 1, ["--d" as string]: (i / Math.max(1, weeks.length - 1)).toFixed(3) }}>
               <title>{`Semaine du ${dayLabel(w.monday, { day: "numeric", month: "short" })} · ${w.phase} · ${fmtDur(w.minutes)} prévues${d ? `, ${fmtDur(d)} faites` : ""}`}</title>
             </rect>
-            {d != null && w.monday <= cur && <rect x={x + bw * 0.38} width={bw * 0.24} y={y(d)} height={Math.max(1, H - P.b - y(d))} rx={1} style={{ fill: "var(--snow)" }} />}
-            {isCur && <rect x={x + 1} y={P.t - 6} width={bw - 2} height={H - P.b - P.t + 6} rx={4} fill="none" style={{ stroke: "var(--ember)" }} strokeDasharray="3 3" />}
+            {d != null && w.monday <= cur && <rect className="ch-bar done" x={x + bw * 0.38} width={bw * 0.24} y={y(d)} height={Math.max(1, H - P.b - y(d))} rx={1} style={{ fill: "var(--snow)", ["--d" as string]: (i / Math.max(1, weeks.length - 1)).toFixed(3) }} />}
+            {isCur && <rect className="ch-now" x={x + 1} y={P.t - 6} width={bw - 2} height={H - P.b - P.t + 6} rx={4} fill="none" style={{ stroke: "var(--ember)" }} strokeDasharray="3 3" />}
             {i % every === 0 && <text x={x + bw / 2} y={H - 5} textAnchor="middle">{dayLabel(w.monday, { day: "numeric", month: "short" })}</text>}
           </g>
         );
