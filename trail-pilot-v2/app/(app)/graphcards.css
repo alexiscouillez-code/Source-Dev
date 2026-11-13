@@ -610,7 +610,8 @@ form.cal-comment { display: grid; gap: 8px; white-space: normal; }
   @keyframes ring-seg { from { stroke-dasharray: 0 var(--C); } }
   .mo .gc-ring:not(.is-in) .gc-seg { stroke-dasharray: 0 var(--C); }
   .mo .gc-ring.is-in .gc-seg { animation: ring-seg .7s calc(var(--i, 0) * .55s + .15s) var(--ease) both; }
-  .mo .gc-ring.is-in .gc-ring-mid { animation: chip-pop .5s 1.6s var(--ease) both; }
+  .mo .gc-ring.is-in .gc-ring-mid { animation: ring-mid .5s 1.6s var(--ease) both; }
+  @keyframes ring-mid { 0% { opacity: 0; transform: translateY(-50%) scale(.6); } 60% { transform: translateY(-50%) scale(1.1); } 100% { opacity: 1; transform: translateY(-50%); } }
 
   /* Curseur VO2max : glisse jusqu'à ta valeur avec un dépassement, la fourchette s'ouvre depuis le centre */
   @keyframes vo2-in { from { left: 0; opacity: 0; } 30% { opacity: 1; } }
