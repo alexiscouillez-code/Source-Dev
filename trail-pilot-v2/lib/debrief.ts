@@ -47,9 +47,9 @@ export async function loadDebriefs(userId: number, today: string) {
     loadGoal(userId),
     all<{ id: number; name: string; date: string; distanceKm: number | null; gainM: number | null; priority: string }>(
       "SELECT id, name, date, distance_km AS distanceKm, gain_m AS gainM, priority FROM side_races WHERE user_id = ? AND date <= ? AND date >= ? ORDER BY date DESC", [userId, today, since]),
-    one<{ hr_max: number | null; hr_rest: number | null }>("SELECT hr_max, hr_rest FROM profiles WHERE user_id = ?", [userId]),
+    one<{ hr_max: number | null; hr_rest: number | null; vo2_watch: number | null; vdot_ref: number | null }>("SELECT hr_max, hr_rest, vo2_watch, vdot_ref FROM profiles WHERE user_id = ?", [userId]),
   ]);
-  const physio = { hrMax: prof?.hr_max ?? null, hrRest: prof?.hr_rest ?? null };
+  const physio = { hrMax: prof?.hr_max ?? null, hrRest: prof?.hr_rest ?? null, vdot: prof?.vo2_watch ?? prof?.vdot_ref ?? null };
   const races: { key: string; main: boolean; name: string; date: string; distanceKm: number | null; gainM: number | null }[] = [];
   if (goal && goal.date <= today && goal.date >= since) races.push({ key: `main:${goal.date}`, main: true, name: goal.name, date: goal.date, distanceKm: goal.distance_km, gainM: goal.gain_m });
   for (const s of sides) races.push({ key: `side:${s.id}`, main: false, name: s.name, date: s.date, distanceKm: s.distanceKm, gainM: s.gainM });

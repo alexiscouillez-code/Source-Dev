@@ -21,7 +21,7 @@ import { withSideRaces, withStrength, type SideRace } from "./engine/extras";
 import { timeline, weeklySummary } from "./engine/timeline";
 import { HttpError } from "./api";
 
-export interface ProfileRow { hr_max: number | null; hr_rest: number | null; vo2_watch: number | null; days_per_week: number; long_day: number; max_weekly_minutes: number | null; level: Level }
+export interface ProfileRow { hr_max: number | null; hr_rest: number | null; vo2_watch: number | null; vdot_ref?: number | null; days_per_week: number; long_day: number; max_weekly_minutes: number | null; level: Level }
 export interface GoalRow { name: string; date: string; distance_km: number | null; gain_m: number | null; plan_meta?: string | null; route?: string | null; gear?: string | null }
 export interface ActivityRow { id: number; date: string; sport: Sport; name: string | null; duration_min: number; distance_km: number | null; gain_m: number | null; loss_m: number | null; avg_hr: number | null; max_hr: number | null; rpe: number | null; source: string; strava_id: string | null; analysis?: string | null; check_state?: number | null }
 export interface PlanRow { id: number; date: string; template: string; title: string; sport: string; duration_min: number; gain_m: number | null; rpe_target: number; description: string; phase: string; status: string; activity_id: number | null; locked: number; original: string | null }
@@ -47,9 +47,12 @@ export const toVo2Run = (r: ActivityRow): Vo2Run => ({ date: r.date, sport: r.sp
 const toPlanned = (p: PlanRow): PlannedLike => ({ title: p.title, durationMin: p.duration_min, rpeTarget: p.rpe_target, template: p.template, sport: p.sport, description: p.description, gainM: p.gain_m });
 
 export async function loadProfile(userId: number) {
-  const p = await one<ProfileRow>("SELECT hr_max, hr_rest, vo2_watch, days_per_week, long_day, max_weekly_minutes, level FROM profiles WHERE user_id = ?", [userId]);
+  const p = await one<ProfileRow>("SELECT hr_max, hr_rest, vo2_watch, vdot_ref, days_per_week, long_day, max_weekly_minutes, level FROM profiles WHERE user_id = ?", [userId]);
   return p ?? { hr_max: null, hr_rest: null, vo2_watch: null, days_per_week: 4, long_day: 6, max_weekly_minutes: null, level: "regulier" as Level };
 }
+/** Repères physiologiques d’un profil : FC max, FC de repos et VO2max de référence (montre, sinon dernière estimation). */
+export const physioOf = (p: { hr_max: number | null; hr_rest: number | null; vo2_watch?: number | null; vdot_ref?: number | null }) =>
+  ({ hrMax: p.hr_max, hrRest: p.hr_rest, vdot: p.vo2_watch ?? p.vdot_ref ?? null });
 export const loadSideRaces = (userId: number) =>
   all<SideRace & { id: number }>("SELECT id, name, date, distance_km AS distanceKm, gain_m AS gainM, priority FROM side_races WHERE user_id = ? ORDER BY date", [userId]);
 export const loadGoal = (userId: number) => one<GoalRow>("SELECT name, date, distance_km, gain_m, plan_meta, route, gear FROM goals WHERE user_id = ?", [userId]);
@@ -60,7 +63,7 @@ export const readPlanMeta = (g: GoalRow | null | undefined): RacePlan | null => 
 export const loadActivities = (userId: number, since: string, withExcluded = false) =>
   all<ActivityRow>(`SELECT id, date, sport, name, duration_min, distance_km, gain_m, loss_m, avg_hr, max_hr, rpe, source, strava_id, analysis, check_state FROM activities WHERE user_id = ? AND date >= ?${withExcluded ? "" : " AND COALESCE(check_state, 0) <> 1"} ORDER BY date DESC, id DESC`, [userId, since]);
 
-export function withLoad(a: ActivityRow, physio: { hrMax: number | null; hrRest: number | null }) {
+export function withLoad(a: ActivityRow, physio: { hrMax: number | null; hrRest: number | null; vdot?: number | null }) {
   const l = sessionLoad(toActivityLike(a), physio);
   // Le résumé brut ne part pas vers le navigateur : on n’envoie que ce qui s’affiche (zones, allure ajustée, découplage, VO2max de la sortie).
   const { analysis: raw, ...row } = a;
@@ -143,7 +146,15 @@ export async function regeneratePlan(userId: number, today: string) {
 
 export async function loadState(userId: number, today: string) {
   const [profile, acts] = await Promise.all([loadProfile(userId), loadActivities(userId, addDays(today, -240))]);
-  const physio = { hrMax: profile.hr_max, hrRest: profile.hr_rest };
+  // VO2max de référence : recalculée ici (elle ne dépend pas de la charge) et mémorisée quand elle bouge d’au moins 0,5 point,
+  // pour que tous les écrans jugent l’effort des sorties sans cardio avec la même valeur.
+  const est = estimateVo2(acts.map(toVo2Run), today, { hrMax: profile.hr_max, hrRest: profile.hr_rest, watch: null });
+  const ref = est.method === "seances" ? est.value : null;
+  if (ref != null && (profile.vdot_ref == null || Math.abs(ref - profile.vdot_ref) >= 0.5)) {
+    profile.vdot_ref = ref;
+    await run("UPDATE profiles SET vdot_ref = ? WHERE user_id = ?", [ref, userId]).catch(() => {});
+  }
+  const physio = physioOf(profile);
   return { profile, acts, physio, tl: timeline(acts.map(toActivityLike), physio, today) };
 }
 
@@ -392,7 +403,7 @@ async function recentPast(userId: number, today: string, physio: { hrMax: number
 /** Ce que le plan apprend du prévu / réalisé, et si le coureur a choisi de garder le plan sans ajustement. */
 export async function loadLearning(userId: number, today: string): Promise<{ learning: Learning; off: boolean; applied: string | null }> {
   const prof = await loadProfile(userId);
-  const physio = { hrMax: prof.hr_max, hrRest: prof.hr_rest };
+  const physio = physioOf(prof);
   const z = zoneBounds(physio);
   const [past, row] = await Promise.all([recentPast(userId, today, physio), one<{ sig: string; off: number }>("SELECT sig, off FROM plan_learning WHERE user_id = ?", [userId])]);
   return { learning: learn(past, today, z ? Math.round(z[1]) : null), off: !!row?.off, applied: row ? row.sig : null };
@@ -410,7 +421,7 @@ export async function setLearningOff(userId: number, today: string, off: boolean
 export async function calendarView(userId: number, today: string, from: string, to: string) {
   await reconcile(userId, today);
   const prof = await loadProfile(userId);
-  const physio = { hrMax: prof.hr_max, hrRest: prof.hr_rest };
+  const physio = physioOf(prof);
   const targets = trainingTargets(null, prof.hr_max, prof.hr_rest);
   const [sessions, acts, checks, goal, sides, absence] = await Promise.all([
     all<PlanRow & { a_duration: number | null; a_distance: number | null; a_gain: number | null; a_name: string | null; a_analysis: string | null }>(
@@ -509,7 +520,7 @@ export async function planView(userId: number, today: string) {
   const from = addDays(mondayOf(today), -7);
   const to = goal && goal.date > today ? goal.date : addDays(today, 21);
   const prof = await loadProfile(userId);
-  const physio = { hrMax: prof.hr_max, hrRest: prof.hr_rest };
+  const physio = physioOf(prof);
   const targets = trainingTargets(null, prof.hr_max, prof.hr_rest);
   const [sessions, done, races] = await Promise.all([
     all<PlanRow & { a_duration: number | null; a_distance: number | null; a_gain: number | null; a_name: string | null; a_analysis: string | null }>(

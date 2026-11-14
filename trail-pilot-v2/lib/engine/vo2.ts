@@ -14,8 +14,8 @@ import { windowsVo2 } from "./streams";
  *    puis la part de ta capacité utilisée, donnée par ta réserve cardiaque (Swain : %VO2 de réserve
  *    ≈ %FC de réserve), corrigée de la dérive cardiaque des sorties longues. Sur les efforts durs
  *    (FC moyenne ≥ 88 % de la FC max), on y ajoute la VDOT de Daniels tirée du couple temps/distance.
- *    Chaque mois de l’historique donne une valeur (moyenne de ses 2 meilleures séances : les
- *    sorties faciles sous-estiment la capacité). La VO2max actuelle est la moyenne de tous les
+ *    Chaque mois de l’historique donne une valeur (3e quartile de ses séances : les sorties
+ *    faciles sous-estiment la capacité, mais « les meilleures » la surestiment quand on court souvent). La VO2max actuelle est la moyenne de tous les
  *    mois, pondérée par l’ancienneté : le poids d’un mois est divisé par deux tous les 3 mois.
  * 2. À partir des seules fréquences cardiaques (repère) : 15,3 × FC max / FC repos (Uth et al.).
  *
@@ -50,7 +50,7 @@ const HALF_LIFE_DAYS = 90;
 
 /** Coût énergétique de la course selon la pente (J/kg/m, Minetti et al. 2002). */
 const minetti = (i: number) => 155.4 * i ** 5 - 30.4 * i ** 4 - 43.3 * i ** 3 + 46.3 * i ** 2 + 19.5 * i + 3.6;
-const daniels = (v: number) => -4.6 + 0.182258 * v + 0.000104 * v * v; // ml/kg/min, v en m/min
+export const daniels = (v: number) => -4.6 + 0.182258 * v + 0.000104 * v * v; // ml/kg/min, v en m/min
 const fracOf = (t: number) => 0.8 + 0.1894393 * Math.exp(-0.012778 * t) + 0.2989558 * Math.exp(-0.1932605 * t);
 
 /** Vitesse équivalente sur le plat : même dépense que la sortie, montées et descentes comprises. */
@@ -107,6 +107,19 @@ function sessionVo2(a: Vo2Run, hrMax: number, hrRest: number | null): number | n
 }
 
 type Dated = Vo2Session & { age: number };
+/**
+ * Valeur d’un mois. Les sorties faciles, hachées ou techniques sous-estiment la capacité : on regarde donc le haut
+ * de la distribution, mais pas « les deux meilleures », qui montent mécaniquement avec le nombre de sorties
+ * (plus on court, plus on tire de valeurs chanceuses). On prend le 3e quartile, stable quel que soit le nombre
+ * de séances. Pour les sorties analysées seconde par seconde, qui retiennent déjà leurs meilleurs passages,
+ * on reste plus près du centre (60e centile).
+ */
+export function monthValue(values: number[], precise: boolean) {
+  const v = [...values].sort((a, b) => a - b);
+  if (v.length <= 2) return v.reduce((x, y) => x + y, 0) / v.length;
+  const pos = (v.length - 1) * (precise ? 0.6 : 0.75), i = Math.floor(pos);
+  return v[i] + (v[Math.min(v.length - 1, i + 1)] - v[i]) * (pos - i);
+}
 
 /** Toutes les séances exploitables de l’historique, de la plus récente à la plus ancienne. */
 function sessionsOf(runs: Vo2Run[], today: string, hrMax: number, hrRest: number | null): Dated[] {
@@ -121,7 +134,7 @@ function sessionsOf(runs: Vo2Run[], today: string, hrMax: number, hrRest: number
   return out.sort((x, y) => x.age - y.age);
 }
 
-/** Une valeur par mois : moyenne des 2 meilleures séances du mois. */
+/** Une valeur par mois (voir monthValue). */
 function byMonth(list: Dated[]) {
   const m = new Map<string, { vs: number[]; age: number }>();
   // Dans un mois où des sorties ont été analysées seconde par seconde, elles seules comptent : elles sont plus fiables.
@@ -132,10 +145,8 @@ function byMonth(list: Dated[]) {
     const e = m.get(k) ?? { vs: [], age: s.age };
     e.vs.push(s.vo2max); e.age = Math.min(e.age, s.age); m.set(k, e);
   }
-  return [...m.entries()].sort(([a], [b]) => (a < b ? -1 : 1)).map(([month, { vs, age }]) => {
-    const top = [...vs].sort((a, b) => b - a).slice(0, 2);
-    return { month, value: top.reduce((x, y) => x + y, 0) / top.length, sessions: vs.length, age };
-  });
+  return [...m.entries()].sort(([a], [b]) => (a < b ? -1 : 1)).map(([month, { vs, age }]) =>
+    ({ month, value: monthValue(vs, fine.has(month)), sessions: vs.length, age }));
 }
 
 /** Estimation telle qu’elle était `offset` jours avant aujourd’hui, sur tout l’historique antérieur. */
@@ -168,9 +179,13 @@ export function raceTime(vdot: number, km: number) {
 
 export function estimateVo2(runs: Vo2Run[], today: string, profile: { hrMax: number | null; hrRest: number | null; watch?: number | null }): Vo2Estimate {
   const notes: string[] = [];
-  const observed = runs.reduce((m, a) => Math.max(m, a.maxHr ?? 0), 0);
-  const hrMax = profile.hrMax ?? (observed >= 150 ? observed : null);
-  const hrMaxSource = profile.hrMax ? "profil" : hrMax ? "observée" : null;
+  // FC la plus haute vue sur au moins deux sorties : une valeur isolée peut être un parasite du capteur.
+  const peaks = runs.filter((a) => (a.sport === "course" || a.sport === "trail") && a.maxHr && a.maxHr >= 120 && a.maxHr <= 225).map((a) => a.maxHr!).sort((x, y) => y - x);
+  const observed = peaks.length >= 2 ? peaks[1] : peaks[0] ?? 0;
+  // FC max déclarée plus basse que ce que le cœur atteint réellement : on prend la valeur observée, sinon tout le calcul est décalé.
+  const exceeded = profile.hrMax != null && observed >= profile.hrMax + 3 && peaks.length >= 2;
+  const hrMax = exceeded ? observed : profile.hrMax ?? (observed >= 150 ? observed : null);
+  const hrMaxSource = exceeded ? "observée" : profile.hrMax ? "profil" : hrMax ? "observée" : null;
   const hrRest = profile.hrRest;
   const uth = hrMax && hrRest ? r1(clamp(15.3 * (hrMax / hrRest), 25, 90)) : null;
 
@@ -198,7 +213,9 @@ export function estimateVo2(runs: Vo2Run[], today: string, profile: { hrMax: num
     return empty;
   }
   if (method === "seances" && all.length && all[0].age > 90) notes.push(`Ta dernière sortie exploitable date de plus de 3 mois : l’estimation repose sur des données anciennes.`);
-  if (hrMaxSource === "observée") notes.push(`FC max prise sur ta plus haute valeur enregistrée (${hrMax} bpm). Si tu connais ta vraie FC max, renseigne-la : l’estimation sera plus juste.`);
+  if (exceeded) notes.push(`Ta FC est montée à ${observed} bpm sur plusieurs sorties, au-dessus de la FC max de ton profil (${profile.hrMax}). Le calcul utilise ${observed} : mets ton profil à jour, tes zones et tes allures en dépendent.`);
+  else if (profile.hrMax && peaks.length >= 12 && observed <= profile.hrMax - 15) notes.push(`Sur ${peaks.length} sorties, ta FC n’a jamais dépassé ${observed} bpm, loin de la FC max de ton profil (${profile.hrMax}). Si elle est surestimée, ta VO2max l’est aussi : vérifie-la sur un effort maximal (côte de 3 à 4 min, fin de course courte).`);
+  if (hrMaxSource === "observée" && !exceeded) notes.push(`FC max prise sur ta plus haute valeur enregistrée (${hrMax} bpm). Si tu connais ta vraie FC max, renseigne-la : l’estimation sera plus juste.`);
   if (!hrRest) notes.push("Ajoute ta FC de repos dans ton profil : le calcul passe alors par ta réserve cardiaque, plus précise.");
   if (method === "frequence") notes.push("Estimation par les seules fréquences cardiaques (FC max / FC repos) : un repère, qui sous-estime souvent les coureurs entraînés. Importe des sorties avec cardio pour un calcul plus juste.");
   if (watch) notes.push(`Ta montre indique ${String(watch).replace(".", ",")} : c’est cette valeur qui sert à calculer tes allures. L’estimation Trail Pilot (${String(value).replace(".", ",")}) reste affichée pour comparaison ; un écart de quelques points entre deux méthodes est normal.`);

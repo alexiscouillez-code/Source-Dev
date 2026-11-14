@@ -223,4 +223,9 @@ export const MIGRATIONS: { tag: string; statements: string[] }[] = [
     // Séance repérée comme suspecte (doublon, chrono oublié, trajet motorisé) : NULL = non vérifiée, 1 = exclue des calculs, 2 = confirmée correcte.
     statements: [`ALTER TABLE activities ADD COLUMN check_state INTEGER`],
   },
+  {
+    tag: "017_vdot_ref",
+    // VO2max de référence mémorisée (estimation des sorties) : sert à juger l’effort des sorties sans cardio d’après leur allure.
+    statements: [`ALTER TABLE profiles ADD COLUMN vdot_ref REAL`],
+  },
 ];

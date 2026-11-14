@@ -4,7 +4,7 @@ import { parseActivity } from "@/lib/activity-input";
 import { all, run } from "@/db/client";
 import { addDays } from "@/lib/engine/dates";
 import { listShoes } from "@/lib/shoes";
-import { loadActivities, loadProfile, reconcile, resolveToday, withLoad } from "@/lib/service";
+import { loadActivities, loadProfile, reconcile, resolveToday, withLoad, physioOf } from "@/lib/service";
 
 export const GET = withUser(async (user, req) => {
   const url = new URL(req.url);
@@ -17,7 +17,7 @@ export const GET = withUser(async (user, req) => {
   ]);
   const byId = new Map(tracks.map((t) => [t.id, t]));
   return json({
-    activities: acts.map((a) => ({ ...withLoad(a, { hrMax: p.hr_max, hrRest: p.hr_rest }), track: byId.get(a.id)?.track ?? null, shoe_id: byId.get(a.id)?.shoe_id ?? null })),
+    activities: acts.map((a) => ({ ...withLoad(a, physioOf(p)), track: byId.get(a.id)?.track ?? null, shoe_id: byId.get(a.id)?.shoe_id ?? null })),
     shoes: shoes.map(({ id, name, retired, wear, km, limitKm }) => ({ id, name, retired, wear, km, limitKm })),
   });
 });

@@ -61,7 +61,7 @@ const VOLUME_FACTOR: Record<Level, number> = { debutant: 0.85, regulier: 1, conf
 // Jours d’entraînement par semaine, sortie longue en dernier (dimanche = 6), puis décalés vers le jour choisi.
 const SLOTS: Record<number, number[]> = { 2: [2, 6], 3: [1, 3, 6], 4: [1, 3, 4, 6], 5: [0, 1, 3, 4, 6], 6: [0, 1, 2, 3, 4, 6], 7: [0, 1, 2, 3, 4, 5, 6] };
 export const MAX_PLAN_DAYS = 400;
-export const ENGINE = 2;
+export const ENGINE = 3;
 
 const round5 = (n: number) => Math.max(20, Math.round(n / 5) * 5);
 const round50 = (n: number) => Math.round(n / 50) * 50;
@@ -73,12 +73,26 @@ const TAPER_LONG: Record<number, number[]> = { 1: [0.55], 2: [0.7, 0.55], 3: [0.
 const recentFoot = (acts: ActivityLike[], today: string) =>
   acts.filter((a) => { const d = diffDays(a.date, today); return d >= 1 && d <= 28 && isFoot(a.sport); });
 
+/**
+ * Volume hebdomadaire de départ : moyenne des 4 dernières semaines. Une semaine creuse isolée (maladie, voyage :
+ * moins de la moitié des trois autres) est écartée, sinon le plan repartirait de trop bas.
+ */
 export function baselineWeekly(activities: ActivityLike[], today: string, level: Level) {
-  const minutes = recentFoot(activities, today).reduce((s, a) => s + a.durationMin, 0) / 4;
+  const wk = [0, 0, 0, 0];
+  for (const a of recentFoot(activities, today)) wk[Math.min(3, Math.floor((diffDays(a.date, today) - 1) / 7))] += a.durationMin;
+  const sorted = [...wk].sort((x, y) => x - y);
+  const top3 = (sorted[1] + sorted[2] + sorted[3]) / 3;
+  const minutes = sorted[0] < top3 * 0.5 && sorted[1] >= top3 * 0.6 ? top3 : (wk[0] + wk[1] + wk[2] + wk[3]) / 4;
   return minutes >= 45 ? minutes : FALLBACK_WEEKLY[level];
 }
+/**
+ * Plus longue sortie récente. Une sortie exceptionnelle isolée (course, grande randonnée) ne sert pas de base telle quelle :
+ * on ne dépasse pas une fois et demie la deuxième plus longue.
+ */
 export function recentLongest(activities: ActivityLike[], today: string) {
-  return recentFoot(activities, today).reduce((m, a) => Math.max(m, a.durationMin), 0);
+  const d = recentFoot(activities, today).map((a) => a.durationMin).sort((x, y) => y - x);
+  if (!d.length) return 0;
+  return d.length >= 2 ? Math.min(d[0], d[1] * 1.5) : d[0];
 }
 const recentGain = (acts: ActivityLike[], today: string) => recentFoot(acts, today).reduce((s, a) => s + (a.gainM ?? 0), 0) / 4;
 
@@ -198,7 +212,7 @@ export function buildRacePlan(input: { today: string; profile: PlannerProfile; g
   // ---------- Séances, puis volume réel ----------
   // Le volume de chaque semaine est celui des séances réellement placées (le renforcement compte pour moitié) :
   // si les jours disponibles ne permettent pas de loger tout le volume visé, le verdict le voit.
-  const items = sessionsFor(weeks, { start, goal, profile, raceMin: d.raceMin, dplusPerKm: d.gainM / d.distanceKm, backToBack: d.backToBack, hasRace: true });
+  const items = sessionsFor(weeks, { start, goal, profile, raceMin: d.raceMin, dplusPerKm: d.gainM / d.distanceKm, backToBack: d.backToBack, hasRace: true, base: Math.min(base, cap) });
   let realPeak = 0;
   weeks.forEach((wk) => {
     const end = addDays(wk.monday, 7);
@@ -322,16 +336,22 @@ function diagnose(o: {
 }
 
 // ---------- Répartition des séances dans la semaine ----------
-function sessionsFor(weeks: PlanWeek[], o: { start: string; goal: PlannerGoal; profile: PlannerProfile; raceMin: number; dplusPerKm: number; backToBack: boolean; hasRace: boolean }): PlanItem[] {
+function sessionsFor(weeks: PlanWeek[], o: { start: string; goal: PlannerGoal; profile: PlannerProfile; raceMin: number; dplusPerKm: number; backToBack: boolean; hasRace: boolean; base?: number }): PlanItem[] {
   const { start, goal, profile } = o;
   const days = Math.max(2, Math.min(7, profile.daysPerWeek));
   const shift = (profile.longDay - 6 + 7) % 7;
   const baseSlots = SLOTS[days].map((s) => (s + shift) % 7);
   const longSlot = (6 + shift) % 7;
   const items: PlanItem[] = [];
+  // Volume réellement placé la dernière semaine pleine : garde-fou pour que le volume des séances suive une vraie progression
+  // (pas plus de +15 % d’une semaine pleine à la suivante, et une semaine allégée réellement en dessous de la précédente).
+  let prevReal = o.base ?? 0;
 
   weeks.forEach((wk, wi) => {
     const { phase } = wk;
+    const building = phase !== "Affûtage" && phase !== "Semaine de course";
+    const budget = !building || !prevReal ? wk.minutes : wk.light ? Math.min(wk.minutes, prevReal * 0.85) : Math.min(wk.minutes, prevReal * 1.15);
+    const from = items.length;
     let slots = [...baseSlots];
     const b2b = o.backToBack && phase === "Spécifique" && !wk.light && days >= 3;
     const dayBefore = (longSlot + 6) % 7;
@@ -339,26 +359,28 @@ function sessionsFor(weeks: PlanWeek[], o: { start: string; goal: PlannerGoal; p
       const drop = slots.filter((s) => s !== longSlot).sort((a, b) => dist(a, dayBefore) - dist(b, dayBefore))[0];
       slots = slots.map((s) => (s === drop ? dayBefore : s));
     }
-    const qualitySlot = pickQualitySlot(slots.filter((s) => !(b2b && s === dayBefore)), longSlot);
     // Alternance comptée à rebours depuis la course : elle ne change pas quand le plan est recalculé chaque lundi.
     const toGo = weeks.length - 1 - wi;
     const quality = qualityFor(phase, wk.light, profile.level, toGo, o.dplusPerKm);
+    // Sans séance de qualité cette semaine (semaine allégée, débutant une semaine sur deux), son créneau redevient un footing
+    // et partage le volume avec les autres : sinon les footings gonflent et la semaine « légère » devient la plus lourde.
+    const qualitySlot = quality ? pickQualitySlot(slots.filter((s) => !(b2b && s === dayBefore)), longSlot) : -1;
     // Seconde séance de qualité (allure soutenue) pour qui s’entraîne beaucoup : confirmé dès 5 sorties, régulier dès 6.
     const wantsTwo = !wk.light && (phase === "Développement" || phase === "Spécifique") && ((profile.level === "confirme" && days >= 5) || (profile.level === "regulier" && days >= 6));
     const quality2Slot = wantsTwo && quality
       ? slots.filter((s) => s !== longSlot && s !== qualitySlot && s !== dayBefore && dist(s, qualitySlot) >= 2 && dist(s, longSlot) >= 2).sort((a, b) => dist(b, qualitySlot) - dist(a, qualitySlot))[0] ?? -1
       : -1;
-    const q2Min = quality2Slot >= 0 ? clamp(wk.minutes * 0.13, 45, 70) : 0;
+    const q2Min = quality2Slot >= 0 ? clamp(budget * 0.13, 45, 70) : 0;
     const firstEasy = slots.find((s) => s !== longSlot && s !== qualitySlot && s !== quality2Slot && !(b2b && s === dayBefore));
     const strength = (days >= 5 && profile.level !== "debutant") || (phase === "Fondation" && days >= 4);
 
-    const qMin = quality ? (quality === "sharpen" ? 40 : clamp(wk.minutes * 0.18, 50, 85)) : 0;
+    const qMin = quality ? (quality === "sharpen" ? 40 : clamp(budget * 0.18, 50, 85)) : 0;
     const b2bMin = b2b ? wk.longMin * 0.55 : 0;
     const strengthMin = strength && firstEasy != null ? 40 : 0;
     const easySlots = slots.filter((s) => s !== longSlot && s !== qualitySlot && s !== quality2Slot && !(b2b && s === dayBefore) && !(strengthMin && s === firstEasy));
     // Footings : 30 min au moins ; au plus 75 (débutant), 90 (régulier) ou 100 min (confirmé). Au-delà, le volume manquant
     // n’est pas forcé : le volume réel de la semaine (somme des séances) remplace l’annonce, et c’est lui que juge le verdict.
-    const easyMin = clamp((wk.minutes - wk.longMin - qMin - q2Min - b2bMin - strengthMin * 0.5) / Math.max(1, easySlots.length), 30, EASY_MAX[profile.level]);
+    const easyMin = clamp((budget - wk.longMin - qMin - q2Min - b2bMin - strengthMin * 0.5) / Math.max(1, easySlots.length), 30, EASY_MAX[profile.level]);
     const longGain = round50(wk.gainM * (b2b ? 0.45 : 0.55));
     const qGain = round50(wk.gainM * 0.3);
 
@@ -380,6 +402,9 @@ function sessionsFor(weeks: PlanWeek[], o: { start: string; goal: PlannerGoal; p
       else if (strengthMin && slot === firstEasy) items.push(make("strength", date, 40, phase, 0));
       else items.push(make("easy", date, easyMin, phase, 0));
     }
+    const placed = items.slice(from);
+    const full = placed.length >= Math.max(2, days - 1);
+    if (building && !wk.light && full) prevReal = placed.reduce((t, x) => t + (x.template === "strength" ? x.durationMin * 0.5 : x.durationMin), 0);
   });
 
   if (o.hasRace && goal.date >= start) {

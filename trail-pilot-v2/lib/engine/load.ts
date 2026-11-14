@@ -6,7 +6,8 @@
  *                (une minute de fractionné pèse environ 2,5 fois une minute de footing), comme dans
  *                les modèles de référence (TRIMP, score de stress). L’intensité vient, dans l’ordre :
  *                du ressenti (1-10), du temps passé dans chaque zone cardiaque quand la sortie a été
- *                analysée seconde par seconde, de la FC moyenne, sinon d’une valeur type du sport ;
+ *                analysée seconde par seconde, de la FC moyenne, de l’allure rapportée à la VO2max,
+ *                sinon d’une valeur type du sport ;
  *  - mécanique = coût des impacts et du dénivelé : 1,5/km, 6 par 100 m de D+, 7 par 100 m de D−
  *                (la descente, excentrique, abîme davantage), pondérés selon le sport.
  *
@@ -24,8 +25,8 @@ export interface ActivityLike {
   /** Temps par tranche de 5 bpm (analyse seconde par seconde), voir engine/streams. */
   hrHist?: number[] | null;
 }
-export interface Physio { hrMax?: number | null; hrRest?: number | null }
-export type EffortSource = "ressenti" | "zones" | "fc" | "estimé";
+export interface Physio { hrMax?: number | null; hrRest?: number | null; /** VO2max de référence (montre, sinon estimation) : sert à juger l’effort d’une sortie sans cardio d’après son allure. */ vdot?: number | null }
+export type EffortSource = "ressenti" | "zones" | "fc" | "allure" | "estimé";
 
 /** Coût d’une minute selon l’effort (1-10) : quadratique en intensité, calé pour rester proche de l’ancien barème en endurance. */
 export const stress = (rpe: number) => 2.447 * (0.5 + 0.06 * rpe) ** 2;
@@ -68,6 +69,17 @@ export function effort(a: ActivityLike, p: Physio = {}): { rpe: number; source: 
     // Sans FC de repos : bornes des zones en % de FC max (0,64 / 0,73 / 0,82 / 0,91).
     const rpe = f < 0.64 ? 3 : f < 0.73 ? 4 : f < 0.775 ? 5 : f < 0.82 ? 6 : f < 0.865 ? 7 : f < 0.91 ? 8 : 9;
     return { rpe: Math.min(9, rpe + (rpe <= 6 ? spiky : 0)), source: "fc" };
+  }
+  // Ni ressenti ni cardio : on juge l’effort à l’allure. L’allure ramenée au plat (100 m de D+ = 1 km) donne un coût en
+  // oxygène, rapporté à la VO2max du coureur. Sur une sortie continue, 65 % correspond à un footing, 85 % au seuil.
+  const km = a.distanceKm ?? 0;
+  if (p.vdot && p.vdot >= 28 && (a.sport === "course" || a.sport === "trail") && km >= 2 && a.durationMin >= 12) {
+    const v = ((km + Math.max(0, a.gainM ?? 0) / 100) * 1000 * (a.sport === "trail" ? 1.05 : 1)) / a.durationMin;
+    if (v >= 40 && v <= 420) {
+      const f = (-4.6 + 0.182258 * v + 0.000104 * v * v) / p.vdot;
+      const rpe = f < 0.58 ? 3 : f < 0.72 ? 4 : f < 0.78 ? 5 : f < 0.84 ? 6 : f < 0.9 ? 7 : f < 0.96 ? 8 : 9;
+      return { rpe, source: "allure" };
+    }
   }
   return { rpe: IMPACT[a.sport].rpe, source: "estimé" };
 }

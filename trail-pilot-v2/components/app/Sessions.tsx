@@ -10,7 +10,7 @@ import { parseActivityFile } from "@/lib/activity-file";
 
 const TrackMap = dynamic(() => import("./TrackMap"), { ssr: false, loading: () => <div className="tmap" style={{ height: 300 }}><div className="tmap-loading">Chargement de la carte…</div></div> });
 
-const EFFORT_SOURCE = { ressenti: "ton ressenti", zones: "le temps passé dans chaque zone cardiaque", fc: "ta fréquence cardiaque moyenne", "estimé": "une estimation" };
+const EFFORT_SOURCE = { ressenti: "ton ressenti", zones: "le temps passé dans chaque zone cardiaque", fc: "ta fréquence cardiaque moyenne", allure: "ton allure, rapportée à ta VO2max", "estimé": "une estimation" };
 const ZONE_NAMES = ["Z1 récupération", "Z2 endurance", "Z3 tempo", "Z4 seuil", "Z5 VO2max"];
 const paceOf = (mPerMin: number) => { const p = 1000 / mPerMin; return `${Math.floor(p)}:${String(Math.round((p % 1) * 60) % 60).padStart(2, "0")}`; };
 
