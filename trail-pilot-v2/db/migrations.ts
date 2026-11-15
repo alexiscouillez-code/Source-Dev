@@ -228,4 +228,13 @@ export const MIGRATIONS: { tag: string; statements: string[] }[] = [
     // VO2max de référence mémorisée (estimation des sorties) : sert à juger l’effort des sorties sans cardio d’après leur allure.
     statements: [`ALTER TABLE profiles ADD COLUMN vdot_ref REAL`],
   },
+  {
+    tag: "018_status_review",
+    statements: [
+      // Santé des services extérieurs (utilisateur 0 = service commun à tous).
+      `CREATE TABLE IF NOT EXISTS service_status (service TEXT NOT NULL, user_id INTEGER NOT NULL DEFAULT 0, last_ok_at INTEGER, last_fail_at INTEGER, last_error TEXT, PRIMARY KEY (service, user_id))`,
+      // Bilan rédigé par l'IA pour une sortie importée par fichier ou saisie à la main (jamais pour une sortie Strava).
+      `ALTER TABLE activities ADD COLUMN ai_review TEXT`,
+    ],
+  },
 ];

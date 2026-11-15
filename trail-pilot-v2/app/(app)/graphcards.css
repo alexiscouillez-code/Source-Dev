@@ -665,3 +665,27 @@ form.cal-comment { display: grid; gap: 8px; white-space: normal; }
   .sus-list li.out { animation: sus-out .38s var(--ease) both; }
   @keyframes sus-out { to { opacity: 0; transform: translateX(24px); } }
 }
+
+/* ---------- État des connexions ---------- */
+.chip.danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+.svc-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.svc { display: grid; gap: 3px; padding: 10px 12px; border-radius: 12px; background: var(--ink-3); box-shadow: inset 0 0 0 1px var(--line); }
+.svc.danger { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--danger) 45%, transparent); }
+.svc-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* ---------- Bilan IA d'une sortie ---------- */
+.review-ask { justify-self: start; margin-top: 6px; }
+.ai-review { display: grid; gap: 6px; margin-top: 8px; padding: 11px 12px; border-radius: 12px; background: color-mix(in srgb, var(--ember) 6%, var(--ink-3)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ember) 25%, var(--line)); }
+.ai-review.busy { opacity: .6; }
+.ai-head { display: flex; justify-content: space-between; align-items: center; }
+.ai-title { font-size: 14px; line-height: 1.35; }
+.ai-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 13px; line-height: 1.4; }
+.ai-list li { position: relative; padding-left: 18px; }
+.ai-list li::before { position: absolute; left: 0; top: 0; font-weight: 700; }
+.ai-list.ok li::before { content: "✓"; color: var(--ok); }
+.ai-list.warn li::before { content: "!"; color: var(--lite); left: 4px; }
+.ai-tip { margin: 0; font-size: 13px; line-height: 1.4; display: grid; gap: 2px; }
+.ai-tip span { font-family: var(--mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--ember-t, var(--ember)); }
+@media (prefers-reduced-motion: no-preference) {
+  .ai-review { animation: card-in .45s var(--ease) both; }
+}

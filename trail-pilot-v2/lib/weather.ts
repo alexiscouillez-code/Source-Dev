@@ -1,4 +1,5 @@
 import "server-only";
+import { recordFail, recordOk } from "./status";
 import { one, run } from "@/db/client";
 import { addDays, diffDays } from "./engine/dates";
 
@@ -40,8 +41,10 @@ export async function raceWeather(lat: number, lon: number, date: string, today:
       code: v("weather_code") ?? 0, label: labelOf(v("weather_code") ?? 0),
     };
     await run("INSERT OR REPLACE INTO app_kv(key, value, updated_at) VALUES (?, ?, ?)", [key, JSON.stringify(w), Date.now()]);
+    await recordOk("meteo");
     return { status: "ok", weather: w };
-  } catch {
+  } catch (e) {
+    await recordFail("meteo", e);
     return cached ? { status: "ok", weather: JSON.parse(cached.value) } : { status: "error" };
   }
 }
@@ -79,8 +82,10 @@ export async function trainingForecast(lat: number, lon: number, today: string):
         rainProb: v("precipitation_probability_max"), rainMm: Math.round((v("precipitation_sum") ?? 0) * 10) / 10, windMax: Math.round(v("wind_speed_10m_max") ?? 0), code, label: labelOf(code) });
     });
     await run("INSERT OR REPLACE INTO app_kv(key, value, updated_at) VALUES (?, ?, ?)", [key, JSON.stringify(days), Date.now()]);
+    await recordOk("meteo");
     return days;
-  } catch {
+  } catch (e) {
+    await recordFail("meteo", e);
     return cached ? JSON.parse(cached.value) : null;
   }
 }

@@ -1,4 +1,5 @@
 import "server-only";
+import { recordFail, recordOk } from "./status";
 import { all, one, run } from "@/db/client";
 import { HttpError } from "./api";
 import { addDays } from "./engine/dates";
@@ -98,6 +99,7 @@ export async function ask(userId: number, today: string, message: string) {
       signal: AbortSignal.timeout(45000),
     });
   if (!res.ok) {
+    await recordFail("ia", `Réponse ${res.status}`);
     console.error("Coach IA", res.status, (await res.text().catch(() => "")).slice(0, 300));
     throw new HttpError(502, res.status === 429 ? "Le coach est très demandé : réessaie dans une minute." : "Le coach ne répond pas pour le moment. Réessaie dans un instant.");
   }
@@ -105,6 +107,7 @@ export async function ask(userId: number, today: string, message: string) {
     ? (((await res.json()) as { choices?: { message?: { content?: string | null } }[] }).choices?.[0]?.message?.content ?? "").trim()
     : (((await res.json()) as { content?: { type: string; text?: string }[] }).content ?? []).filter((c) => c.type === "text").map((c) => c.text).join("\n").trim();
   if (!reply) throw new HttpError(502, "Le coach n’a pas su répondre. Reformule ta question.");
+  await recordOk("ia");
   const now = Date.now();
   await run("INSERT INTO coach_messages(user_id, role, content, at) VALUES (?, 'user', ?, ?)", [userId, message, now]);
   await run("INSERT INTO coach_messages(user_id, role, content, at) VALUES (?, 'assistant', ?, ?)", [userId, reply.slice(0, 6000), now + 1]);

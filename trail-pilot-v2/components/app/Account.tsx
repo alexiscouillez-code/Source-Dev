@@ -21,6 +21,7 @@ export default function Account({ me, refresh, toast, go }: Ctx) {
         <CalendarCard toast={toast} />
         <ShareCard toast={toast} />
         <StravaCard me={me} refresh={refresh} toast={toast} />
+        <StatusCard />
         <EmailCard me={me} toast={toast} />
         <HealthCard me={me} refresh={refresh} toast={toast} />
         <DataCard toast={toast} />
@@ -30,6 +31,51 @@ export default function Account({ me, refresh, toast, go }: Ctx) {
 }
 
 type P = Pick<Ctx, "me" | "refresh" | "toast">;
+
+interface SvcState { key: string; label: string; use: string; configured: boolean; linked: boolean | null; lastOk: number | null; lastFail: number | null; error: string | null }
+const ago = (t: number, now: number) => {
+  const m = Math.max(0, Math.round((now - t) / 60000));
+  if (m < 1) return "à l’instant";
+  if (m < 60) return `il y a ${m} min`;
+  const h = Math.round(m / 60);
+  if (h < 48) return `il y a ${h} h`;
+  return `il y a ${Math.round(h / 24)} j`;
+};
+/** Un état lisible par service : activé ou non, relié ou non, dernière réussite, panne en cours. */
+function svcLine(s: SvcState, now: number): { tone: "ok" | "danger" | "lite" | "dim"; label: string; detail: string | null } {
+  if (!s.configured) return { tone: "dim", label: "Pas activé sur le site", detail: null };
+  if (s.linked === false) return { tone: "dim", label: "Non relié", detail: s.key === "push" ? "Active le rappel du check-in pour recevoir les notifications sur cet appareil." : null };
+  if (s.lastFail && (!s.lastOk || s.lastFail > s.lastOk)) return { tone: "danger", label: `En panne depuis ${ago(s.lastFail, now).replace("il y a ", "")}`, detail: `${s.error ?? "Erreur"}${s.lastOk ? ` · dernière réussite ${ago(s.lastOk, now)}` : ""}` };
+  if (s.lastOk) return { tone: "ok", label: "Fonctionne", detail: `Dernière réussite ${ago(s.lastOk, now)}` };
+  return { tone: "lite", label: "Pas encore utilisé", detail: null };
+}
+
+function StatusCard() {
+  const [d, setD] = useState<{ services: SvcState[]; now: number } | null>(null);
+  const [err, setErr] = useState(false);
+  const load = () => { setErr(false); api<{ services: SvcState[]; now: number }>("/api/status").then(setD).catch(() => setErr(true)); };
+  useEffect(load, []);
+  const lines = d?.services.map((s) => ({ s, l: svcLine(s, d.now) })) ?? [];
+  const down = lines.filter((x) => x.l.tone === "danger").length;
+  return (
+    <Fold id="acc-status" title="État des connexions" aside={d ? <span className={`chip ${down ? "danger" : "ok"}`}><span className="dot" />{down ? `${down} en panne` : "Tout va bien"}</span> : null}>
+      <p className="soft small" style={{ margin: 0 }}>Les services extérieurs dont dépend l’appli. Si quelque chose ne marche pas, c’est ici que tu le vois en premier.</p>
+      {err && <p className="small" style={{ margin: 0 }}>Impossible de lire l’état. <button className="link small" onClick={load}>Réessayer</button></p>}
+      {!d && !err && <p className="muted small" style={{ margin: 0 }}>Chargement…</p>}
+      {d && (
+        <ul className="svc-list">
+          {lines.map(({ s, l }) => (
+            <li key={s.key} className={`svc ${l.tone}`}>
+              <div className="svc-top"><b>{s.label}</b><span className={`chip ${l.tone}`}><span className="dot" />{l.label}</span></div>
+              <span className="muted small">{l.detail ?? s.use}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {d && <button className="btn ghost sm" onClick={load} style={{ justifySelf: "start" }}>Actualiser</button>}
+    </Fold>
+  );
+}
 
 function useSubmit(toast: Ctx["toast"]) {
   const [busy, setBusy] = useState(false);

@@ -1,4 +1,5 @@
 import "server-only";
+import { recordFail, recordOk } from "./status";
 import webpush from "web-push";
 import { all, run } from "@/db/client";
 import { SITE_URL } from "./site";
@@ -25,8 +26,9 @@ export async function pushToUser(userId: number, payload: { title: string; body:
     } catch (e) {
       const code = (e as { statusCode?: number }).statusCode;
       if (code === 404 || code === 410) await run("DELETE FROM push_subs WHERE endpoint = ?", [s.endpoint]);
-      else throw e;
+      else { await recordFail("push", code ? `Réponse ${code}` : e, userId); throw e; }
     }
   }
+  if (sent) await recordOk("push", userId);
   return sent;
 }

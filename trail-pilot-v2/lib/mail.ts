@@ -1,4 +1,5 @@
 import "server-only";
+import { recordFail, recordOk } from "./status";
 import { SITE_NAME, SITE_URL } from "./site";
 
 /**
@@ -26,5 +27,6 @@ export async function sendMail(to: string, subject: string, intro: string, cta: 
     headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
     body: JSON.stringify({ from, to: [to], subject, html, text }),
   });
-  if (!res.ok) throw new Error(`Envoi d’e-mail refusé (${res.status})`);
+  if (!res.ok) { await recordFail("mail", `Réponse ${res.status}`); throw new Error(`Envoi d’e-mail refusé (${res.status})`); }
+  await recordOk("mail");
 }

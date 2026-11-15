@@ -1,4 +1,5 @@
 import "server-only";
+import { recordFail, recordOk } from "./status";
 import { cleanSignals, keywordSignals, type NoteSignals } from "./engine/note";
 
 /**
@@ -46,7 +47,8 @@ export async function analyzeNote(text: string): Promise<NoteSignals> {
         body: JSON.stringify({ model: process.env.COACH_MODEL || "claude-sonnet-5-5", max_tokens: 300, system: SYSTEM, messages: [{ role: "user", content: user }] }),
         signal: AbortSignal.timeout(8000),
       });
-    if (!res.ok) { console.error("Analyse du commentaire", res.status); return fallback; }
+    if (!res.ok) { console.error("Analyse du commentaire", res.status); await recordFail("ia", `Réponse ${res.status}`); return fallback; }
+    await recordOk("ia");
     const reply = p === "groq"
       ? ((await res.json()) as { choices?: { message?: { content?: string | null } }[] }).choices?.[0]?.message?.content ?? ""
       : (((await res.json()) as { content?: { type: string; text?: string }[] }).content ?? []).filter((c) => c.type === "text").map((c) => c.text).join("");
@@ -56,6 +58,7 @@ export async function analyzeNote(text: string): Promise<NoteSignals> {
     return { ...s, malade: s.malade || fallback.malade, douleur: (Math.max(s.douleur, fallback.douleur === 2 ? 2 : 0) as 0 | 1 | 2), resume: s.resume || fallback.resume };
   } catch (e) {
     console.error("Analyse du commentaire", e instanceof Error ? e.message : e);
+    await recordFail("ia", e);
     return fallback;
   }
 }

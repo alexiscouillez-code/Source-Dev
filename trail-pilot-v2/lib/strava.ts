@@ -1,4 +1,5 @@
 import "server-only";
+import { recordFail, recordOk } from "./status";
 import { all, one, run } from "@/db/client";
 import { open, seal, sign, verify } from "./crypto";
 import type { Sport } from "./engine/load";
@@ -182,8 +183,10 @@ export async function syncUser(userId: number, opts: { auto?: boolean } = {}) {
     // L’analyse fine ne doit jamais faire échouer la synchro elle-même.
     const analyzed = await analyzePending(token, userId, opts.auto ? 8 : STREAMS_PER_SYNC).catch(() => 0);
     // `added` : sorties réellement nouvelles (la fenêtre de synchro repasse aussi sur les 3 derniers jours).
+    await recordOk("strava", userId);
     return { imported, added: Math.max(0, (await count()) - before), analyzed, skipped: false };
   } catch (err) {
+    await recordFail("strava", err, userId);
     const message = err instanceof Error ? err.message : "Erreur Strava";
     await run("UPDATE strava_links SET last_error = ? WHERE user_id = ?", [message, userId]);
     throw err;

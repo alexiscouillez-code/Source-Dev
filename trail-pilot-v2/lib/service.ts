@@ -144,16 +144,25 @@ export async function regeneratePlan(userId: number, today: string) {
   return items.length;
 }
 
-export async function loadState(userId: number, today: string) {
-  const [profile, acts] = await Promise.all([loadProfile(userId), loadActivities(userId, addDays(today, -240))]);
-  // VO2max de référence : recalculée ici (elle ne dépend pas de la charge) et mémorisée quand elle bouge d’au moins 0,5 point,
-  // pour que tous les écrans jugent l’effort des sorties sans cardio avec la même valeur.
-  const est = estimateVo2(acts.map(toVo2Run), today, { hrMax: profile.hr_max, hrRest: profile.hr_rest, watch: null });
+/**
+ * VO2max de référence : recalculée sur les 240 derniers jours (elle ne dépend pas de la charge) et mémorisée quand elle
+ * bouge d’au moins 0,5 point, pour que tous les écrans jugent l’effort des sorties sans cardio avec la même valeur,
+ * quel que soit l’écran ouvert en premier.
+ */
+export async function refreshVdotRef(userId: number, profile: ProfileRow, today: string, acts?: ActivityRow[]) {
+  const list = acts ?? await loadActivities(userId, addDays(today, -240));
+  const est = estimateVo2(list.map(toVo2Run), today, { hrMax: profile.hr_max, hrRest: profile.hr_rest, watch: null });
   const ref = est.method === "seances" ? est.value : null;
   if (ref != null && (profile.vdot_ref == null || Math.abs(ref - profile.vdot_ref) >= 0.5)) {
     profile.vdot_ref = ref;
     await run("UPDATE profiles SET vdot_ref = ? WHERE user_id = ?", [ref, userId]).catch(() => {});
   }
+  return profile;
+}
+
+export async function loadState(userId: number, today: string) {
+  const [profile, acts] = await Promise.all([loadProfile(userId), loadActivities(userId, addDays(today, -240))]);
+  await refreshVdotRef(userId, profile, today, acts);
   const physio = physioOf(profile);
   return { profile, acts, physio, tl: timeline(acts.map(toActivityLike), physio, today) };
 }

@@ -35,6 +35,34 @@ function Insight({ a }: { a: Activity }) {
   );
 }
 
+/**
+ * Bilan de la sortie par l’IA : seulement pour une sortie importée par fichier de montre ou saisie à la main.
+ * Les sorties venues de Strava n’y ont pas droit (règle de Strava sur l’IA).
+ */
+function Review({ a, ai, toast, onDone }: { a: Activity; ai: boolean; toast: Ctx["toast"]; onDone: () => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  const r = a.review;
+  const ask = async () => {
+    setBusy(true);
+    try { await api(`/api/activities/${a.id}/review`, { method: "POST" }); await onDone(); }
+    catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }
+    finally { setBusy(false); }
+  };
+  if (!r) {
+    if (!ai || !a.reviewable || a.duration_min < 10 || a.check_state === 1) return null;
+    return <button className="link small review-ask" disabled={busy} onClick={ask}>{busy ? "Bilan en cours…" : "✦ Bilan de la sortie par l’IA"}</button>;
+  }
+  return (
+    <div className={`ai-review${busy ? " busy" : ""}`}>
+      <div className="ai-head"><span className="eyebrow">Bilan IA</span>{ai && <button className="link small" disabled={busy} onClick={ask}>{busy ? "…" : "Refaire"}</button>}</div>
+      <b className="ai-title">{r.titre}</b>
+      {r.forts.length > 0 && <ul className="ai-list ok">{r.forts.map((x, i) => <li key={i}>{x}</li>)}</ul>}
+      {r.surveiller.length > 0 && <ul className="ai-list warn">{r.surveiller.map((x, i) => <li key={i}>{x}</li>)}</ul>}
+      {r.conseil && <p className="ai-tip"><span>Prochaine fois</span>{r.conseil}</p>}
+    </div>
+  );
+}
+
 export default function Sessions({ me, refresh, toast }: Ctx) {
   const [acts, setActs] = useState<Activity[] | null>(null);
   const [shoes, setShoes] = useState<MiniShoe[]>([]);
@@ -48,7 +76,8 @@ export default function Sessions({ me, refresh, toast }: Ctx) {
   // « Voir sur la carte » déplie la carte si besoin, puis l’amène à l’écran.
   const showOnMap = (id: number) => { setFocus(id); setMapOpen(true); requestAnimationFrame(() => mapRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })); };
 
-  const load = useCallback(async () => { const r = await api<{ activities: Activity[]; shoes?: MiniShoe[] }>("/api/activities"); setActs(r.activities); setShoes(r.shoes ?? []); }, []);
+  const [ai, setAi] = useState(false);
+  const load = useCallback(async () => { const r = await api<{ activities: Activity[]; shoes?: MiniShoe[]; ai?: boolean }>("/api/activities"); setActs(r.activities); setShoes(r.shoes ?? []); setAi(!!r.ai); }, []);
   useEffect(() => { load().catch((e) => toast(e.message)); }, [load, toast]);
   useEffect(() => { const on = () => { load().catch(() => {}); }; window.addEventListener("tp-synced", on); return () => window.removeEventListener("tp-synced", on); }, [load]);
 
@@ -131,6 +160,7 @@ export default function Sessions({ me, refresh, toast }: Ctx) {
                   <div className="s" title={`Effort ${a.effort}/10 d’après ${EFFORT_SOURCE[a.effortSource]}`}>Charge <b className="mono" style={{ color: "var(--snow)" }}>{a.load}</b> · effort {String(a.effort).replace(".", ",")}/10 ({a.effortSource}){a.source === "strava" ? " · Strava" : a.source === "gpx" ? " · GPX" : a.source === "fichier" ? " · fichier montre" : ""}</div>
                   {a.check_state === 1 && <div className="s excl-note">Exclue des calculs de charge et du plan. <button className="link small" onClick={() => include(a)}>Réintégrer</button></div>}
                   <Insight a={a} />
+                  <Review a={a} ai={ai} toast={toast} onDone={load} />
                 </div>
                 <div className="item-actions">
                   {a.track && <button className="iconbtn" aria-label="Voir sur la carte" title="Voir sur la carte" onClick={() => showOnMap(a.id)}><IconPin /></button>}

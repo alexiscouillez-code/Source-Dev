@@ -13,6 +13,9 @@ export function libsql(): Client {
       authToken: process.env.TURSO_AUTH_TOKEN,
       intMode: "number",
     });
+    // Fichier SQLite local (développement, tests) : si un autre programme écrit en même temps, on patiente
+    // jusqu'à 5 s au lieu d'échouer sur « base verrouillée ». Sans effet sur Turso en production.
+    if ((process.env.TURSO_DATABASE_URL ?? "file:").startsWith("file:")) client.execute("PRAGMA busy_timeout = 5000").catch(() => {});
   }
   return client;
 }
