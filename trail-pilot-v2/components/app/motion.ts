@@ -5,7 +5,7 @@
  * Ne touche qu’aux nœuds texte composés d’un seul nombre, et s’arrête si React change la valeur
  * entre-temps. Rien ne bouge si l’utilisateur a demandé de réduire les animations.
  */
-const SELECTOR = ".kpi b, .zbig, .race-time b, .side-goal b, .specs b, .vo2-big, .num-up, .ready-now b, .records b, .db-top b, .gap-v b, .form-facts b, .cal-sum b, .shoe .mono, .gc-big, .rg-line .mono";
+const SELECTOR = ".g-num, .kpi b, .zbig, .race-time b, .side-goal b, .specs b, .vo2-big, .num-up, .ready-now b, .records b, .db-top b, .gap-v b, .form-facts b, .cal-sum b, .shoe .mono, .gc-big, .rg-line .mono";
 /** Durées « 4 h 08 » ou « 45 min » : elles défilent en minutes. */
 const DUR = /^(\d{1,3}) h (\d{2})$|^(\d{1,3}) min$/;
 const NUM = /^([^\d+\-−]*[+\-−]?)(\d[\d\u202f\u00a0 ]*(?:,\d+)?)(\D{0,8})$/;
@@ -40,6 +40,7 @@ export function startCountUps(root: HTMLElement) {
     const m = NUM.exec(node.nodeValue ?? "");
     if (!m) return;
     const [, pre, raw, post] = m;
+    if (/^['’]/.test(post)) return; // allure « 7'06 » : on ne fait pas défiler les minutes seules
     const target = Number(raw.replace(/[\s\u202f\u00a0]/g, "").replace(",", "."));
     if (!Number.isFinite(target) || target === 0) return;
     const decimals = raw.includes(",") ? raw.split(",")[1].length : 0;
@@ -85,7 +86,7 @@ export function startCountUps(root: HTMLElement) {
  * entièrement sorti de l’écran, pour que l’animation rejoue au retour. Sans JavaScript ou avec « réduire les
  * animations », rien n’est masqué : la classe « mo » sur <html> conditionne tous les états de départ.
  */
-const REVEAL = "svg.chart, .radar, .month-bars, .week-bars, .gaps, .zbar, .ready-plot, .shoe-list, .gc-gauge, .gc-ring, .vo2-scale, .cal-grid";
+const REVEAL = "svg.chart, .radar, .month-bars, .week-bars, .gaps, .zbar, .ready-plot, .shoe-list, .gc-gauge, .gc-ring, .vo2-scale, .cal-grid, .night .glass, .dotprofile, .dotgrid, .radar-dots";
 export function startReveals(root: HTMLElement) {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || !("IntersectionObserver" in window)) return () => {};
   document.documentElement.classList.add("mo");

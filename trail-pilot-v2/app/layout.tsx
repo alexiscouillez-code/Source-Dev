@@ -29,7 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="fr" suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: "try{const t=localStorage.getItem('trail-pilot-theme');document.documentElement.dataset.theme=t==='dark'||t==='light'?t:(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light')}catch{}" }} />
+        <script dangerouslySetInnerHTML={{ __html: "try{const t=localStorage.getItem('trail-pilot-theme');document.documentElement.dataset.theme=t==='dark'||t==='light'||t==='glass'?t:(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light')}catch{}" }} />
       </head>
       <body>
         {children}

@@ -50,7 +50,8 @@ async function launch() { browser ??= await chromium.launch(); return browser; }
 async function newUser(device = "phone", { theme = "dark", profile } = {}) {
   const b = await launch();
   const ctx = await b.newContext({ ...DEVICES[device] });
-  await ctx.addInitScript((t) => { try { localStorage.setItem("tp-tour-v1", "1"); localStorage.setItem("trail-pilot-theme", t); } catch {} }, theme);
+  // Thème de départ posé au premier chargement seulement : un changement fait dans la page doit survivre au rechargement.
+  await ctx.addInitScript((t) => { try { localStorage.setItem("tp-tour-v1", "1"); if (!localStorage.getItem("trail-pilot-theme")) localStorage.setItem("trail-pilot-theme", t); } catch {} }, theme);
   const page = await ctx.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));

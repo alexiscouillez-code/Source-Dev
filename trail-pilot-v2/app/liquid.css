@@ -48,3 +48,47 @@ html[data-lq="drain"]::view-transition-old(root) { z-index: 1; }                
 html[data-lq]::view-transition-old(lq-toggle), html[data-lq]::view-transition-old(lq-fx) { display: none; }
 html[data-lq] .cursor { visibility: hidden; }                                    /* le curseur décoratif du site ne se mélange pas aux images */
 .auth-panel > button.theme-toggle.lq-toggle { position: absolute; }                /* connexion : l’interrupteur reste en haut à droite */
+
+/* ---------- Bouton d'apparence à trois états (Jour → Nuit → Verre) ---------- */
+button.theme-toggle.ap-toggle { display: inline-grid; place-items: center; position: relative; overflow: hidden; }
+.ap-toggle .ap-icon { display: grid; place-items: center; }
+.ap-toggle svg { width: 17px; height: 17px; }
+.ap-toggle[data-ap="light"] { color: #e4561c; }
+.ap-toggle[data-ap="dark"] { color: #f4efe6; }
+.ap-toggle[data-ap="glass"] { color: #fff; background: linear-gradient(160deg, #3d46e8, #6a72ff); border-color: rgba(255, 255, 255, .45); box-shadow: 0 6px 18px -8px rgba(61, 70, 232, .9); }
+.ap-toggle:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+@media (prefers-reduced-motion: no-preference) {
+  .ap-toggle .ap-icon { animation: ap-in .5s cubic-bezier(.3, 1.5, .5, 1) both; }
+  @keyframes ap-in { from { opacity: 0; transform: rotate(-90deg) scale(.4); } }
+}
+
+/* ---------- Passage vers ou depuis le mode Verre : la nouvelle apparence se révèle en cercle depuis le bouton ---------- */
+html.vt-reveal::view-transition-old(root), html.vt-reveal::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+html.vt-reveal::view-transition-new(root) { animation: vt-reveal .9s cubic-bezier(.2, .8, .2, 1) both; }
+@keyframes vt-reveal {
+  from { clip-path: circle(0 at var(--vt-x, 50%) var(--vt-y, 50%)); }
+  to { clip-path: circle(150vmax at var(--vt-x, 50%) var(--vt-y, 50%)); }
+}
+
+/* ---------- Choix de l'apparence (Compte) : trois vignettes d'aperçu ---------- */
+.ap-pick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.ap-tile { position: relative; display: grid; gap: 4px; padding: 10px; border-radius: 18px; border: 1px solid var(--line); background: var(--ink-2); cursor: pointer; min-width: 0; }
+.ap-tile input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+.ap-tile:has(input:focus-visible) { outline: 2px solid var(--snow); outline-offset: 3px; }
+.ap-tile.on { border-color: var(--snow); box-shadow: inset 0 0 0 1px var(--snow); }
+.ap-tile b { font-size: 14px; }
+.ap-tile small { font-size: 11.5px; line-height: 1.3; color: var(--mute); }
+.ap-prev { position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 7px; height: 56px; border-radius: 12px; margin-bottom: 4px; overflow: hidden; }
+.ap-prev i { border-radius: 6px; }
+.ap-prev i:first-child { grid-column: 1 / -1; }
+.ap-light .ap-prev { background: #f4f1ec; } .ap-light .ap-prev i { background: #fff; box-shadow: 0 0 0 1px #e2dbd0; } .ap-light .ap-prev i:first-child { background: #e4561c; opacity: .85; }
+.ap-dark .ap-prev { background: #0b0f14; } .ap-dark .ap-prev i { background: #1b2631; } .ap-dark .ap-prev i:first-child { background: #ff6a2b; opacity: .85; }
+.ap-glass .ap-prev { background: radial-gradient(60% 60% at 20% 20%, rgba(180, 140, 255, .7), transparent 70%), linear-gradient(165deg, #0b0b2b, #2a1f6e 55%, #5b4bd6); }
+.ap-glass .ap-prev i { background: rgba(255, 255, 255, .16); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .35); }
+.ap-glass .ap-prev i:first-child { background: linear-gradient(160deg, #3d46e8, #6a72ff); }
+@media (prefers-reduced-motion: no-preference) {
+  .ap-tile { transition: transform .25s cubic-bezier(.2, .8, .2, 1), border-color .25s; }
+  .ap-tile:hover { transform: translateY(-2px); }
+  .ap-tile.on .ap-prev { animation: ap-in .5s cubic-bezier(.3, 1.5, .5, 1); }
+}
+@media (max-width: 380px) { .ap-tile small { display: none; } }

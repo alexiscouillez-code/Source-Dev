@@ -1,0 +1,172 @@
+/* =====================================================================
+   Style « nuit » : bloc « Ma sortie du jour » et cartes en verre dépoli.
+   Uniquement des dégradés CSS et du SVG (aucune image).
+   ===================================================================== */
+
+.night {
+  --n-0: #0b0b2b; --n-1: #2a1f6e; --n-2: #5b4bd6;
+  --n-violet: #b48cff; --n-blue: #4f5bff;
+  /* Textes secondaires et petites capitales : 70 % de blanc ne suffit pas sur les zones claires (3,6:1 mesuré) ;
+     ces valeurs sont les plus basses qui gardent 4,5:1 partout dans le bloc. */
+  --n-text: #fff; --n-soft: rgba(255, 255, 255, .93); --n-cap: rgba(255, 255, 255, .88);
+  position: relative; isolation: isolate; overflow: hidden;
+  margin: 18px 0 0; padding: 22px 16px 20px; border-radius: 36px;
+  color: var(--n-text);
+  /* Taches lumineuses floues (dégradés radiaux), puis le fond de nuit. */
+  background:
+    radial-gradient(42% 32% at 18% 22%, rgba(180, 140, 255, .55), transparent 70%),
+    radial-gradient(48% 36% at 92% 52%, rgba(79, 91, 255, .34), transparent 72%),
+    radial-gradient(38% 28% at 30% 92%, rgba(180, 140, 255, .2), transparent 70%),
+    linear-gradient(165deg, var(--n-0) 0%, var(--n-1) 52%, var(--n-2) 100%);
+}
+.night.is-loading { min-height: 520px; max-width: 380px; margin-left: auto; margin-right: auto; }
+
+/* Étoiles : petits points blancs, très discrets. */
+.night-stars {
+  position: absolute; inset: 0; z-index: -1; pointer-events: none; opacity: .55;
+  background-image:
+    radial-gradient(1px 1px at 12% 8%, #fff 50%, transparent 51%),
+    radial-gradient(1px 1px at 34% 16%, rgba(255,255,255,.8) 50%, transparent 51%),
+    radial-gradient(1.4px 1.4px at 71% 6%, #fff 50%, transparent 51%),
+    radial-gradient(1px 1px at 88% 21%, rgba(255,255,255,.7) 50%, transparent 51%),
+    radial-gradient(1px 1px at 52% 34%, rgba(255,255,255,.6) 50%, transparent 51%),
+    radial-gradient(1.2px 1.2px at 6% 47%, #fff 50%, transparent 51%),
+    radial-gradient(1px 1px at 94% 44%, rgba(255,255,255,.7) 50%, transparent 51%),
+    radial-gradient(1px 1px at 22% 71%, rgba(255,255,255,.6) 50%, transparent 51%),
+    radial-gradient(1.3px 1.3px at 63% 79%, #fff 50%, transparent 51%),
+    radial-gradient(1px 1px at 84% 93%, rgba(255,255,255,.7) 50%, transparent 51%),
+    radial-gradient(1px 1px at 41% 97%, rgba(255,255,255,.5) 50%, transparent 51%);
+}
+
+/* Mobile d'abord : une colonne de 380 px au plus, centrée, à toutes les tailles d'écran. */
+.night-inner { max-width: 380px; margin: 0 auto; display: grid; gap: 12px; }
+.night-title { margin: 2px 6px 4px; font-size: 14px; font-weight: 500; letter-spacing: .02em; color: var(--n-soft); }
+.night-note { margin: 0 6px; }
+
+.night .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* ---------- GlassCard ---------- */
+.glass {
+  position: relative; display: grid; gap: 6px; align-content: start;
+  padding: 20px; border-radius: 32px; color: var(--n-text);
+  background: rgba(255, 255, 255, .11);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  backdrop-filter: blur(24px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, .25);
+  /* Ombre douce dehors, halo léger en haut à l'intérieur. */
+  box-shadow: 0 18px 40px -18px rgba(5, 4, 30, .55), inset 0 1px 0 rgba(255, 255, 255, .28), inset 0 18px 36px -24px rgba(255, 255, 255, .35);
+  text-align: left; font: inherit;
+}
+.glass-inner { padding: 14px; border-radius: 22px; background: rgba(255, 255, 255, .08); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22); }
+/* Variante accent : bleu saturé. La partie la plus claire reste un halo en coin, loin du texte, pour garder le contraste. */
+.glass-accent {
+  background:
+    radial-gradient(70% 55% at 100% 0%, rgba(106, 114, 255, .9), transparent 70%),
+    linear-gradient(160deg, #3d46e8 0%, #4a52ee 100%);
+  border-color: rgba(255, 255, 255, .3);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass:not(.glass-accent) { background: rgba(40, 32, 110, .85); }
+  .glass-inner { background: rgba(255, 255, 255, .08); }
+}
+button.glass { cursor: pointer; width: 100%; }
+button.glass:hover { border-color: rgba(255, 255, 255, .5); }
+.glass:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+
+/* ---------- Typographie ---------- */
+.g-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.g-top { font-size: 14px; font-weight: 500; color: var(--n-text); line-height: 1.3; display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.g-top-sm { font-size: 13px; }
+.g-icon { width: 14px; height: 14px; }
+.g-when { font-size: 12px; color: var(--n-soft); margin-top: -2px; }
+.g-big { margin: 8px 0 0; display: grid; gap: 4px; }
+.g-num { font-size: 56px; font-weight: 500; line-height: 1; letter-spacing: -.02em; color: var(--n-text); font-variant-numeric: tabular-nums; }
+.g-num small { font-size: .4em; font-weight: 500; letter-spacing: .08em; }
+.g-num-sm { font-size: 32px; }
+.g-num-sm small { font-size: .42em; }
+.g-cap { font-family: var(--mono); font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: var(--n-cap); }
+.g-sub { font-size: 12px; line-height: 1.35; color: var(--n-soft); }
+.g-meta { position: absolute; font-family: var(--mono); font-size: 10px; letter-spacing: .14em; color: rgba(255, 255, 255, .2); pointer-events: none; }
+.g-example {
+  flex: none; align-self: start; font-family: var(--mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 99px; color: #fff; background: rgba(11, 11, 43, .55); border: 1px dashed rgba(255, 255, 255, .55);
+}
+.g-example-float { position: absolute; right: 4px; top: -6px; }
+/* Dans les petites cartes, la mention « Exemple » passe sous le titre au lieu de le chevaucher. */
+.g-pair-out .g-row { flex-direction: column; align-items: flex-start; gap: 6px; }
+
+/* ---------- Grande carte ---------- */
+.run-card { gap: 4px; }
+.g-profile { position: relative; margin: 10px -4px 6px; }
+.g-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+.g-pair .glass-inner { gap: 6px; }
+.g-pair-out { margin-top: 0; }
+.g-pair-out > .glass { padding: 16px; border-radius: 28px; gap: 8px; }
+
+/* ---------- DotProfile ---------- */
+.dotprofile { margin: 0; }
+.dotprofile svg { display: block; width: 100%; height: auto; }
+.dp-axis { display: flex; justify-content: space-between; margin-top: 6px; font-family: var(--mono); font-size: 11px; letter-spacing: .2em; color: var(--n-cap); }
+
+/* ---------- DotGrid ---------- */
+.dotgrid { display: block; width: 100%; max-width: 128px; height: auto; margin: 4px 0 2px; }
+
+/* ---------- RadarCard ---------- */
+.radar-card { position: relative; }
+.radar-card .g-row { flex-direction: column; align-items: flex-start; gap: 6px; }
+.radar-dots { display: block; width: 100%; max-width: 128px; height: auto; margin: 2px auto 0; }
+.radar-card .g-example { margin-top: -2px; }
+.radar-card .g-sub { color: rgba(255, 255, 255, .88); overflow-wrap: anywhere; }
+
+/* ---------- Motion design ----------
+   Déclenché quand chaque élément arrive à l'écran (classe « is-in » posée par motion.ts) et rejoué à chaque retour.
+   Les états de départ n'existent que sous « html.mo » (animations permises) : sans script ou avec
+   « réduire les animations », tout est affiché d'emblée, sans aucun mouvement. */
+@media (prefers-reduced-motion: no-preference) {
+  /* Cartes : elles montent et se posent l'une après l'autre ; les sous-cartes suivent la grande carte. */
+  .mo .night .glass:not(.is-in) { opacity: 0; transform: translateY(18px) scale(.97); }
+  .mo .night .glass.is-in { animation: night-in .7s cubic-bezier(.2, .8, .2, 1) both; }
+  .mo .night .g-pair .glass-inner.is-in:nth-child(1) { animation-delay: .35s; }
+  .mo .night .g-pair .glass-inner.is-in:nth-child(2) { animation-delay: .45s; }
+  .mo .night .g-pair-out > .glass.is-in:nth-child(1) { animation-delay: .12s; }
+  .mo .night .g-pair-out > .glass.is-in:nth-child(2) { animation-delay: .22s; }
+  @keyframes night-in { from { opacity: 0; transform: translateY(18px) scale(.97); } }
+
+  /* Profil : les points montent colonne par colonne, de gauche à droite, puis le point d'arrivée s'allume et pulse. */
+  .night .dp-dot, .night .dp-last, .night .dp-glow, .night .dg-on, .night .dg-off, .night .rd-ring, .night .rd-sweep { transform-box: fill-box; transform-origin: center; }
+  .mo .dotprofile:not(.is-in) :is(.dp-dot, .dp-last, .dp-glow) { opacity: 0; }
+  .mo .dotprofile.is-in .dp-dot { animation: dp-rise .45s cubic-bezier(.3, 1.5, .5, 1) calc(var(--c) * 26ms + var(--r) * 18ms) both; }
+  .mo .dotprofile.is-in .dp-last { animation: dp-pop .5s cubic-bezier(.3, 1.6, .5, 1) 1.25s both; }
+  .mo .dotprofile.is-in .dp-glow { animation: dp-halo 1.8s ease-out 1.5s 6 both; }
+  @keyframes dp-rise { from { opacity: 0; transform: translateY(8px) scale(.3); } }
+  @keyframes dp-pop { from { opacity: 0; transform: scale(0); } 60% { transform: scale(1.6); } }
+  @keyframes dp-halo { 0% { opacity: .5; transform: scale(.6); } 100% { opacity: 0; transform: scale(2.4); } }
+
+  /* Grille de charge : les points creux apparaissent, puis les points pleins s'allument un à un, du bas vers le haut. */
+  .mo .dotgrid:not(.is-in) :is(.dg-on, .dg-off) { opacity: 0; }
+  .mo .dotgrid.is-in .dg-off { animation: dg-fade .4s ease-out calc(var(--i) * 3ms) both; }
+  .mo .dotgrid.is-in .dg-on { animation: dg-pop .35s cubic-bezier(.3, 1.6, .5, 1) calc(.25s + var(--i) * 12ms) both; }
+  @keyframes dg-fade { from { opacity: 0; } }
+  @keyframes dg-pop { from { opacity: 0; transform: scale(0); } 70% { transform: scale(1.35); } }
+
+  /* Radar : les cercles s'ouvrent, la cible glisse du centre jusqu'à sa place, puis une onde balaie le radar. */
+  .mo .radar-dots:not(.is-in) :is(.rd-ring, .rd-line, .rd-target, .rd-center) { opacity: 0; }
+  .mo .radar-dots.is-in .rd-ring { animation: rd-open .6s cubic-bezier(.2, .8, .2, 1) calc(var(--i) * 110ms) both; }
+  .mo .radar-dots.is-in .rd-center { animation: dp-pop .4s cubic-bezier(.3, 1.6, .5, 1) .2s both; }
+  .mo .radar-dots.is-in .rd-line { animation: dg-fade .5s ease-out .55s both; }
+  .mo .radar-dots.is-in .rd-target { animation: rd-go .8s cubic-bezier(.3, 1.3, .4, 1) .4s both; }
+  .mo .radar-dots.is-in .rd-ping { transform-box: fill-box; transform-origin: center; animation: dp-halo 1.8s ease-out 1.3s 6 both; }
+  .mo .radar-dots.is-in .rd-sweep { animation: rd-sweep 2.4s ease-out 1.2s 4 both; }
+  .rd-sweep { opacity: 0; }
+  @keyframes rd-open { from { opacity: 0; transform: scale(.3); } }
+  @keyframes rd-go { from { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(.4); } 30% { opacity: 1; } }
+  @keyframes rd-sweep { 0% { opacity: .6; transform: scale(.05); } 100% { opacity: 0; transform: scale(1); } }
+
+  /* Survol : la carte radar (cliquable) se soulève légèrement. */
+  .night button.glass { transition: transform .3s cubic-bezier(.2, .8, .2, 1), border-color .3s; }
+  .night button.glass:hover { transform: translateY(-3px); }
+}
+
+/* Détail de la charge : posé dans le coin le plus clair du dégradé, il reste en blanc plein, sur un verre un peu plus sombre, pour garder 4,5:1. */
+.week-card .g-sub { color: var(--n-text); }
+.night .week-card { background: rgba(255, 255, 255, .08); }

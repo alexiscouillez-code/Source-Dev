@@ -21,7 +21,7 @@ export interface Streams {
   distance?: (number | null)[]; // m
 }
 export interface Best { k1: number | null; k5: number | null; k10: number | null; vam: number | null }
-export interface Analysis { v: 1; hist: number[]; win: [number, number, number][]; gap: number | null; dec: number | null; loss: number | null; moving: number; best?: Best; /** Temps écoulé (s, pauses comprises) à chaque kilomètre entier */ km?: number[]; /** Fin de l’enregistrement : [secondes, km] */ end?: [number, number] }
+export interface Analysis { v: 1; hist: number[]; win: [number, number, number][]; gap: number | null; dec: number | null; loss: number | null; moving: number; best?: Best; /** Temps écoulé (s, pauses comprises) à chaque kilomètre entier */ km?: number[]; /** Fin de l’enregistrement : [secondes, km] */ end?: [number, number] ; /** Profil d’altitude (m), rééchantillonné en ALT_COLS points régulièrement espacés en distance. */ alt?: number[] }
 
 export const HIST_MIN = 60, HIST_STEP = 5, HIST_BINS = 32;
 const WIN = 120, STEP = 30, WARMUP = 480, MAX_WIN = 48;
@@ -107,10 +107,32 @@ export function analyze(s: Streams): Analysis | null {
     const e1 = mean(gapS, 0, h) / mean(hrS, 0, h), e2 = mean(gapS, h, m) / mean(hrS, h, m);
     if (e1 > 0) dec = Math.round(((e1 - e2) / e1) * 1000) / 10;
   }
-  return { v: 1, hist: hist.map((x) => Math.round(x)), win: kept, gap, dec, loss: s.altitude ? lossOf(s.altitude) : null, moving: Math.round(moving), best: bestsOf(s), ...kmSplits(s) };
+  return { v: 1, hist: hist.map((x) => Math.round(x)), win: kept, gap, dec, loss: s.altitude ? lossOf(s.altitude) : null, moving: Math.round(moving), best: bestsOf(s), ...kmSplits(s), ...(altProfile(s.altitude, s.distance) ? { alt: altProfile(s.altitude, s.distance) } : {}) };
 }
 
 /** Temps de passage à chaque kilomètre (pauses comprises, comme un chrono de course) : sert au débrief section par section. */
+export const ALT_COLS = 40;
+/**
+ * Profil d’altitude compact : ALT_COLS points régulièrement espacés en distance, chacun moyenne des mesures de son
+ * tronçon (lisse le bruit du baromètre ou du GPS). Rien sous 1 km ou sans altitude ni distance.
+ */
+export function altProfile(altitude: (number | null)[] | undefined, distance: (number | null)[] | undefined, cols = ALT_COLS): number[] | undefined {
+  if (!altitude || !distance) return undefined;
+  const d: number[] = [], z: number[] = [];
+  for (let i = 0; i < Math.min(altitude.length, distance.length); i++) {
+    const a = num(altitude[i]), x = num(distance[i]);
+    if (a != null && x != null && a > -500 && a < 9000 && (!d.length || x >= d[d.length - 1])) { d.push(x); z.push(a); }
+  }
+  if (d.length < cols || d[d.length - 1] - d[0] < 1000) return undefined;
+  const span = d[d.length - 1] - d[0], sum = new Array<number>(cols).fill(0), n = new Array<number>(cols).fill(0);
+  for (let i = 0; i < d.length; i++) { const c = Math.min(cols - 1, Math.floor(((d[i] - d[0]) / span) * cols)); sum[c] += z[i]; n[c]++; }
+  const out: number[] = [];
+  for (let c = 0; c < cols; c++) out.push(n[c] ? Math.round(sum[c] / n[c]) : NaN);
+  // Tronçon sans mesure (pause GPS) : on reprend la valeur voisine.
+  for (let c = 0; c < cols; c++) if (Number.isNaN(out[c])) out[c] = c ? out[c - 1] : out.find((v) => !Number.isNaN(v)) ?? 0;
+  return out;
+}
+
 function kmSplits(s: Streams): { km?: number[]; end?: [number, number] } {
   if (!s.distance) return {};
   const t: number[] = [], d: number[] = [];
@@ -229,6 +251,7 @@ export function cleanAnalysis(x: unknown): Analysis | null {
       k10: ok(a.best.k10, 1500, 36000) ? Math.round(a.best.k10!) : null, vam: ok(a.best.vam, 200, 2500) ? Math.round(a.best.vam!) : null,
     } : undefined,
     ...(Array.isArray(a.km) && a.km.length <= MAX_KM && a.km.every((v, i) => ok(v, 1, 900000) && (i === 0 || v >= a.km![i - 1])) ? { km: a.km.map(Math.round) } : {}),
+    ...(Array.isArray(a.alt) && a.alt.length >= 10 && a.alt.length <= 60 && a.alt.every((v) => ok(v, -500, 9000)) ? { alt: a.alt.map(Math.round) } : {}),
     ...(Array.isArray(a.end) && a.end.length === 2 && ok(a.end[0], 1, 900000) && ok(a.end[1], 0, 400) ? { end: [Math.round(a.end[0]), a.end[1]] as [number, number] } : {}),
   };
 }

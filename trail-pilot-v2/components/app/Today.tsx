@@ -1,5 +1,6 @@
 "use client";
 
+import TodayRun from "@/components/night/TodayRun";
 import StrengthButton from "./StrengthButton";
 import { useState } from "react";
 import type { Ctx } from "./AppShell";
@@ -86,6 +87,7 @@ export default function Today({ me, refresh, go, toast }: Ctx) {
           <button className="btn sm" onClick={() => go("plan")}>Mode jour de course</button>
         </div>
       )}
+      <TodayRun today={me.today} onTerrains={() => go("terrains")} />
       <FormCard me={me} go={go} onAsk={() => setAsk((x) => !x)} asking={ask} />
       {ask && <Coach toast={toast} />}
       <WeekCard today={me.today} toast={toast} />
