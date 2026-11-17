@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { switchTheme, THEME_EVENT } from "./liquidTheme";
 import { cleanTint, glassPalette, TINT_KEY, type GlassTint } from "./glassPalette";
 
@@ -80,3 +81,15 @@ export function setTint(tint: GlassTint, from?: HTMLElement | null) {
   if (currentAppearance() !== "glass") setAppearance("glass", from);
 }
 export const TINT_EVENT = "tp-tint";
+
+/** Apparence active, suivie en direct (null avant le premier rendu côté navigateur). */
+export function useAppearance(): Appearance | null {
+  const [a, setA] = useState<Appearance | null>(null);
+  useEffect(() => {
+    setA(currentAppearance());
+    const on = (e: Event) => setA((e as CustomEvent<Appearance>).detail);
+    window.addEventListener(APPEARANCE_EVENT, on);
+    return () => window.removeEventListener(APPEARANCE_EVENT, on);
+  }, []);
+  return a;
+}

@@ -9,8 +9,9 @@ import { dotHeights, fmtKm1, resample } from "@/lib/engine/today-run";
  *
  * Interaction : on parcourt le profil du doigt ou à la souris (ou aux flèches du clavier) ; la colonne visée
  * s'allume et grossit, les autres s'estompent, et une étiquette donne le kilomètre et l'altitude.
+ * Seulement en mode Verre (`interactive`) ; en Jour et en Nuit, le profil reste une image fixe, comme à l'origine.
  */
-export default function DotProfile({ profile, km, cols = 40, rows = 12, label }: { profile: number[]; km: number; cols?: number; rows?: number; label?: string }) {
+export default function DotProfile({ profile, km, cols = 40, rows = 12, label, interactive = false }: { profile: number[]; km: number; cols?: number; rows?: number; label?: string; interactive?: boolean }) {
   const values = resample(profile, cols);
   const heights = dotHeights(values, rows);
   const [hi, setHi] = useState<number | null>(null);
@@ -28,13 +29,16 @@ export default function DotProfile({ profile, km, cols = 40, rows = 12, label }:
   };
   const text = hi != null ? `${fmtKm1(kmAt(hi))} km, ${Math.round(values[hi])} mètres` : desc;
   return (
-    <figure className={`dotprofile${hi != null ? " is-scrub" : ""}`}>
+    <figure className={`dotprofile${interactive ? " is-live" : ""}${hi != null && interactive ? " is-scrub" : ""}`}>
       <div className="dp-plot">
-      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMax meet" tabIndex={0}
-        role="slider" aria-label={desc} aria-valuemin={0} aria-valuemax={cols - 1} aria-valuenow={hi ?? cols - 1} aria-valuetext={text}
-        onPointerDown={(e) => setHi(at(e))} onPointerMove={(e) => { if (e.pointerType === "mouse" || e.buttons) setHi(at(e)); }}
-        onPointerLeave={(e) => { if (e.pointerType === "mouse") setHi(null); }} onKeyDown={key} onBlur={() => setHi(null)}
-        style={{ touchAction: "pan-y" }}>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMax meet"
+        {...(interactive ? {
+          tabIndex: 0, role: "slider", "aria-label": desc, "aria-valuemin": 0, "aria-valuemax": cols - 1, "aria-valuenow": hi ?? cols - 1, "aria-valuetext": text,
+          onPointerDown: (e: PointerEvent<SVGSVGElement>) => setHi(at(e)),
+          onPointerMove: (e: PointerEvent<SVGSVGElement>) => { if (e.pointerType === "mouse" || e.buttons) setHi(at(e)); },
+          onPointerLeave: (e: PointerEvent<SVGSVGElement>) => { if (e.pointerType === "mouse") setHi(null); },
+          onKeyDown: key, onBlur: () => setHi(null), style: { touchAction: "pan-y" },
+        } : { role: "img", "aria-label": desc })}>
         <g className="dp-all">
           {heights.map((h, c) => Array.from({ length: h }, (_, r) => {
             // r = 0 en bas de la colonne. Le sommet de la colonne est le plus lumineux.
@@ -46,7 +50,7 @@ export default function DotProfile({ profile, km, cols = 40, rows = 12, label }:
           <circle className="dp-glow" cx={lastC * G + G / 2} cy={H - (lastR * G + G / 2)} r={6} fill="#fff" opacity="0.25" />
           <circle className="dp-last" cx={lastC * G + G / 2} cy={H - (lastR * G + G / 2)} r={3.2} fill="#fff" />
         </g>
-        {hi != null && (
+        {interactive && hi != null && (
           // Colonne visée : ses points s'allument (rangée par rangée), un repère pointillé monte jusqu'en haut.
           <g className="dp-hi" key={hi}>
             {Array.from({ length: rows }, (_, r) => r < heights[hi]
@@ -55,7 +59,7 @@ export default function DotProfile({ profile, km, cols = 40, rows = 12, label }:
           </g>
         )}
       </svg>
-      {hi != null && (
+      {interactive && hi != null && (
         <span className="dp-tip" aria-hidden="true" style={{ left: `${((hi + 0.5) / cols) * 100}%`, bottom: `${(heights[hi] / rows) * 100}%` }}>
           <b>{Math.round(values[hi])} m</b>{fmtKm1(kmAt(hi))} km
         </span>

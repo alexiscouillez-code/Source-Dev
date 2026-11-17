@@ -10,10 +10,11 @@ import { fmtKm1 } from "@/lib/engine/today-run";
  *
  * Interaction : un faisceau suit le doigt ou la souris autour du centre ; quand il passe sur la cible, elle
  * s'accroche (onde plus forte) et la direction s'affiche. Un glissé ne déclenche pas l'ouverture des terrains.
+ * Seulement en mode Verre (`interactive`) ; en Jour et en Nuit, la carte reste celle d'origine.
  */
 const DIRS = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"];
 const dirOf = (deg: number) => DIRS[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
-export default function RadarCard({ title, name, km, bearing, from, example, onOpen }: { title: string; name: string; km: number; bearing: number; from: string; example?: boolean; onOpen?: () => void }) {
+export default function RadarCard({ title, name, km, bearing, from, example, onOpen, interactive = false }: { title: string; name: string; km: number; bearing: number; from: string; example?: boolean; onOpen?: () => void; interactive?: boolean }) {
   const S = 100, C = S / 2, Rmax = 40;
   const r = Math.min(Rmax, Math.max(10, Math.sqrt(Math.min(km, 20) / 20) * Rmax));
   const a = ((bearing - 90) * Math.PI) / 180;
@@ -31,7 +32,7 @@ export default function RadarCard({ title, name, km, bearing, from, example, onO
   const diff = beam == null ? 180 : Math.abs((((beam - bearing) % 360) + 540) % 360 - 180);
   const locked = diff < 20;
   const ba = beam == null ? 0 : ((beam - 90) * Math.PI) / 180;
-  const handlers = {
+  const handlers = !interactive ? {} : {
     onPointerMove: (e: PointerEvent<HTMLElement>) => { if (e.pointerType === "mouse" || e.buttons) aim(e); },
     onPointerDown: (e: PointerEvent<HTMLElement>) => { start.current = [e.clientX, e.clientY]; moved.current = 0; aim(e); },
     onPointerLeave: () => setBeam(null),
@@ -59,7 +60,7 @@ export default function RadarCard({ title, name, km, bearing, from, example, onO
       </svg>
       <span className="g-num g-num-sm" aria-hidden="true">{fmtKm1(km)}<small> KM</small></span>
       <span className="g-sub" aria-hidden="true">{name}</span>
-      <span className={`rd-dir${beam != null ? " on" : ""}`} aria-hidden="true">{locked ? `Cap ${dirOf(bearing)} · trouvé` : beam != null ? `Cap ${dirOf(beam)}` : `Cap ${dirOf(bearing)}`}</span>
+      {interactive && <span className={`rd-dir${beam != null ? " on" : ""}`} aria-hidden="true">{locked ? `Cap ${dirOf(bearing)} · trouvé` : beam != null ? `Cap ${dirOf(beam)}` : `Cap ${dirOf(bearing)}`}</span>}
     </>
   );
   return onOpen

@@ -174,8 +174,8 @@ button.glass:hover { border-color: rgba(255, 255, 255, .5); }
    Interaction du bloc : profil et grille qu'on parcourt du doigt, tuiles qui se retournent, radar qui suit le pointeur.
    ===================================================================== */
 .dp-plot { position: relative; }
-.dotprofile svg, .dotgrid { cursor: crosshair; outline: none; -webkit-tap-highlight-color: transparent; }
-.dotprofile svg:focus-visible, .dotgrid:focus-visible { outline: 2px solid #fff; outline-offset: 4px; border-radius: 8px; }
+.dotprofile.is-live svg, .dotgrid.is-live { cursor: crosshair; outline: none; -webkit-tap-highlight-color: transparent; }
+.dotprofile.is-live svg:focus-visible, .dotgrid.is-live:focus-visible { outline: 2px solid #fff; outline-offset: 4px; border-radius: 8px; }
 /* Pendant le parcours : le reste du profil s'estompe, la colonne visée s'allume. */
 .dotprofile .dp-all, .dotgrid .dg-all { transition: opacity .25s ease; }
 .dotprofile.is-scrub .dp-all { opacity: .38; }

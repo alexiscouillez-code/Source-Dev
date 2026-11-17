@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api, dayLabel, fmtDur } from "@/components/app/client";
 import { EXAMPLE_GAIN_REF, EXAMPLE_PROFILE, EXAMPLE_RUN, EXAMPLE_TRAILHEAD, EXAMPLE_WEEK, fmtKm1, fmtPace, type TodayRun as Data } from "@/lib/engine/today-run";
 import GlassCard from "./GlassCard";
+import { useAppearance } from "@/components/appearance";
 import DotProfile from "./DotProfile";
 import DotGrid from "./DotGrid";
 import RadarCard from "./RadarCard";
@@ -23,6 +24,8 @@ export default function TodayRun({ today, onTerrains }: { today: string; onTerra
   // Tuiles retournables (D+ ↔ D+ par km, allure ↔ vitesse) et pourcentage visé sur la grille de charge.
   const [alt, setAlt] = useState({ gain: false, pace: false });
   const [pick, setPick] = useState<number | null>(null);
+  // Interactions (profil, grille, tuiles, radar) : mode Verre seulement ; en Jour et en Nuit, le bloc d'origine.
+  const glass = useAppearance() === "glass";
   const [failed, setFailed] = useState(false);
   useEffect(() => { api<Data>(`/api/today-run?today=${today}`).then(setD).catch(() => setFailed(true)); }, [today]);
   if (!d && !failed) return <section className="night is-loading" aria-busy="true" aria-label="Ma sortie du jour, chargement" />;
@@ -59,42 +62,62 @@ export default function TodayRun({ today, onTerrains }: { today: string; onTerra
           </p>
           {profile && (
             <div className="g-profile">
-              <DotProfile profile={profile} km={run.distanceKm} label={runEx ? "Profil d'altitude d'exemple." : undefined} />
+              <DotProfile interactive={glass} profile={profile} km={run.distanceKm} label={runEx ? "Profil d'altitude d'exemple." : undefined} />
             </div>
           )}
 
-          <div className="g-pair">
-            <GlassCard inner as="button" type="button" className="tap" aria-pressed={alt.gain}
-              aria-label={alt.gain ? `Dénivelé positif par kilomètre : ${run.gainM != null ? Math.round(run.gainM / run.distanceKm) : "inconnu"} mètres. Toucher pour revenir au total.` : `Dénivelé positif : ${run.gainM ?? "inconnu"} mètres. Toucher pour voir le dénivelé par kilomètre.`}
-              onClick={() => setAlt({ ...alt, gain: !alt.gain })}>
-              <span className="g-top g-top-sm"><ArrowUp /> {alt.gain ? "D+ / km" : "D+"}</span>
-              <span className="g-flip" key={alt.gain ? "a" : "b"}>
-                <span className="g-num g-num-sm" aria-hidden="true">{run.gainM == null ? "—" : alt.gain ? Math.round(run.gainM / run.distanceKm) : run.gainM}<small> M</small></span>
-                <span className="g-sub">
-                  {alt.gain ? "de montée par kilomètre" : <>{diff == null ? "Pas de sortie la semaine dernière" : `${diff >= 0 ? "+" : "−"}${Math.abs(diff)} m vs moy. sem. dernière`}{refEx && diff != null && " (exemple)"}</>}
+          {glass ? (
+            <div className="g-pair">
+              <GlassCard inner as="button" type="button" className="tap" aria-pressed={alt.gain}
+                aria-label={alt.gain ? `Dénivelé positif par kilomètre : ${run.gainM != null ? Math.round(run.gainM / run.distanceKm) : "inconnu"} mètres. Toucher pour revenir au total.` : `Dénivelé positif : ${run.gainM ?? "inconnu"} mètres. Toucher pour voir le dénivelé par kilomètre.`}
+                onClick={() => setAlt({ ...alt, gain: !alt.gain })}>
+                <span className="g-top g-top-sm"><ArrowUp /> {alt.gain ? "D+ / km" : "D+"}</span>
+                <span className="g-flip" key={alt.gain ? "a" : "b"}>
+                  <span className="g-num g-num-sm" aria-hidden="true">{run.gainM == null ? "—" : alt.gain ? Math.round(run.gainM / run.distanceKm) : run.gainM}<small> M</small></span>
+                  <span className="g-sub">
+                    {alt.gain ? "de montée par kilomètre" : <>{diff == null ? "Pas de sortie la semaine dernière" : `${diff >= 0 ? "+" : "−"}${Math.abs(diff)} m vs moy. sem. dernière`}{refEx && diff != null && " (exemple)"}</>}
+                  </span>
                 </span>
-              </span>
-            </GlassCard>
-            <GlassCard inner as="button" type="button" className="tap" aria-pressed={alt.pace}
-              aria-label={alt.pace ? `Vitesse moyenne en mouvement : ${(3600 / run.paceSec).toFixed(1).replace(".", ",")} kilomètres par heure. Toucher pour revenir à l'allure.` : `Allure moyenne : ${Math.floor(run.paceSec / 60)} minutes ${Math.round(run.paceSec % 60)} secondes par kilomètre. Toucher pour voir la vitesse.`}
-              onClick={() => setAlt({ ...alt, pace: !alt.pace })}>
-              <span className="g-top g-top-sm">{alt.pace ? "Vitesse" : "Allure"}</span>
-              <span className="g-flip" key={alt.pace ? "a" : "b"}>
-                <span className="g-num g-num-sm" aria-hidden="true">{alt.pace ? (3600 / run.paceSec).toFixed(1).replace(".", ",") : fmtPace(run.paceSec)}<small>{alt.pace ? " KM/H" : " /KM"}</small></span>
+              </GlassCard>
+              <GlassCard inner as="button" type="button" className="tap" aria-pressed={alt.pace}
+                aria-label={alt.pace ? `Vitesse moyenne en mouvement : ${(3600 / run.paceSec).toFixed(1).replace(".", ",")} kilomètres par heure. Toucher pour revenir à l'allure.` : `Allure moyenne : ${Math.floor(run.paceSec / 60)} minutes ${Math.round(run.paceSec % 60)} secondes par kilomètre. Toucher pour voir la vitesse.`}
+                onClick={() => setAlt({ ...alt, pace: !alt.pace })}>
+                <span className="g-top g-top-sm">{alt.pace ? "Vitesse" : "Allure"}</span>
+                <span className="g-flip" key={alt.pace ? "a" : "b"}>
+                  <span className="g-num g-num-sm" aria-hidden="true">{alt.pace ? (3600 / run.paceSec).toFixed(1).replace(".", ",") : fmtPace(run.paceSec)}<small>{alt.pace ? " KM/H" : " /KM"}</small></span>
+                  <span className="g-sub">en mouvement</span>
+                </span>
+              </GlassCard>
+            </div>
+          ) : (
+            <div className="g-pair">
+              <GlassCard inner>
+                <span className="g-top g-top-sm"><ArrowUp /> D+</span>
+                <span className="g-num g-num-sm" aria-hidden="true">{run.gainM ?? "—"}<small> M</small></span>
+                <span className="sr-only">Dénivelé positif : {run.gainM ?? "inconnu"} mètres.</span>
+                <span className="g-sub">
+                  {diff == null ? "Pas de sortie la semaine dernière" : `${diff >= 0 ? "+" : "−"}${Math.abs(diff)} m vs moy. sem. dernière`}
+                  {refEx && diff != null && " (exemple)"}
+                </span>
+              </GlassCard>
+              <GlassCard inner>
+                <span className="g-top g-top-sm">Allure</span>
+                <span className="g-num g-num-sm" aria-hidden="true">{fmtPace(run.paceSec)}<small> /KM</small></span>
+                <span className="sr-only">Allure moyenne : {Math.floor(run.paceSec / 60)} minutes {Math.round(run.paceSec % 60)} secondes par kilomètre.</span>
                 <span className="g-sub">en mouvement</span>
-              </span>
-            </GlassCard>
-          </div>
+              </GlassCard>
+            </div>
+          )}
         </GlassCard>
 
         <div className="g-pair g-pair-out">
           <GlassCard className="week-card">
             <div className="g-row"><span className="g-top">Charge de la semaine</span>{weekEx && <Example />}</div>
-            <DotGrid pct={week.pct} onPick={setPick} label={`Charge de la semaine : ${week.pct} % du temps prévu, ${fmtDur(week.doneMin)} sur ${fmtDur(week.plannedMin)}${weekEx ? " (exemple)" : ""}.`} />
+            <DotGrid interactive={glass} pct={week.pct} onPick={setPick} label={`Charge de la semaine : ${week.pct} % du temps prévu, ${fmtDur(week.doneMin)} sur ${fmtDur(week.plannedMin)}${weekEx ? " (exemple)" : ""}.`} />
             <span className={`g-num g-num-sm${pick != null ? " is-pick" : ""}`} aria-hidden="true">{pick ?? week.pct}<small> %</small></span>
             <span className="g-sub" aria-hidden="true">{pick != null ? `≈ ${fmtDur(Math.round((week.plannedMin * pick) / 100))} de la semaine prévue` : `${fmtDur(week.doneMin)} sur ${fmtDur(week.plannedMin)}`}</span>
           </GlassCard>
-          <RadarCard title="Prochain départ de sentier" name={th.name} km={th.km} bearing={th.bearing} from={th.from} example={thEx} onOpen={onTerrains} />
+          <RadarCard interactive={glass} title="Prochain départ de sentier" name={th.name} km={th.km} bearing={th.bearing} from={th.from} example={thEx} onOpen={onTerrains} />
         </div>
         {failed && <p className="g-sub night-note">Données indisponibles pour le moment : exemple affiché.</p>}
       </div>

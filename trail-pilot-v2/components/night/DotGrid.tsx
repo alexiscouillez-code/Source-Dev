@@ -8,9 +8,9 @@ import { useState, type KeyboardEvent, type PointerEvent } from "react";
  *
  * Interaction : chaque point vaut 1 % de la semaine prévue. On les parcourt du doigt, à la souris ou aux flèches ;
  * `onPick` reçoit le pourcentage visé (null en sortant) et les points jusqu'à lui s'allument. Un toucher fait
- * partir une onde de points depuis le point touché.
+ * partir une onde de points depuis le point touché. Seulement en mode Verre (`interactive`) ; ailleurs, image fixe.
  */
-export default function DotGrid({ pct, label, onPick }: { pct: number; label: string; onPick?: (n: number | null) => void }) {
+export default function DotGrid({ pct, label, onPick, interactive = false }: { pct: number; label: string; onPick?: (n: number | null) => void; interactive?: boolean }) {
   const filled = Math.max(0, Math.min(100, Math.round(pct)));
   const G = 10, R = 3;
   const [hi, setHi] = useState<number | null>(null);
@@ -31,16 +31,19 @@ export default function DotGrid({ pct, label, onPick }: { pct: number; label: st
     pick(Math.max(0, Math.min(99, (hi ?? Math.max(0, filled - 1)) + d)));
   };
   return (
-    <svg className={`dotgrid${hi != null ? " is-scrub" : ""}`} viewBox={`0 0 ${G * 10} ${G * 10}`} tabIndex={0}
-      role="slider" aria-label={label} aria-valuemin={1} aria-valuemax={100} aria-valuenow={hi != null ? hi + 1 : filled} aria-valuetext={hi != null ? `${hi + 1} % de la semaine prévue` : label}
-      onPointerDown={(e) => {
-        const i = at(e), p = pos(i), k = Date.now();
-        pick(i); setWave({ k, c: p.col, r: p.row });
-        window.setTimeout(() => setWave((w) => (w?.k === k ? null : w)), 1300);
-      }}
-      onPointerMove={(e) => { if (e.pointerType === "mouse" || e.buttons) pick(at(e)); }}
-      onPointerLeave={(e) => { if (e.pointerType === "mouse") pick(null); }} onBlur={() => pick(null)} onKeyDown={key}
-      style={{ touchAction: "pan-y" }}>
+    <svg className={`dotgrid${interactive ? " is-live" : ""}${hi != null ? " is-scrub" : ""}`} viewBox={`0 0 ${G * 10} ${G * 10}`}
+      {...(interactive ? {
+        tabIndex: 0, role: "slider", "aria-label": label, "aria-valuemin": 1, "aria-valuemax": 100, "aria-valuenow": hi != null ? hi + 1 : filled,
+        "aria-valuetext": hi != null ? `${hi + 1} % de la semaine prévue` : label,
+        onPointerDown: (e: PointerEvent<SVGSVGElement>) => {
+          const i = at(e), p = pos(i), k = Date.now();
+          pick(i); setWave({ k, c: p.col, r: p.row });
+          window.setTimeout(() => setWave((w) => (w?.k === k ? null : w)), 1300);
+        },
+        onPointerMove: (e: PointerEvent<SVGSVGElement>) => { if (e.pointerType === "mouse" || e.buttons) pick(at(e)); },
+        onPointerLeave: (e: PointerEvent<SVGSVGElement>) => { if (e.pointerType === "mouse") pick(null); },
+        onBlur: () => pick(null), onKeyDown: key, style: { touchAction: "pan-y" },
+      } : { role: "img", "aria-label": label })}>
       <g className="dg-all">
         {Array.from({ length: 100 }, (_, i) => {
           // Remplissage ligne par ligne en partant du bas, de gauche à droite.

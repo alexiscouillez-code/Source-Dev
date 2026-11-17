@@ -82,7 +82,7 @@ scenario("Bloc « Ma sortie du jour »", async () => {
     // Accessibilité : graphiques nommés, valeurs lues, focus visible.
     const labels = await page.evaluate(() => [...document.querySelectorAll(".night svg[role=img], .night svg[role=slider]")].map((s) => s.getAttribute("aria-label")));
     check(labels.length === 3 && labels.every((l) => l && l.length > 20), "les trois graphiques de points ont une description", labels.map((l) => l?.slice(0, 50)));
-    check(await page.evaluate(() => document.querySelectorAll(".night .sr-only").length >= 1 && [...document.querySelectorAll(".night .tap")].every((b) => (b.getAttribute("aria-label") ?? "").length > 20)), "les grands chiffres ont un équivalent pour lecteur d'écran");
+    check(await page.evaluate(() => document.querySelectorAll(".night .sr-only").length >= 3), "les grands chiffres ont un équivalent pour lecteur d'écran");
     await page.locator(".radar-card").focus();
     await page.keyboard.press("Shift+Tab"); await page.keyboard.press("Tab");
     const focus = await page.evaluate(() => { const e = document.activeElement; const s = getComputedStyle(e); return { cls: e.className, outline: s.outlineStyle, w: s.outlineWidth }; });
@@ -91,6 +91,16 @@ scenario("Bloc « Ma sortie du jour »", async () => {
 
     // Interaction : profil parcouru, grille explorée, tuiles retournées, radar qui suit le pointeur.
     if (kind === "reel") {
+      // Mode Nuit : le bloc d'origine, sans ces interactions.
+      const plain = await page.evaluate(() => ({ live: document.querySelectorAll(".night .is-live, .night .tap, .night .rd-dir").length, tiles: document.querySelectorAll(".night .run-card .g-pair .glass-inner").length }));
+      check(plain.live === 0 && plain.tiles === 2, "mode Nuit : bloc d'origine, sans les interactions du mode Verre", plain);
+      const pb0 = await page.locator(".night .dotprofile svg").boundingBox();
+      await page.mouse.move(pb0.x + pb0.width / 2, pb0.y + pb0.height / 2);
+      check((await page.locator(".night .dp-tip").count()) === 0, "mode Nuit : pas d'étiquette sur le profil");
+      await page.mouse.move(0, 0);
+      // Mode Verre : interactions actives.
+      await page.evaluate(() => { document.documentElement.dataset.theme = "glass"; window.dispatchEvent(new CustomEvent("tp-theme", { detail: "glass" })); });
+      await page.waitForSelector(".night .dotprofile.is-live");
       const prof = page.locator(".night .dotprofile svg");
       await prof.scrollIntoViewIfNeeded();
       const pb = await prof.boundingBox();
@@ -130,6 +140,8 @@ scenario("Bloc « Ma sortie du jour »", async () => {
       await page.locator(".night .g-pair-out").screenshot({ path: `${OUT}/night-interaction-radar-${width}.png` });
       check(radar.beam > 0 && /cap /i.test(radar.dir), "radar : le faisceau suit le pointeur et donne le cap", radar);
       await page.mouse.move(0, 0);
+      await page.evaluate(() => { document.documentElement.dataset.theme = "dark"; window.dispatchEvent(new CustomEvent("tp-theme", { detail: "dark" })); });
+      await page.waitForTimeout(300);
     }
 
     check((await overflow(page)) <= 0, "pas de débordement horizontal");
