@@ -92,5 +92,5 @@ button.link::after { content: ""; position: absolute; inset: -11px -8px; }
 .race-anchor legend { padding: 0; margin-bottom: 6px; font-size: 14px; }
 .picks.p4 { grid-template-columns: repeat(4, 1fr); }
 @media (max-width: 420px) { .picks.p4 { grid-template-columns: repeat(2, 1fr); } }
-.race-time .race-refine { justify-self: end; margin-top: 4px; color: var(--ember-t, var(--ember)); }
+.race-time .race-refine { justify-self: end; margin-top: 4px; color: var(--snow); text-decoration: underline; text-underline-offset: 3px; }
 @media (max-width: 600px) { .race-time .race-refine { justify-self: start; } }
