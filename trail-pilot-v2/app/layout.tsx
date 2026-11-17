@@ -6,6 +6,7 @@ import "@fontsource/jetbrains-mono/600.css";
 import "./liquid.css";
 import { SITE_URL, SITE_NAME, SITE_DESC } from "@/lib/site";
 import DotDefs from "@/components/DotDefs";
+import GlassTouch from "@/components/GlassTouch";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -34,6 +35,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <DotDefs />
+        <GlassTouch />
         {children}
         <Analytics />
       </body>

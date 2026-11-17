@@ -169,3 +169,49 @@ button.glass:hover { border-color: rgba(255, 255, 255, .5); }
 /* Détail de la charge : posé dans le coin le plus clair du dégradé, il reste en blanc plein, sur un verre un peu plus sombre, pour garder 4,5:1. */
 .week-card .g-sub { color: var(--n-text); }
 .night .week-card { background: rgba(255, 255, 255, .08); }
+
+/* =====================================================================
+   Interaction du bloc : profil et grille qu'on parcourt du doigt, tuiles qui se retournent, radar qui suit le pointeur.
+   ===================================================================== */
+.dp-plot { position: relative; }
+.dotprofile svg, .dotgrid { cursor: crosshair; outline: none; -webkit-tap-highlight-color: transparent; }
+.dotprofile svg:focus-visible, .dotgrid:focus-visible { outline: 2px solid #fff; outline-offset: 4px; border-radius: 8px; }
+/* Pendant le parcours : le reste du profil s'estompe, la colonne visée s'allume. */
+.dotprofile .dp-all, .dotgrid .dg-all { transition: opacity .25s ease; }
+.dotprofile.is-scrub .dp-all { opacity: .38; }
+.dotgrid.is-scrub .dg-all { opacity: .5; }
+.dp-tip {
+  position: absolute; transform: translate(-50%, -10px); pointer-events: none; white-space: nowrap;
+  display: grid; justify-items: center; gap: 1px; padding: 5px 9px; border-radius: 12px;
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; color: var(--n-0, #0b0b2b); background: #fff;
+  box-shadow: 0 8px 20px -8px rgba(0, 0, 0, .5);
+}
+.dp-tip b { font-family: inherit; font-size: 13px; letter-spacing: 0; }
+.week-card .g-num.is-pick { color: #fff; }
+.rd-dir { font-family: var(--mono); font-size: 10.5px; letter-spacing: .18em; text-transform: uppercase; color: rgba(255, 255, 255, .92); }
+.rd-dir.on { color: #fff; }
+.glass-inner.tap { cursor: pointer; font: inherit; color: inherit; text-align: left; width: 100%; border: 0; -webkit-tap-highlight-color: transparent; }
+.glass-inner.tap:hover { background: rgba(255, 255, 255, .13); }
+.glass-inner.tap:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+.g-flip { display: grid; gap: 6px; }
+/* Petit signe « retournable » en coin. */
+.glass-inner.tap::before { content: ""; position: absolute; top: 12px; right: 12px; width: 5px; height: 5px; border-radius: 50%; background: rgba(255, 255, 255, .7); box-shadow: -8px 0 0 rgba(255, 255, 255, .35); }
+.glass-inner.tap[aria-pressed="true"]::before { box-shadow: -8px 0 0 rgba(255, 255, 255, .85); background: rgba(255, 255, 255, .35); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .dp-hi-dot { transform-box: fill-box; transform-origin: center; animation: dp-pop .32s cubic-bezier(.3, 1.6, .5, 1) calc(var(--r) * 14ms) both; }
+  .dp-hi-guide { animation: dg-fade .3s ease-out calc(var(--r) * 18ms) both; }
+  .dp-tip { animation: tip-in .22s cubic-bezier(.2, .8, .2, 1) both; transition: left .12s ease-out, bottom .12s ease-out; }
+  @keyframes tip-in { from { opacity: 0; transform: translate(-50%, -2px) scale(.9); } }
+  .dg-ring { transform-box: fill-box; transform-origin: center; animation: dp-pop .3s cubic-bezier(.3, 1.6, .5, 1) both; }
+  .dg-wave circle { transform-box: fill-box; transform-origin: center; opacity: 0; animation: dg-wave .55s ease-out calc(var(--d) * 45ms) both; }
+  @keyframes dg-wave { 0% { opacity: .9; transform: scale(.6); } 100% { opacity: 0; transform: scale(2); } }
+  .week-card .g-num.is-pick { animation: num-tick .2s ease-out; }
+  @keyframes num-tick { from { transform: translateY(3px); opacity: .6; } }
+  /* Tuiles : le contenu bascule comme une carte qu'on retourne. */
+  .g-flip { animation: g-flip .42s cubic-bezier(.2, .8, .2, 1) both; transform-origin: 50% 0; }
+  @keyframes g-flip { from { opacity: 0; transform: perspective(400px) rotateX(-70deg); } }
+  .rd-beam circle { animation: dg-fade .18s ease-out both; }
+  .rd-target.is-locked .rd-ping { animation: rd-lock 1s ease-out infinite !important; }
+  @keyframes rd-lock { 0% { opacity: .7; transform: scale(.8); } 100% { opacity: 0; transform: scale(3); } }
+}

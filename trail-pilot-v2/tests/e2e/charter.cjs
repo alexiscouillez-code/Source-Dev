@@ -52,6 +52,22 @@ scenario("Charte pointillée, couleur de fond et transition du mode Verre", asyn
   const tiles = await page.evaluate(() => getComputedStyle(document.querySelector(".vo2-races > div")).backgroundColor);
   check(/rgba\(255, 255, 255/.test(tiles), "tuiles intérieures en verre (plus de cases noires)", tiles);
 
+  // ---------- Interaction : reflet sous le pointeur, éclat de points au toucher ----------
+  const card = page.locator(".card").first();
+  await card.scrollIntoViewIfNeeded();
+  const cb = await card.boundingBox();
+  await page.mouse.move(cb.x + cb.width * 0.3, cb.y + 20);
+  await page.waitForTimeout(200);
+  check(await card.evaluate((e) => e.classList.contains("is-lit") && /px/.test(e.style.getPropertyValue("--mx"))), "la carte sous le pointeur capte la lumière");
+  const op = await card.evaluate((e) => getComputedStyle(e, "::after").opacity);
+  await page.waitForTimeout(450);
+  const lit = await card.evaluate((e) => { const st = getComputedStyle(e, "::after"); return { o: st.opacity, c: st.content, bg: st.backgroundImage.slice(0, 40), cls: e.className }; });
+  check(Number(lit.o) > 0.9, "le reflet apparaît", { op, lit });
+  const nb = await page.locator(".tabbar [data-tab=analysis]").boundingBox();
+  await page.mouse.move(nb.x + nb.width / 2, nb.y + nb.height / 2); await page.mouse.down();
+  check((await page.locator(".tap-dots i").count()) === 10, "un toucher fait éclater un anneau de points");
+  await page.mouse.up();
+
   // ---------- Couleur de fond ----------
   await tab(page, "account");
   const pick = page.locator(".tint-pick");

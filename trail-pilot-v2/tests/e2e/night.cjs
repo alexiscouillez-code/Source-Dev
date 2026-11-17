@@ -80,14 +80,57 @@ scenario("Bloc « Ma sortie du jour »", async () => {
     }
 
     // Accessibilité : graphiques nommés, valeurs lues, focus visible.
-    const labels = await page.evaluate(() => [...document.querySelectorAll(".night svg[role=img]")].map((s) => s.getAttribute("aria-label")));
+    const labels = await page.evaluate(() => [...document.querySelectorAll(".night svg[role=img], .night svg[role=slider]")].map((s) => s.getAttribute("aria-label")));
     check(labels.length === 3 && labels.every((l) => l && l.length > 20), "les trois graphiques de points ont une description", labels.map((l) => l?.slice(0, 50)));
-    check(await page.evaluate(() => document.querySelectorAll(".night .sr-only").length >= 3), "les grands chiffres ont un équivalent pour lecteur d'écran");
+    check(await page.evaluate(() => document.querySelectorAll(".night .sr-only").length >= 1 && [...document.querySelectorAll(".night .tap")].every((b) => (b.getAttribute("aria-label") ?? "").length > 20)), "les grands chiffres ont un équivalent pour lecteur d'écran");
     await page.locator(".radar-card").focus();
     await page.keyboard.press("Shift+Tab"); await page.keyboard.press("Tab");
     const focus = await page.evaluate(() => { const e = document.activeElement; const s = getComputedStyle(e); return { cls: e.className, outline: s.outlineStyle, w: s.outlineWidth }; });
     check(/radar-card/.test(focus.cls) && focus.outline !== "none" && parseFloat(focus.w) >= 2, "focus clavier visible sur la carte radar", focus);
     await page.locator(".night-title").click();
+
+    // Interaction : profil parcouru, grille explorée, tuiles retournées, radar qui suit le pointeur.
+    if (kind === "reel") {
+      const prof = page.locator(".night .dotprofile svg");
+      await prof.scrollIntoViewIfNeeded();
+      const pb = await prof.boundingBox();
+      await page.mouse.move(pb.x + pb.width * 0.5, pb.y + pb.height * 0.6);
+      const tip = page.locator(".night .dp-tip");
+      check(await tip.isVisible() && /\d+ m.*\d+,\d km/.test((await tip.innerText()).replace(/\s+/g, " ")), "profil : le kilomètre et l'altitude s'affichent sous le doigt", await tip.innerText().catch(() => ""));
+      check((await page.locator(".night .dp-hi .dp-hi-dot").count()) > 0, "profil : la colonne visée s'allume");
+      await page.waitForTimeout(500);
+      await page.locator(".night .run-card").screenshot({ path: `${OUT}/night-interaction-profil-${width}.png` });
+      await prof.focus(); await page.keyboard.press("Home");
+      check(/^0,\d km/.test(await prof.getAttribute("aria-valuetext")), "profil : parcours au clavier (début)", await prof.getAttribute("aria-valuetext"));
+      await page.keyboard.press("End");
+      check(/18,\d km/.test(await prof.getAttribute("aria-valuetext")), "profil : parcours au clavier (fin)", await prof.getAttribute("aria-valuetext"));
+      await page.mouse.move(0, 0);
+      const grid = page.locator(".night .dotgrid");
+      await grid.scrollIntoViewIfNeeded();
+      const gb = await grid.boundingBox();
+      await page.mouse.move(gb.x + gb.width * 0.05, gb.y + gb.height * 0.95); // point en bas à gauche : 1 %
+      check((await page.locator(".week-card .g-num").innerText()).startsWith("1"), "grille : le pourcentage visé s'affiche", await page.locator(".week-card .g-num").innerText());
+      check((await page.locator(".week-card .g-sub").innerText()).includes("de la semaine prévue"), "grille : la durée correspondante s'affiche");
+      await page.mouse.move(gb.x + gb.width * 0.55, gb.y + gb.height * 0.35); await page.waitForTimeout(400);
+      await page.locator(".night .g-pair-out").screenshot({ path: `${OUT}/night-interaction-grille-${width}.png` });
+      await page.mouse.click(gb.x + gb.width * 0.5, gb.y + gb.height * 0.5);
+      check((await page.locator(".night .dg-wave circle").count()) === 100, "grille : un toucher fait partir une onde de points");
+      await page.mouse.move(0, 0);
+      const tiles = page.locator(".night .run-card .tap");
+      await tiles.nth(1).click();
+      check((await tiles.nth(1).getAttribute("aria-pressed")) === "true" && (await tiles.nth(1).innerText()).includes("KM/H"), "tuile allure : se retourne en vitesse", await tiles.nth(1).innerText());
+      await tiles.nth(0).click();
+      check((await tiles.nth(0).innerText()).includes("D+ / km"), "tuile D+ : se retourne en D+ par km");
+      await tiles.nth(0).click(); await tiles.nth(1).click();
+      await page.locator(".night .radar-dots").scrollIntoViewIfNeeded();
+      const rb = await page.locator(".night .radar-dots").boundingBox();
+      await page.mouse.move(rb.x + rb.width * 0.9, rb.y + rb.height * 0.5);
+      await page.mouse.move(rb.x + rb.width * 0.8, rb.y + rb.height * 0.3, { steps: 4 });
+      const radar = { beam: await page.locator(".night .rd-beam circle").count(), dir: await page.locator(".night .rd-dir").innerText().catch((e) => e.message.slice(0, 80)), rb, vh: page.viewportSize() };
+      await page.locator(".night .g-pair-out").screenshot({ path: `${OUT}/night-interaction-radar-${width}.png` });
+      check(radar.beam > 0 && /cap /i.test(radar.dir), "radar : le faisceau suit le pointeur et donne le cap", radar);
+      await page.mouse.move(0, 0);
+    }
 
     check((await overflow(page)) <= 0, "pas de débordement horizontal");
     // La barre de navigation fixe recouvrirait le bas du bloc sur la capture : on la masque le temps des captures.

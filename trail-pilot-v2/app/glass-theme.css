@@ -243,3 +243,40 @@
 :root[data-theme="glass"] .vo2-races > div { border-radius: 20px; }
 :root[data-theme="glass"] .vo2-races b { font-family: var(--display); font-weight: 500; font-size: 24px; letter-spacing: -.02em; }
 :root[data-theme="glass"] .vo2-races small { letter-spacing: .18em; }
+
+/* =====================================================================
+   Interaction (components/GlassTouch.tsx)
+   - la carte sous le pointeur capte la lumière : un reflet doux suit le doigt ou la souris ;
+   - un toucher sur un élément actif fait éclater un anneau de points ;
+   - les éléments actifs s'enfoncent légèrement à l'appui (propriété « scale », qui ne gêne pas les animations).
+   ===================================================================== */
+:root[data-theme="glass"] :is(.card, .kpi, .glass, .vo2-races > div, .session, .race-time, .auth-card, .free-card) { position: relative; isolation: isolate; }
+:root[data-theme="glass"] :is(.card, .kpi, .glass, .vo2-races > div, .session, .race-time, .auth-card, .free-card)::after {
+  /* Derrière le contenu, devant le fond de la carte (z-index négatif dans la carte isolée). */
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: -1;
+  background:
+    radial-gradient(220px circle at var(--mx, 50%) var(--my, 0%), rgba(255, 255, 255, .16), transparent 62%),
+    radial-gradient(120px circle at var(--mx, 50%) var(--my, 0%), rgba(255, 255, 255, .1), transparent 70%);
+  opacity: 0; transition: opacity .35s ease;
+}
+:root[data-theme="glass"] :is(.card, .kpi, .glass, .vo2-races > div, .session, .race-time, .auth-card, .free-card).is-lit::after { opacity: 1; }
+/* Bordure qui s'éclaire du côté du pointeur. */
+:root[data-theme="glass"] .is-lit { border-color: rgba(255, 255, 255, .38); }
+
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-theme="glass"] :is(.btn, button.glass, .glass-inner.tap, .picks label, .tint-sw, .navbtn, .view-switch button, .chip[role=button], .vo2-races > div) { transition: scale .18s cubic-bezier(.2, .8, .2, 1); }
+  :root[data-theme="glass"] :is(.btn, button.glass, .glass-inner.tap, .picks label, .navbtn, .view-switch button):active { scale: .96; }
+  :root[data-theme="glass"] button.glass:active { scale: .98; }
+
+  /* Éclat de points au toucher. */
+  .tap-dots { position: fixed; z-index: 2147482000; width: 0; height: 0; pointer-events: none; }
+  .tap-dots i {
+    position: absolute; left: -2.5px; top: -2.5px; width: 5px; height: 5px; border-radius: 50%; background: #fff;
+    box-shadow: 0 0 6px rgba(255, 255, 255, .7);
+    animation: tap-dot .6s cubic-bezier(.15, .8, .25, 1) both;
+  }
+  @keyframes tap-dot {
+    from { transform: rotate(var(--a)) translateY(-4px) scale(.4); opacity: .95; }
+    to { transform: rotate(var(--a)) translateY(-26px) scale(.15); opacity: 0; }
+  }
+}
