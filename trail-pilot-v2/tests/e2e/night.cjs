@@ -34,9 +34,9 @@ const textBoxes = (page) => page.evaluate(() => {
 
 scenario("Bloc « Ma sortie du jour »", async () => {
   const boxes = {};
-  for (const [kind, device, width] of [["reel", "phone", 375], ["reel", "desktop", 1280], ["exemple", "phone", 375], ["exemple", "desktop", 1280]]) {
-    console.log(`— ${kind}, ${width} px`);
-    const { page, errors, api, email, ctx } = await newUser(device);
+  for (const [kind, device, width, theme = "dark"] of [["reel", "phone", 375], ["reel", "desktop", 1280], ["exemple", "phone", 375], ["exemple", "desktop", 1280], ["reel", "phone", 375, "light"], ["reel", "phone", 375, "glass"]]) {
+    console.log(`— ${kind}, ${width} px, ${theme}`);
+    const { page, errors, api, email, ctx } = await newUser(device, { theme });
     if (device === "phone") await page.setViewportSize({ width: 375, height: 812 });
     else await page.setViewportSize({ width: 1280, height: 900 });
     if (kind === "reel") await seedReal(api, email);
@@ -60,8 +60,13 @@ scenario("Bloc « Ma sortie du jour »", async () => {
 
     const box = await block.boundingBox();
     const inner = await page.locator(".night-inner").boundingBox();
-    check(inner.width <= 381, "le contenu ne dépasse pas 380 px de large", Math.round(inner.width));
-    check(Math.abs(inner.x + inner.width / 2 - (box.x + box.width / 2)) < 2, "le contenu est centré dans le bloc");
+    if (width < 900) check(inner.width <= 381, "le contenu ne dépasse pas 380 px de large", Math.round(inner.width));
+    else check((await page.evaluate(() => getComputedStyle(document.querySelector(".night-inner")).gridTemplateColumns.split(" ").length)) === 2, "grand écran : la grande carte à gauche, charge et radar à droite");
+    // Le bloc suit l'apparence : pas de panneau de nuit à part, cartes au style de l'apparence choisie.
+    const look = await page.evaluate(() => { const n = getComputedStyle(document.querySelector(".night")), c = getComputedStyle(document.querySelector(".night .run-card")), ref = document.querySelector(".card"); return { panel: n.backgroundImage, card: c.backgroundColor, blur: c.backdropFilter, ref: ref ? getComputedStyle(ref).backgroundColor : null }; });
+    check(look.panel === "none", "le bloc n'a plus de fond de nuit à part", look.panel.slice(0, 60));
+    if (theme === "glass") check(/blur/.test(look.blur), "mode Verre : cartes en verre", look);
+    else check(look.card === look.ref && !/blur/.test(look.blur), `mode ${theme === "light" ? "Jour" : "Nuit"} : mêmes cartes que le reste du site`, look);
     const cols = await page.evaluate(() => [".run-card .g-pair", ".g-pair-out"].map((s) => getComputedStyle(document.querySelector(s)).gridTemplateColumns.split(" ").length));
     check(cols.every((c) => c === 2), "les deux paires de cartes restent sur deux colonnes", cols);
 
@@ -82,7 +87,7 @@ scenario("Bloc « Ma sortie du jour »", async () => {
     // Accessibilité : graphiques nommés, valeurs lues, focus visible.
     const labels = await page.evaluate(() => [...document.querySelectorAll(".night svg[role=img], .night svg[role=slider]")].map((s) => s.getAttribute("aria-label")));
     check(labels.length === 3 && labels.every((l) => l && l.length > 20), "les trois graphiques de points ont une description", labels.map((l) => l?.slice(0, 50)));
-    check(await page.evaluate(() => document.querySelectorAll(".night .sr-only").length >= 3), "les grands chiffres ont un équivalent pour lecteur d'écran");
+    check(await page.evaluate(() => document.querySelectorAll(".night .sr-only").length + [...document.querySelectorAll(".night .tap")].filter((b) => (b.getAttribute("aria-label") ?? "").length > 20).length >= 3), "les grands chiffres ont un équivalent pour lecteur d'écran");
     await page.locator(".radar-card").focus();
     await page.keyboard.press("Shift+Tab"); await page.keyboard.press("Tab");
     const focus = await page.evaluate(() => { const e = document.activeElement; const s = getComputedStyle(e); return { cls: e.className, outline: s.outlineStyle, w: s.outlineWidth }; });
@@ -90,7 +95,7 @@ scenario("Bloc « Ma sortie du jour »", async () => {
     await page.locator(".night-title").click();
 
     // Interaction : profil parcouru, grille explorée, tuiles retournées, radar qui suit le pointeur.
-    if (kind === "reel") {
+    if (kind === "reel" && theme === "dark") {
       // Mode Nuit : le bloc d'origine, sans ces interactions.
       const plain = await page.evaluate(() => ({ live: document.querySelectorAll(".night .is-live, .night .tap, .night .rd-dir").length, tiles: document.querySelectorAll(".night .run-card .g-pair .glass-inner").length }));
       check(plain.live === 0 && plain.tiles === 2, "mode Nuit : bloc d'origine, sans les interactions du mode Verre", plain);
@@ -151,14 +156,14 @@ scenario("Bloc « Ma sortie du jour »", async () => {
     // hors de l'écran au moment de la capture resteraient dans leur état de départ (invisibles).
     await page.evaluate(() => document.documentElement.classList.remove("mo"));
     await page.waitForTimeout(300);
-    await block.screenshot({ path: `${OUT}/night-${kind}-${width}.png` });
-    boxes[`${kind}-${width}`] = await textBoxes(page);
+    await block.screenshot({ path: `${OUT}/night-${kind}-${width}${theme === "dark" ? "" : "-" + theme}.png` });
+    boxes[`${kind}-${width}${theme === "dark" ? "" : "-" + theme}`] = await textBoxes(page);
     // Version sans texte, pour mesurer le fond derrière chaque texte.
     await page.addStyleTag({ content: ".night *, .night *::before { color: transparent !important; } .night .g-example { border-color: transparent !important; }" });
-    await block.screenshot({ path: `${OUT}/night-${kind}-${width}-fond.png` });
+    await block.screenshot({ path: `${OUT}/night-${kind}-${width}${theme === "dark" ? "" : "-" + theme}-fond.png` });
 
     // Mouvement réduit : aucune animation.
-    if (kind === "reel" && device === "phone") {
+    if (kind === "reel" && device === "phone" && theme === "dark") {
       await page.emulateMedia({ reducedMotion: "reduce" });
       await page.reload(); await page.waitForSelector(".night .run-card");
       const anims = await page.evaluate(() => [...document.querySelectorAll(".night *")].filter((e) => getComputedStyle(e).animationName !== "none").length);

@@ -215,3 +215,39 @@ button.glass:hover { border-color: rgba(255, 255, 255, .5); }
   .rd-target.is-locked .rd-ping { animation: rd-lock 1s ease-out infinite !important; }
   @keyframes rd-lock { 0% { opacity: .7; transform: scale(.8); } 100% { opacity: 0; transform: scale(3); } }
 }
+
+/* =====================================================================
+   Le bloc suit l'apparence choisie : plus de panneau de nuit à part.
+   - Verre : cartes en verre posées sur le fond du site (bleu accent pour le radar) ;
+   - Jour et Nuit : cartes du site (mêmes fonds, bordures et textes que les autres cartes), points de la couleur du texte.
+   ===================================================================== */
+.night svg, .dp-tip { color: var(--n-dot, #fff); }
+.night {
+  background: none; box-shadow: none; padding: 0; border-radius: 0; overflow: visible; isolation: auto;
+}
+:root[data-theme] .night { background: none; box-shadow: none; }
+.night .night-stars { display: none; }
+.night-title { margin: 0 2px 2px; }
+.g-meta { color: color-mix(in srgb, var(--n-text) 22%, transparent); }
+/* Grand écran : la grande carte à gauche, charge et radar à droite. */
+@media (min-width: 900px) {
+  .night-inner { max-width: none; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); align-items: start; }
+  .night-inner > .night-title, .night-inner > .night-note { grid-column: 1 / -1; }
+  .night-inner > .g-pair-out { margin-top: 0; }
+}
+
+:root:is([data-theme="dark"], [data-theme="light"]) .night {
+  --n-text: var(--snow); --n-soft: var(--soft); --n-cap: var(--mute); --n-dot: var(--snow); --n-tip: var(--ink-2);
+}
+:root:is([data-theme="dark"], [data-theme="light"]) .night .glass {
+  background: var(--ink-2); border: 1px solid var(--line); border-radius: 22px; box-shadow: none;
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+}
+:root:is([data-theme="dark"], [data-theme="light"]) .night .glass-inner { background: var(--ink-3); border: 0; border-radius: 16px; }
+:root:is([data-theme="dark"], [data-theme="light"]) .night .week-card { background: var(--ink-2); }
+/* Radar : carte du site, points couleur de la marque. */
+:root:is([data-theme="dark"], [data-theme="light"]) .night .radar-card .radar-dots { color: var(--ember); }
+:root:is([data-theme="dark"], [data-theme="light"]) .night .radar-card .g-sub { color: var(--n-soft); }
+:root:is([data-theme="dark"], [data-theme="light"]) .night .g-example { color: var(--snow); background: var(--ink-3); border-color: var(--mute); }
+:root:is([data-theme="dark"], [data-theme="light"]) .night button.glass:hover { border-color: var(--mute); }
+.dp-tip { background: var(--n-dot, #fff); color: var(--n-tip, var(--n-0)); }

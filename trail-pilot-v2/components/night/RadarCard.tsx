@@ -42,20 +42,20 @@ export default function RadarCard({ title, name, km, bearing, from, example, onO
     <>
       <span className="g-row"><span className="g-top">{title}</span>{example && <span className="g-example">Exemple</span>}</span>
       <svg className="radar-dots" viewBox={`0 0 ${S} ${S}`} role="img" aria-label={label}>
-        {[14, 27, 40].map((rr, i) => <circle key={rr} className="rd-ring" style={{ ["--i" as string]: i }} cx={C} cy={C} r={rr} fill="none" stroke="#fff" strokeOpacity="0.35" strokeWidth="0.6" />)}
-        <circle className="rd-sweep" cx={C} cy={C} r={40} fill="none" stroke="#fff" strokeOpacity="0.5" strokeWidth="0.8" />
-        <line className="rd-line" x1={C} y1={C} x2={tx} y2={ty} stroke="#fff" strokeOpacity="0.85" strokeWidth="1" strokeDasharray="2 2.4" />
+        {[14, 27, 40].map((rr, i) => <circle key={rr} className="rd-ring" style={{ ["--i" as string]: i }} cx={C} cy={C} r={rr} fill="none" stroke="currentColor" strokeOpacity="0.35" strokeWidth="0.6" />)}
+        <circle className="rd-sweep" cx={C} cy={C} r={40} fill="none" stroke="currentColor" strokeOpacity="0.5" strokeWidth="0.8" />
+        <line className="rd-line" x1={C} y1={C} x2={tx} y2={ty} stroke="currentColor" strokeOpacity="0.85" strokeWidth="1" strokeDasharray="2 2.4" />
         {beam != null && (
           // Faisceau : une ligne de points du centre vers le bord, dans la direction du pointeur.
           <g className="rd-beam" aria-hidden="true">
-            {Array.from({ length: 9 }, (_, i) => { const d = 6 + i * 4.3; return <circle key={i} cx={C + d * Math.cos(ba)} cy={C + d * Math.sin(ba)} r={1.5 - i * 0.07} fill="#fff" opacity={(0.95 - i * 0.08).toFixed(2)} />; })}
+            {Array.from({ length: 9 }, (_, i) => { const d = 6 + i * 4.3; return <circle key={i} cx={C + d * Math.cos(ba)} cy={C + d * Math.sin(ba)} r={1.5 - i * 0.07} fill="currentColor" opacity={(0.95 - i * 0.08).toFixed(2)} />; })}
           </g>
         )}
-        <circle className="rd-center" cx={C} cy={C} r={2.6} fill="#fff" />
+        <circle className="rd-center" cx={C} cy={C} r={2.6} fill="currentColor" />
         {/* La cible part du centre et glisse jusqu'à sa place (--dx / --dy : décalage depuis le centre). */}
         <g className={`rd-target${locked ? " is-locked" : ""}`} style={{ ["--dx" as string]: `${(C - tx).toFixed(1)}px`, ["--dy" as string]: `${(C - ty).toFixed(1)}px` }}>
-          <circle className="rd-ping" cx={tx} cy={ty} r={6} fill="#fff" opacity="0.25" />
-          <circle cx={tx} cy={ty} r={3.4} fill="#fff" />
+          <circle className="rd-ping" cx={tx} cy={ty} r={6} fill="currentColor" opacity="0.25" />
+          <circle cx={tx} cy={ty} r={3.4} fill="currentColor" />
         </g>
       </svg>
       <span className="g-num g-num-sm" aria-hidden="true">{fmtKm1(km)}<small> KM</small></span>

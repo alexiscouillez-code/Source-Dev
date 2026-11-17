@@ -127,7 +127,6 @@
 
 /* ---------- Bloc « Ma sortie du jour » : même teinte que le reste du mode Verre ---------- */
 :root[data-theme="glass"] .night { --n-0: var(--g-0); --n-1: var(--g-1); --n-2: var(--g-3); --n-violet: var(--g-glow); --n-blue: var(--g-blue); --n-acc: var(--g-acc); --n-acc-b: var(--g-acc-b); --n-acc-2: var(--g-acc-2); }
-:root[data-theme="glass"] .night { box-shadow: 0 24px 60px -30px color-mix(in srgb, var(--g-0) 90%, #000), inset 0 0 0 1px rgba(255, 255, 255, .08); }
 :root[data-theme="glass"] .tmap-layers { background: color-mix(in srgb, var(--g-0) 72%, transparent); }
 
 /* ---------- Pages publiques ---------- */

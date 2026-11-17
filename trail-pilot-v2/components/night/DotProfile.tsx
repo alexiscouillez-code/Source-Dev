@@ -45,17 +45,17 @@ export default function DotProfile({ profile, km, cols = 40, rows = 12, label, i
             const peak = r === h - 1;
             const op = peak ? 0.95 : 0.22 + 0.5 * (r / Math.max(1, h - 1));
             // --c / --r : colonne et rangée, pour faire monter le profil colonne par colonne (voir night.css).
-            return <circle key={`${c}-${r}`} className="dp-dot" style={{ ["--c" as string]: c, ["--r" as string]: r }} cx={c * G + G / 2} cy={H - (r * G + G / 2)} r={R} fill="#fff" opacity={op.toFixed(2)} />;
+            return <circle key={`${c}-${r}`} className="dp-dot" style={{ ["--c" as string]: c, ["--r" as string]: r }} cx={c * G + G / 2} cy={H - (r * G + G / 2)} r={R} fill="currentColor" opacity={op.toFixed(2)} />;
           }))}
-          <circle className="dp-glow" cx={lastC * G + G / 2} cy={H - (lastR * G + G / 2)} r={6} fill="#fff" opacity="0.25" />
-          <circle className="dp-last" cx={lastC * G + G / 2} cy={H - (lastR * G + G / 2)} r={3.2} fill="#fff" />
+          <circle className="dp-glow" cx={lastC * G + G / 2} cy={H - (lastR * G + G / 2)} r={6} fill="currentColor" opacity="0.25" />
+          <circle className="dp-last" cx={lastC * G + G / 2} cy={H - (lastR * G + G / 2)} r={3.2} fill="currentColor" />
         </g>
         {interactive && hi != null && (
           // Colonne visée : ses points s'allument (rangée par rangée), un repère pointillé monte jusqu'en haut.
           <g className="dp-hi" key={hi}>
             {Array.from({ length: rows }, (_, r) => r < heights[hi]
-              ? <circle key={r} className="dp-hi-dot" style={{ ["--r" as string]: r }} cx={hi * G + G / 2} cy={H - (r * G + G / 2)} r={r === heights[hi] - 1 ? 3.6 : 2.6} fill="#fff" />
-              : <circle key={r} className="dp-hi-guide" style={{ ["--r" as string]: r }} cx={hi * G + G / 2} cy={H - (r * G + G / 2)} r={1} fill="#fff" opacity="0.5" />)}
+              ? <circle key={r} className="dp-hi-dot" style={{ ["--r" as string]: r }} cx={hi * G + G / 2} cy={H - (r * G + G / 2)} r={r === heights[hi] - 1 ? 3.6 : 2.6} fill="currentColor" />
+              : <circle key={r} className="dp-hi-guide" style={{ ["--r" as string]: r }} cx={hi * G + G / 2} cy={H - (r * G + G / 2)} r={1} fill="currentColor" opacity="0.5" />)}
           </g>
         )}
       </svg>

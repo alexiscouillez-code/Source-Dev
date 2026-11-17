@@ -51,22 +51,22 @@ export default function DotGrid({ pct, label, onPick, interactive = false }: { p
           // --i : ordre de remplissage, pour allumer les points un à un (voir night.css).
           const st = { ["--i" as string]: i };
           return on
-            ? <circle key={i} className="dg-on" style={st} cx={col * G + G / 2} cy={row * G + G / 2} r={R} fill="#fff" />
-            : <circle key={i} className="dg-off" style={st} cx={col * G + G / 2} cy={row * G + G / 2} r={R - 0.6} fill="none" stroke="#fff" strokeOpacity="0.45" strokeWidth="1.1" />;
+            ? <circle key={i} className="dg-on" style={st} cx={col * G + G / 2} cy={row * G + G / 2} r={R} fill="currentColor" />
+            : <circle key={i} className="dg-off" style={st} cx={col * G + G / 2} cy={row * G + G / 2} r={R - 0.6} fill="none" stroke="currentColor" strokeOpacity="0.45" strokeWidth="1.1" />;
         })}
       </g>
       {hi != null && (
         // Points jusqu'au pourcentage visé : allumés ; le point visé est cerclé.
         <g className="dg-hi">
-          {Array.from({ length: hi + 1 }, (_, i) => { const { row, col } = pos(i); return <circle key={i} cx={col * G + G / 2} cy={row * G + G / 2} r={R} fill="#fff" />; })}
-          <circle className="dg-ring" cx={pos(hi).col * G + G / 2} cy={pos(hi).row * G + G / 2} r={R + 2.2} fill="none" stroke="#fff" strokeWidth="1.2" />
+          {Array.from({ length: hi + 1 }, (_, i) => { const { row, col } = pos(i); return <circle key={i} cx={col * G + G / 2} cy={row * G + G / 2} r={R} fill="currentColor" />; })}
+          <circle className="dg-ring" cx={pos(hi).col * G + G / 2} cy={pos(hi).row * G + G / 2} r={R + 2.2} fill="none" stroke="currentColor" strokeWidth="1.2" />
         </g>
       )}
       {wave && (
         <g className="dg-wave" key={wave.k} aria-hidden="true">
           {Array.from({ length: 100 }, (_, i) => {
             const { row, col } = pos(i), d = Math.hypot(col - wave.c, row - wave.r);
-            return <circle key={i} style={{ ["--d" as string]: d.toFixed(2) }} cx={col * G + G / 2} cy={row * G + G / 2} r={R} fill="none" stroke="#fff" strokeWidth="1" />;
+            return <circle key={i} style={{ ["--d" as string]: d.toFixed(2) }} cx={col * G + G / 2} cy={row * G + G / 2} r={R} fill="none" stroke="currentColor" strokeWidth="1" />;
           })}
         </g>
       )}
