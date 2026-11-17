@@ -91,7 +91,6 @@ button.glass:hover { border-color: rgba(255, 255, 255, .5); }
   flex: none; align-self: start; font-family: var(--mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase;
   padding: 3px 8px; border-radius: 99px; color: #fff; background: rgba(11, 11, 43, .55); border: 1px dashed rgba(255, 255, 255, .55);
 }
-.g-example-float { position: absolute; right: 4px; top: -6px; }
 /* Dans les petites cartes, la mention « Exemple » passe sous le titre au lieu de le chevaucher. */
 .g-pair-out .g-row { flex-direction: column; align-items: flex-start; gap: 6px; }
 

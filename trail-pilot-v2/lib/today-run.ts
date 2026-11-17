@@ -1,9 +1,11 @@
 import "server-only";
-import { all, one } from "@/db/client";
+import { all, one, run as exec } from "@/db/client";
 import { addDays, mondayOf } from "./engine/dates";
 import { parseAnalysis } from "./engine/streams";
 import { decodePolyline } from "./polyline";
-import type { TodayRun } from "./engine/today-run";
+import { reanalyze } from "./strava";
+import { alongTrack, type TodayRun } from "./engine/today-run";
+import { ALT_COLS } from "./engine/streams";
 
 const FOOT = new Set(["course", "trail", "rando"]);
 
@@ -17,15 +19,52 @@ function geo(a: [number, number], b: [number, number]) {
   return { km, bearing: ((Math.atan2(y, x) / rad) + 360) % 360 };
 }
 
+// Altitude : même service que la recherche de terrains (Open-Meteo par défaut, ou serveur dédié).
+const ELEVATION = process.env.NEXT_PUBLIC_ELEVATION_URL || "https://api.open-meteo.com/v1/elevation";
+const RETRY_MS = 86400000;
+
+type Row = { id: number; strava_id: string | null; analysis: string | null; track: string | null };
+
+/**
+ * Vrai profil d'altitude d'une sortie qui n'en a pas encore (analysée avant l'ajout du profil, ou sans cardio) :
+ * on relit d'abord les flux Strava (altitude de la montre), sinon on mesure l'altitude le long du tracé GPS.
+ * Le résultat est gardé ; sans tracé ni altitude, on ne réessaie qu'une fois par jour. Jamais de profil inventé.
+ */
+async function realProfile(userId: number, r: Row): Promise<number[] | null> {
+  const key = `altprof:${userId}:${r.id}`;
+  const kept = await one<{ value: string; updated_at: number }>("SELECT value, updated_at FROM app_kv WHERE key = ?", [key]);
+  if (kept) {
+    const v = JSON.parse(kept.value) as number[] | null;
+    if (v || Date.now() - kept.updated_at < RETRY_MS) return v;
+  }
+  let profile: number[] | null = null;
+  if (r.strava_id && (await reanalyze(userId, r.strava_id))) {
+    const again = await one<{ analysis: string | null }>("SELECT analysis FROM activities WHERE id = ? AND user_id = ?", [r.id, userId]);
+    profile = parseAnalysis(again?.analysis ?? null)?.alt ?? null;
+    if (profile) return profile; // désormais dans l'analyse de la sortie
+  }
+  const pts = r.track ? alongTrack(decodePolyline(r.track), ALT_COLS) : [];
+  if (pts.length) {
+    try {
+      const q = `latitude=${pts.map((p) => p[0].toFixed(5)).join(",")}&longitude=${pts.map((p) => p[1].toFixed(5)).join(",")}`;
+      const res = await fetch(`${ELEVATION}?${q}`, { signal: AbortSignal.timeout(8000) });
+      const j = res.ok ? ((await res.json()) as { elevation?: number[] }) : null;
+      if (j?.elevation?.length === pts.length && j.elevation.every((z) => Number.isFinite(z) && z > -500 && z < 9000)) profile = j.elevation.map(Math.round);
+    } catch { /* service indisponible : on réessaiera */ return null; }
+  }
+  await exec("INSERT OR REPLACE INTO app_kv(key, value, updated_at) VALUES (?, ?, ?)", [key, JSON.stringify(profile), Date.now()]);
+  return profile;
+}
+
 /**
  * Données du bloc « Ma sortie du jour ». Chaque partie vaut null quand la donnée réelle manque :
- * l'écran affiche alors des données d'exemple, signalées comme telles.
+ * l'écran affiche alors des données d'exemple, signalées comme telles (sauf le profil d'altitude : sans vrai profil, il n'est pas affiché).
  */
 export async function todayRun(userId: number, today: string): Promise<TodayRun> {
   const monday = mondayOf(today);
   const [acts, plan, terrains] = await Promise.all([
-    all<{ id: number; date: string; sport: string; name: string | null; duration_min: number; distance_km: number | null; gain_m: number | null; analysis: string | null; track: string | null }>(
-      "SELECT id, date, sport, name, duration_min, distance_km, gain_m, analysis, track FROM activities WHERE user_id = ? AND COALESCE(check_state, 0) <> 1 AND date >= ? AND date <= ? ORDER BY date DESC, id DESC",
+    all<{ id: number; date: string; sport: string; name: string | null; duration_min: number; distance_km: number | null; gain_m: number | null; analysis: string | null; track: string | null; strava_id: string | null }>(
+      "SELECT id, date, sport, name, duration_min, distance_km, gain_m, analysis, track, strava_id FROM activities WHERE user_id = ? AND COALESCE(check_state, 0) <> 1 AND date >= ? AND date <= ? ORDER BY date DESC, id DESC",
       [userId, addDays(monday, -7), today]),
     all<{ duration_min: number }>("SELECT duration_min FROM plan_sessions WHERE user_id = ? AND date >= ? AND date <= ? AND template <> 'race' AND sport <> 'renfo' AND status <> 'skipped'", [userId, monday, addDays(monday, 6)]),
     all<{ name: string; lat: number; lon: number }>("SELECT name, lat, lon FROM terrains WHERE user_id = ?", [userId]),
@@ -43,7 +82,7 @@ export async function todayRun(userId: number, today: string): Promise<TodayRun>
       name: r.name ?? (r.sport === "trail" ? "Sortie trail" : r.sport === "rando" ? "Randonnée" : "Course à pied"),
       distanceKm: r.distance_km!, gainM: r.gain_m != null ? Math.round(r.gain_m) : null,
       paceSec: Math.round(seconds / r.distance_km!),
-      profile: an?.alt ?? null,
+      profile: an?.alt ?? (await realProfile(userId, r)),
     };
   }
 

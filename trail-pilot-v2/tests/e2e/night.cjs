@@ -113,4 +113,32 @@ scenario("Bloc « Ma sortie du jour »", async () => {
     await ctx.close();
   }
   fs.writeFileSync(`${OUT}/night-boxes.json`, JSON.stringify(boxes));
+
+  // Sortie analysée avant l'ajout du profil d'altitude : le vrai profil est mesuré le long du tracé, jamais inventé.
+  for (const withTrack of [true, false]) {
+    console.log(`— sortie sans altitude enregistrée, ${withTrack ? "avec" : "sans"} tracé`);
+    const { page, errors, email, ctx } = await newUser("phone");
+    await page.setViewportSize({ width: 375, height: 812 });
+    const uid = await userId(email);
+    const analysis = { v: 1, hist: new Array(32).fill(0), win: [], gap: null, dec: null, loss: 500, moving: 97 * 60 };
+    const track = withTrack ? encode(Array.from({ length: 30 }, (_, i) => [45.9 + i * 0.002, 6.86 + Math.sin(i / 4) * 0.004])) : null;
+    await db().execute({ sql: "INSERT INTO activities(user_id, date, sport, name, duration_min, distance_km, gain_m, source, track, analysis, created_at, updated_at) VALUES (?, ?, 'trail', 'Biot Trail', 100, 12.8, 512, 'fichier', ?, ?, 0, 0)", args: [uid, iso(-2), track, JSON.stringify(analysis)] });
+    await openApp(page);
+    await page.waitForSelector(".night .run-card");
+    const st = await page.evaluate(() => ({
+      ex: document.querySelectorAll(".night .run-card .g-example").length,
+      prof: document.querySelector(".night .dotprofile svg")?.getAttribute("aria-label") ?? null,
+      meta: [...document.querySelectorAll(".night .g-meta")].map((e) => e.textContent.trim()).filter(Boolean),
+    }));
+    check(st.ex === 0, "aucune mention « exemple » sur la carte de la sortie", st.ex);
+    if (withTrack) {
+      check(st.prof && /Profil d'altitude sur 12,8 kilomètres/.test(st.prof) && !/exemple/i.test(st.prof), "profil réel mesuré le long du tracé", st.prof);
+      const kept = await db().execute({ sql: "SELECT value FROM app_kv WHERE key LIKE ?", args: [`altprof:${uid}:%`] });
+      check(kept.rows.length === 1 && JSON.parse(kept.rows[0].value)?.length === 40, "profil gardé (pas de nouvel appel au prochain affichage)");
+    } else {
+      check(st.prof === null && !st.meta.some((m) => / M$/.test(m)), "sans tracé ni altitude, pas de profil ni d'altitudes affichés", st);
+    }
+    check(errors.length === 0, "aucune erreur dans la page", errors.slice(0, 3));
+    await ctx.close();
+  }
 });

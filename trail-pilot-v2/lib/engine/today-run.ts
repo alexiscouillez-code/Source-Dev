@@ -14,14 +14,14 @@ export interface TodayRun {
 
 /*
  * ⚠ DONNÉES D'EXEMPLE ⚠
- * Utilisées seulement quand la donnée réelle manque (pas de sortie récente, sortie analysée avant l'ajout du profil
- * d'altitude, pas de plan, pas de terrain enregistré). L'écran affiche alors la mention « Exemple » sur la partie concernée.
+ * Utilisées seulement quand la donnée réelle manque (pas de sortie récente, pas de plan, pas de terrain enregistré). L'écran affiche alors la mention « Exemple » sur la partie concernée.
  * Ne jamais les présenter comme des données du coureur.
  */
 export const EXAMPLE_RUN: NonNullable<TodayRun["run"]> = {
   id: 0, date: "", isToday: true, sport: "trail", name: "Boucle des crêtes",
   distanceKm: 24.6, gainM: 1180, paceSec: 342, profile: null,
 };
+/** Profil de la carte d'exemple (seulement quand il n'y a aucune sortie récente, la carte entière porte alors la mention « Exemple »). */
 export const EXAMPLE_PROFILE: number[] = [
   412, 418, 431, 452, 480, 511, 547, 590, 634, 671, 702, 728, 744, 751, 748, 736, 719, 702, 694, 701,
   722, 756, 798, 841, 879, 905, 918, 921, 910, 884, 846, 801, 752, 703, 655, 607, 561, 512, 468, 431,
@@ -34,6 +34,32 @@ export const EXAMPLE_TRAILHEAD = { name: "Col de la Croix", km: 6.4, bearing: 52
 export const fmtPace = (sec: number) => { const m = Math.floor(sec / 60), s = Math.round(sec % 60); return s === 60 ? `${m + 1}'00` : `${m}'${String(s).padStart(2, "0")}`; };
 /** Nombre à la française avec une décimale : 24.6 → « 24,6 ». */
 export const fmtKm1 = (km: number) => (Math.round(km * 10) / 10).toFixed(1).replace(".", ",");
+
+/**
+ * Points régulièrement espacés le long d'un tracé (le premier au départ, le dernier à l'arrivée), pour en tirer un
+ * profil d'altitude quand la sortie n'a pas d'altitude enregistrée. Vide sous 500 m.
+ */
+export function alongTrack(pts: [number, number][], n: number): [number, number][] {
+  if (pts.length < 2 || n < 2) return [];
+  const rad = Math.PI / 180;
+  const hav = (a: [number, number], b: [number, number]) => {
+    const h = Math.sin(((b[0] - a[0]) * rad) / 2) ** 2 + Math.cos(a[0] * rad) * Math.cos(b[0] * rad) * Math.sin(((b[1] - a[1]) * rad) / 2) ** 2;
+    return 2 * 6371 * Math.asin(Math.sqrt(h));
+  };
+  const d = [0];
+  for (let i = 1; i < pts.length; i++) d.push(d[i - 1] + hav(pts[i - 1], pts[i]));
+  const total = d[d.length - 1];
+  if (total < 0.5) return [];
+  const out: [number, number][] = [];
+  let j = 0;
+  for (let c = 0; c < n; c++) {
+    const t = (total * c) / (n - 1);
+    while (j < pts.length - 2 && d[j + 1] < t) j++;
+    const seg = d[j + 1] - d[j], u = seg > 0 ? Math.min(1, Math.max(0, (t - d[j]) / seg)) : 0;
+    out.push([pts[j][0] + (pts[j + 1][0] - pts[j][0]) * u, pts[j][1] + (pts[j + 1][1] - pts[j][1]) * u]);
+  }
+  return out;
+}
 
 /** Rééchantillonne une série en `cols` colonnes (moyenne par tronçon) : sert aux profils plus longs ou plus courts que la grille. */
 export function resample(values: number[], cols: number): number[] {

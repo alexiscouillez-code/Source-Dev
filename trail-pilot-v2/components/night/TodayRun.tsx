@@ -15,7 +15,8 @@ const Example = () => <span className="g-example">Exemple</span>;
 
 /**
  * Bloc « Ma sortie du jour », style nuit et verre dépoli. Chaque partie utilise la donnée réelle quand elle existe,
- * sinon des données d'exemple signalées par la mention « Exemple ».
+ * sinon des données d'exemple signalées par la mention « Exemple ». Le profil d'altitude d'une vraie sortie est toujours
+ * le sien (relu sur Strava ou mesuré le long du tracé) ; sans lui, la carte s'en passe.
  */
 export default function TodayRun({ today, onTerrains }: { today: string; onTerrains?: () => void }) {
   const [d, setD] = useState<Data | null>(null);
@@ -24,7 +25,8 @@ export default function TodayRun({ today, onTerrains }: { today: string; onTerra
   if (!d && !failed) return <section className="night is-loading" aria-busy="true" aria-label="Ma sortie du jour, chargement" />;
 
   const run = d?.run ?? EXAMPLE_RUN, runEx = !d?.run;
-  const profile = d?.run?.profile ?? EXAMPLE_PROFILE, profEx = !d?.run?.profile;
+  // Profil : le vrai, sinon rien (jamais de courbe inventée sous une vraie sortie) ; la carte d'exemple garde le sien.
+  const profile = runEx ? EXAMPLE_PROFILE : d?.run?.profile ?? null;
   const ref = d?.gainRef ?? (runEx ? EXAMPLE_GAIN_REF : null), refEx = !d?.gainRef;
   const week = d?.week ?? EXAMPLE_WEEK, weekEx = !d?.week;
   const th = d?.trailhead ?? EXAMPLE_TRAILHEAD, thEx = !d?.trailhead;
@@ -39,9 +41,9 @@ export default function TodayRun({ today, onTerrains }: { today: string; onTerra
 
         <GlassCard className="run-card">
           {/* Métadonnées décoratives (altitudes, date), dans la zone libre à droite du grand chiffre. */}
-          <span className="g-meta" aria-hidden="true" style={{ top: 74, right: 22 }}>{Math.round(Math.max(...profile))} M</span>
+          {profile && <span className="g-meta" aria-hidden="true" style={{ top: 74, right: 22 }}>{Math.round(Math.max(...profile))} M</span>}
           <span className="g-meta" aria-hidden="true" style={{ top: 112, right: 64 }}>{runEx ? "" : run.date.slice(5).replace("-", ".")}</span>
-          <span className="g-meta" aria-hidden="true" style={{ top: 150, right: 26 }}>{Math.round(Math.min(...profile))} M</span>
+          {profile && <span className="g-meta" aria-hidden="true" style={{ top: 150, right: 26 }}>{Math.round(Math.min(...profile))} M</span>}
           <div className="g-row">
             <span className="g-top">{run.name}</span>
             {runEx && <Example />}
@@ -52,10 +54,11 @@ export default function TodayRun({ today, onTerrains }: { today: string; onTerra
             <span className="g-cap" aria-hidden="true">KM Distance</span>
             <span className="sr-only">Distance : {fmtKm1(run.distanceKm)} kilomètres{runEx ? " (exemple)" : ""}.</span>
           </p>
-          <div className="g-profile">
-            {profEx && !runEx && <span className="g-example g-example-float">Profil d’exemple</span>}
-            <DotProfile profile={profile} km={run.distanceKm} label={profEx ? `Profil d'altitude d'exemple, la sortie n'a pas de profil enregistré.` : undefined} />
-          </div>
+          {profile && (
+            <div className="g-profile">
+              <DotProfile profile={profile} km={run.distanceKm} label={runEx ? "Profil d'altitude d'exemple." : undefined} />
+            </div>
+          )}
 
           <div className="g-pair">
             <GlassCard inner>

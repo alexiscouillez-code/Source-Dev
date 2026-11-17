@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { altProfile, analyze, cleanAnalysis } from "../../lib/engine/streams";
-import { dotHeights, fmtKm1, fmtPace, resample } from "../../lib/engine/today-run";
+import { alongTrack, dotHeights, fmtKm1, fmtPace, resample } from "../../lib/engine/today-run";
 
 test("profil d'altitude : 40 points régulièrement espacés en distance", () => {
   // 12 km : montée de 400 à 900 m sur 6 km puis descente.
@@ -40,4 +40,15 @@ test("formats : allure et distance à la française", () => {
   assert.equal(fmtPace(342), "5'42");
   assert.equal(fmtPace(359.6), "6'00");
   assert.equal(fmtKm1(24.64), "24,6");
+});
+
+test("alongTrack : points régulièrement espacés du départ à l'arrivée", () => {
+  const line: [number, number][] = [[45, 6], [45.01, 6], [45.03, 6]]; // environ 3,3 km vers le nord
+  const pts = alongTrack(line, 5);
+  assert.equal(pts.length, 5);
+  assert.deepEqual(pts[0], [45, 6]);
+  assert.ok(Math.abs(pts[4][0] - 45.03) < 1e-9);
+  for (let i = 1; i < 5; i++) assert.ok(Math.abs(pts[i][0] - pts[i - 1][0] - 0.0075) < 1e-6);
+  assert.deepEqual(alongTrack([[45, 6], [45.001, 6]], 5), []); // moins de 500 m
+  assert.deepEqual(alongTrack([[45, 6]], 5), []);
 });
