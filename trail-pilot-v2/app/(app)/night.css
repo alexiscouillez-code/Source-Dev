@@ -5,7 +5,7 @@
 
 .night {
   --n-0: #0b0b2b; --n-1: #2a1f6e; --n-2: #5b4bd6;
-  --n-violet: #b48cff; --n-blue: #4f5bff;
+  --n-violet: #b48cff; --n-blue: #4f5bff; --n-acc: #3d46e8; --n-acc-b: #4a52ee; --n-acc-2: #6a72ff;
   /* Textes secondaires et petites capitales : 70 % de blanc ne suffit pas sur les zones claires (3,6:1 mesuré) ;
      ces valeurs sont les plus basses qui gardent 4,5:1 partout dans le bloc. */
   --n-text: #fff; --n-soft: rgba(255, 255, 255, .93); --n-cap: rgba(255, 255, 255, .88);
@@ -14,9 +14,9 @@
   color: var(--n-text);
   /* Taches lumineuses floues (dégradés radiaux), puis le fond de nuit. */
   background:
-    radial-gradient(42% 32% at 18% 22%, rgba(180, 140, 255, .55), transparent 70%),
-    radial-gradient(48% 36% at 92% 52%, rgba(79, 91, 255, .34), transparent 72%),
-    radial-gradient(38% 28% at 30% 92%, rgba(180, 140, 255, .2), transparent 70%),
+    radial-gradient(42% 32% at 18% 22%, color-mix(in srgb, var(--n-violet) 55%, transparent), transparent 70%),
+    radial-gradient(48% 36% at 92% 52%, color-mix(in srgb, var(--n-blue) 34%, transparent), transparent 72%),
+    radial-gradient(38% 28% at 30% 92%, color-mix(in srgb, var(--n-violet) 20%, transparent), transparent 70%),
     linear-gradient(165deg, var(--n-0) 0%, var(--n-1) 52%, var(--n-2) 100%);
 }
 .night.is-loading { min-height: 520px; max-width: 380px; margin-left: auto; margin-right: auto; }
@@ -61,12 +61,12 @@
 /* Variante accent : bleu saturé. La partie la plus claire reste un halo en coin, loin du texte, pour garder le contraste. */
 .glass-accent {
   background:
-    radial-gradient(70% 55% at 100% 0%, rgba(106, 114, 255, .9), transparent 70%),
-    linear-gradient(160deg, #3d46e8 0%, #4a52ee 100%);
+    radial-gradient(70% 55% at 100% 0%, color-mix(in srgb, var(--n-acc-2) 90%, transparent), transparent 70%),
+    linear-gradient(160deg, var(--n-acc) 0%, var(--n-acc-b) 100%);
   border-color: rgba(255, 255, 255, .3);
 }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .glass:not(.glass-accent) { background: rgba(40, 32, 110, .85); }
+  .glass:not(.glass-accent) { background: color-mix(in srgb, var(--n-1) 85%, transparent); }
   .glass-inner { background: rgba(255, 255, 255, .08); }
 }
 button.glass { cursor: pointer; width: 100%; }
@@ -89,7 +89,7 @@ button.glass:hover { border-color: rgba(255, 255, 255, .5); }
 .g-meta { position: absolute; font-family: var(--mono); font-size: 10px; letter-spacing: .14em; color: rgba(255, 255, 255, .2); pointer-events: none; }
 .g-example {
   flex: none; align-self: start; font-family: var(--mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase;
-  padding: 3px 8px; border-radius: 99px; color: #fff; background: rgba(11, 11, 43, .55); border: 1px dashed rgba(255, 255, 255, .55);
+  padding: 3px 8px; border-radius: 99px; color: #fff; background: color-mix(in srgb, var(--n-0) 55%, transparent); border: 1px dashed rgba(255, 255, 255, .55);
 }
 /* Dans les petites cartes, la mention « Exemple » passe sous le titre au lieu de le chevaucher. */
 .g-pair-out .g-row { flex-direction: column; align-items: flex-start; gap: 6px; }

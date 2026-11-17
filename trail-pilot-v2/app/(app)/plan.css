@@ -80,3 +80,17 @@ button.link::after { content: ""; position: absolute; inset: -11px -8px; }
 .chart line[stroke="#ffffff30"], .chart line[stroke="#ffffff40"] { stroke: var(--chart-zero); }
 .chart rect[fill="#243241"] { fill: var(--chart-bar); }
 .chart rect[fill="#2c3b4a"] { fill: var(--chart-bar-2); }
+
+/* ---------- Repères du temps de course (formulaire de la course) ---------- */
+.race-anchor { display: grid; gap: 12px; padding: 14px 16px; border-radius: 16px; border: 1px dashed var(--line); background: var(--ink-2); }
+.race-anchor > summary { cursor: pointer; font-weight: 700; display: flex; align-items: baseline; gap: 8px; list-style: none; }
+.race-anchor > summary::-webkit-details-marker { display: none; }
+.race-anchor > summary::before { content: "›"; display: inline-block; transition: transform .2s; }
+.race-anchor[open] > summary::before { transform: rotate(90deg); }
+.race-anchor[open] { gap: 14px; }
+.race-anchor fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 8px; min-width: 0; }
+.race-anchor legend { padding: 0; margin-bottom: 6px; font-size: 14px; }
+.picks.p4 { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 420px) { .picks.p4 { grid-template-columns: repeat(2, 1fr); } }
+.race-time .race-refine { justify-self: end; margin-top: 4px; color: var(--ember-t, var(--ember)); }
+@media (max-width: 600px) { .race-time .race-refine { justify-self: start; } }

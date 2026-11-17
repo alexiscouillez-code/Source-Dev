@@ -22,13 +22,15 @@ import Debriefs from "./Debriefs";
 import GearList, { type GearItem } from "./GearList";
 import { calibLabel } from "@/lib/engine/calibration";
 import type { RaceRoute, WeatherAdjust } from "@/lib/engine/strategy";
+import { durationText, parseDuration, TERRAIN_LABEL, type RaceAnchor, type Terrain } from "@/lib/engine/race-anchor";
 
 type Verdict = "solide" | "ambitieux" | "risque" | "court";
 interface PlanWeek { monday: string; phase: string; minutes: number; longMin: number; gainM: number; focus: string; light: boolean }
 interface RacePlan {
   generatedOn: string;
   race: { name: string; date: string; distanceKm: number; gainM: number; effortKm: number; daysTo: number; assumed: boolean };
-  estimate: { low: number; high: number }; estimateFrom?: "vo2" | "niveau"; calib?: { factor: number; n: number } | null;
+  estimate: { low: number; high: number }; estimateFrom?: "reference" | "vo2" | "niveau"; calib?: { factor: number; n: number } | null;
+  estimateCourse?: { factor: number; from: "vainqueur" | "terrain" | null }; estimateRef?: { km: number; gain: number; min: number } | null;
   demands: { weeklyMin: number; longMin: number; weeklyGain: number; backToBack: boolean };
   current: { weeklyMin: number; longestMin: number; weeklyGain: number; hasHistory: boolean };
   reach: { weeklyMin: number; longMin: number };
@@ -36,7 +38,7 @@ interface RacePlan {
   diagnosis?: { causes: string[]; fixes: string[]; gaps?: { key: string; label: string; reach: number; need: number; unit: "min" | "m" }[]; options?: { title: string; text: string }[]; keep?: string };
 }
 type Session = PlanSession;
-interface View { today: string; goal: { name: string; date: string; distance_km: number | null; gain_m: number | null; route?: RaceRoute | null; gear?: GearItem[] } | null; plan: RacePlan | null; sessions: Session[]; doneByWeek: Record<string, number>; races: SideRaceRow[]; absence?: Absence | null; learning?: { items: { kind: string; text: string; changes: boolean }[]; off: boolean } }
+interface View { today: string; goal: { name: string; date: string; distance_km: number | null; gain_m: number | null; route?: RaceRoute | null; gear?: GearItem[]; anchor?: RaceAnchor | null } | null; plan: RacePlan | null; sessions: Session[]; doneByWeek: Record<string, number>; races: SideRaceRow[]; absence?: Absence | null; learning?: { items: { kind: string; text: string; changes: boolean }[]; off: boolean } }
 
 const VERDICT: Record<Verdict, { label: string; color: string }> = {
   solide: { label: "Objectif solide", color: "var(--ok)" },
@@ -58,6 +60,7 @@ export default function Planning({ me, refresh, toast, go }: Ctx) {
   };
   const [v, setV] = useState<View | null>(null);
   const [editing, setEditing] = useState(false);
+  const [refine, setRefine] = useState(false);
   const [busy, setBusy] = useState(false);
   const [wx, setWx] = useState<WeatherAdjust | null>(null);
 
@@ -109,7 +112,7 @@ export default function Planning({ me, refresh, toast, go }: Ctx) {
   }
   const noted = async () => { await Promise.all([load(), refresh()]); };
   const [away, setAway] = useState(false);
-  const saved = async (msg: string) => { setEditing(false); await Promise.all([load(), refresh()]); toast(msg); };
+  const saved = async (msg: string) => { setEditing(false); setRefine(false); await Promise.all([load(), refresh()]); toast(msg); };
 
   if (!v) return <><Head /><div className="skeleton" /></>;
 
@@ -119,7 +122,7 @@ export default function Planning({ me, refresh, toast, go }: Ctx) {
         <Head sub={v.goal && !editing ? "Course passée" : undefined} />
         {!editing && <Debriefs today={v.today} rev={rev} toast={toast} />}
         {v.goal && !editing && <p className="muted small" style={{ margin: "0 0 10px" }}>Prochaine étape : choisis ta prochaine course, le plan repart de ta forme actuelle.</p>}
-        <RaceForm goal={v.goal} today={v.today} onSaved={saved} onCancel={editing ? () => setEditing(false) : undefined} />
+        <RaceForm goal={v.goal} today={v.today} refine={refine} onSaved={saved} onCancel={editing ? () => { setEditing(false); setRefine(false); } : undefined} />
         {!v.goal && v.sessions.length > 0 && (
           <section className="card" style={{ marginTop: 14 }}>
             <div className="card-head"><h2>En attendant : entretien</h2><div className="row"><button className="btn ghost sm" onClick={() => setAway(true)}>Imprévu</button><button className="btn ghost sm" onClick={recalc} disabled={busy}>Recalculer</button></div></div>
@@ -152,7 +155,7 @@ export default function Planning({ me, refresh, toast, go }: Ctx) {
       <Debriefs today={v.today} rev={rev} toast={toast} />
       <LearningCard l={v.learning} onToggle={async (off) => { try { await api("/api/plan", { method: "PATCH", body: { learningOff: off, today: v.today } }); await Promise.all([load(), refresh()]); toast(off ? "Plan d’origine rétabli, sans ajustement." : "Ajustements réactivés."); } catch (e) { toast(e instanceof Error ? e.message : "Erreur"); } }} />
       {away && <AbsenceSheet a={v.absence ?? null} today={v.today} onClose={() => setAway(false)} onSaved={async (msg) => { setAway(false); await Promise.all([load(), refresh()]); toast(msg); }} />}
-      <RaceHeader p={p} />
+      <RaceHeader p={p} onRefine={() => { setRefine(true); setEditing(true); }} />
       <section className="card plan-board" style={{ marginTop: 14 }}>
         <PlanBoard today={v.today} rev={rev} targets={me.targets} onStatus={setStatus} onWhere={whereTo} onMoveTo={moveTo} onRestore={restore} onChanged={noted}>
           <WeekList sessions={v.sessions} weeks={p.weeks} today={v.today} doneByWeek={v.doneByWeek} onStatus={setStatus} targets={me.targets} onWhere={whereTo} onMove={move} />
@@ -201,7 +204,18 @@ function Head({ sub, action }: { sub?: string; action?: React.ReactNode }) {
 }
 
 // ---------- En-tête de course ----------
-function RaceHeader({ p }: { p: RacePlan }) {
+/** D'où vient le temps estimé, en une ligne. */
+function estimateSource(p: RacePlan) {
+  if (p.estimateFrom === "reference" && p.estimateRef) return `d’après ton résultat : ${fmtKm(p.estimateRef.km)} km, ${fmtNum(p.estimateRef.gain)} m D+ en ${fmtDur(p.estimateRef.min)}`;
+  return p.estimateFrom === "vo2" ? "d’après ta VO2max" : "à ton niveau actuel";
+}
+/** Correction du parcours appliquée, en une ligne. */
+function courseLabel(c: NonNullable<RacePlan["estimateCourse"]>) {
+  const pct = Math.round((c.factor - 1) * 100), txt = `${pct > 0 ? "+" : pct < 0 ? "−" : "±"}${Math.abs(pct)} %`;
+  return c.from === "vainqueur" ? `parcours ${txt} (temps du vainqueur précédent)` : `terrain ${txt}`;
+}
+
+function RaceHeader({ p, onRefine }: { p: RacePlan; onRefine: () => void }) {
   const vd = VERDICT[p.verdict];
   const g = p.diagnosis?.gaps, opts = p.diagnosis?.options;
   const [fixOpen, setFixOpen] = useFold("plan-risk-fix", false);
@@ -221,8 +235,10 @@ function RaceHeader({ p }: { p: RacePlan }) {
         <div className="race-time">
           <small>Temps estimé pour finir</small>
           <b>{fmtDur(p.estimate.low)} – {fmtDur(p.estimate.high)}</b>
-          <span>{p.estimateFrom === "vo2" ? "d’après ta VO2max" : "à ton niveau actuel"}</span>
+          <span>{estimateSource(p)}</span>
+          {p.estimateCourse?.from && <span>{courseLabel(p.estimateCourse)}</span>}
           {calibLabel(p.calib) && <span className="calib">{calibLabel(p.calib)}</span>}
+          <button type="button" className="link small race-refine" onClick={onRefine}>{p.estimateFrom === "reference" || p.estimateCourse?.from ? "Modifier les repères" : "Affiner ce temps"}</button>
         </div>
       </div>
       <div className="race-verdict">
@@ -470,9 +486,18 @@ const FORMATS = [
   { label: "Ultra XL", km: 120, d: 7000 },
 ];
 
-function RaceForm({ goal, today, onSaved, onCancel }: { goal: View["goal"]; today: string; onSaved: (m: string) => Promise<void>; onCancel?: () => void }) {
+function RaceForm({ goal, today, refine = false, onSaved, onCancel }: { goal: View["goal"]; today: string; refine?: boolean; onSaved: (m: string) => Promise<void>; onCancel?: () => void }) {
   const upcoming = goal && goal.date > today ? goal : null;
   const [g, setG] = useState({ name: upcoming?.name ?? "", date: upcoming?.date ?? "", distanceKm: upcoming?.distance_km?.toString().replace(".", ",") ?? "", gainM: upcoming?.gain_m?.toString() ?? "" });
+  const a0 = upcoming?.anchor ?? null;
+  // Repères facultatifs du temps de course (voir engine/race-anchor).
+  const [an, setAn] = useState({
+    terrain: (a0?.terrain ?? "mixte") as Terrain,
+    refKm: a0?.ref ? String(a0.ref.km).replace(".", ",") : "", refGain: a0?.ref ? String(a0.ref.gain) : "", refTime: a0?.ref ? durationText(a0.ref.min) : "",
+    winner: a0?.winnerMin ? durationText(a0.winnerMin) : "",
+  });
+  const refRef = useRef<HTMLDetailsElement>(null);
+  useEffect(() => { if (refine && refRef.current) { refRef.current.open = true; refRef.current.scrollIntoView({ block: "center", behavior: "smooth" }); } }, [refine]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const min = (() => { const d = new Date(`${localToday()}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10); })();
@@ -480,7 +505,13 @@ function RaceForm({ goal, today, onSaved, onCancel }: { goal: View["goal"]; toda
 
   async function submit(e: React.FormEvent) {
     e.preventDefault(); setBusy(true); setErr(null);
-    try { await api("/api/goal", { method: "PUT", body: g }); await onSaved("Ton plan jusqu’au jour J est prêt."); }
+    const refMin = parseDuration(an.refTime), winnerMin = parseDuration(an.winner);
+    const refKm = Number(an.refKm.replace(",", ".")), refGain = Number(an.refGain || 0);
+    const partial = !!(an.refKm || an.refTime) && !(refKm > 0 && refMin);
+    if (partial) { setErr("Pour ton résultat de référence, indique au moins la distance et le temps (par exemple 4h05)."); setBusy(false); return; }
+    if (an.winner && !winnerMin) { setErr("Temps du vainqueur illisible : écris-le par exemple 6h42."); setBusy(false); return; }
+    const anchor = { terrain: an.terrain, winnerMin, ref: refKm > 0 && refMin ? { km: refKm, gain: refGain, min: refMin } : null };
+    try { await api("/api/goal", { method: "PUT", body: { ...g, anchor } }); await onSaved("Ton plan jusqu’au jour J est prêt."); }
     catch (e2) { setErr(e2 instanceof Error ? e2.message : "Erreur"); setBusy(false); }
   }
   async function remove() {
@@ -515,6 +546,34 @@ function RaceForm({ goal, today, onSaved, onCancel }: { goal: View["goal"]; toda
           <label className="field">Distance (km)<input inputMode="decimal" value={g.distanceKm} onChange={(e) => setG({ ...g, distanceKm: e.target.value })} placeholder="45" required /></label>
           <label className="field">D+ (m)<input inputMode="numeric" value={g.gainM} onChange={(e) => setG({ ...g, gainM: e.target.value })} placeholder="2500" required /></label>
         </div>
+        <details className="race-anchor" ref={refRef} open={!!a0}>
+          <summary>Affiner le temps estimé <span className="muted small">facultatif</span></summary>
+          <p className="muted small" style={{ margin: 0 }}>
+            Sans ces repères, le temps vient de ta VO2max, qui ne voit ni la technique, ni les descentes, ni ta gestion de course.
+            Un vrai résultat et le temps du vainqueur rapprochent l’estimation de ce que prévoient les outils de suivi en course.
+          </p>
+          <fieldset className="field">
+            <legend>Terrain de la course</legend>
+            <div className="picks p4" role="radiogroup" aria-label="Terrain de la course">
+              {(Object.keys(TERRAIN_LABEL) as Terrain[]).map((k) => (
+                <label key={k} className={an.terrain === k ? "on" : ""}><input type="radio" name="terrain" value={k} checked={an.terrain === k} onChange={() => setAn({ ...an, terrain: k })} />{TERRAIN_LABEL[k][0].toUpperCase() + TERRAIN_LABEL[k].slice(1)}</label>
+              ))}
+            </div>
+          </fieldset>
+          <fieldset className="field">
+            <legend>Un de tes résultats récents en trail</legend>
+            <div className="fields f3">
+              <label className="field">Distance (km)<input inputMode="decimal" value={an.refKm} onChange={(e) => setAn({ ...an, refKm: e.target.value })} placeholder="30" /></label>
+              <label className="field">D+ (m)<input inputMode="numeric" value={an.refGain} onChange={(e) => setAn({ ...an, refGain: e.target.value })} placeholder="1500" /></label>
+              <label className="field">Ton temps<input value={an.refTime} onChange={(e) => setAn({ ...an, refTime: e.target.value })} placeholder="4h05" /></label>
+            </div>
+            <small className="muted">Le plus proche possible de la course visée, en distance et en terrain, et de moins d’un an.</small>
+          </fieldset>
+          <label className="field">Temps du vainqueur de l’édition précédente
+            <input value={an.winner} onChange={(e) => setAn({ ...an, winner: e.target.value })} placeholder="6h42" />
+            <small className="muted">Sur le site de la course ou dans les résultats LiveTrail : il mesure la difficulté réelle du parcours (il remplace alors le choix du terrain).</small>
+          </label>
+        </details>
         {err && <p className="note err" role="alert">{err}</p>}
         <div className="row">
           <button className="btn" type="submit" disabled={busy}>{busy ? "Calcul du plan…" : upcoming ? "Recalculer mon plan" : "Créer mon plan"}</button>

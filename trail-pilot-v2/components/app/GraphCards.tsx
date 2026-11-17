@@ -69,6 +69,8 @@ function useHover() {
 const Tip = ({ x, children }: { x: number; children: ReactNode }) => (
   <div className="gc-tip" style={{ left: `${Math.max(14, Math.min(86, x))}%` }}>{children}</div>
 );
+/** Contour de l'aire sous une courbe, en pourcentages de la zone du graphique (trame de points du mode Verre). */
+export const areaClip = (pts: [number, number][]) => `polygon(0% 100%, ${pts.map(([x, y]) => `${x.toFixed(2)}% ${y.toFixed(2)}%`).join(", ")}, 100% 100%)`;
 const Empty = ({ children }: { children: ReactNode }) => <div className="gc-empty">{children}</div>;
 
 /* ---------- Volume : courbe des 8 dernières semaines ---------- */
@@ -88,7 +90,7 @@ function VolumeCard({ weeks }: { weeks: GraphData["weeks"] }) {
       status={alert ? "Surcharge" : delta == null ? "À construire" : `${delta > 0 ? "+" : ""}${delta} %`}
       back={<><p>Tes kilomètres à pied, semaine par semaine. Le pourcentage compare ta dernière semaine complète à la moyenne des quatre précédentes.</p><p><b>Repère :</b> au-delà de +30 % d’un coup, le risque de blessure grimpe. Vise plutôt +10 % par semaine, avec une semaine allégée toutes les trois ou quatre.</p></>}>
       {max <= 1 && !weeks.some((w) => w.km) ? <Empty>Ajoute tes sorties pour voir ton volume.</Empty> : (
-        <div className="gc-plot" onPointerMove={move} onPointerDown={move} onPointerLeave={(e) => { if (e.pointerType === "mouse") setHi(null); }}>
+        <div className="gc-plot" style={{ ["--area" as string]: areaClip(weeks.map((w, i) => [(X(i) / 300) * 100, Y(w.km)])) }} onPointerMove={move} onPointerDown={move} onPointerLeave={(e) => { if (e.pointerType === "mouse") setHi(null); }}>
           <svg viewBox="0 0 300 100" preserveAspectRatio="none" aria-hidden="true">
             <path className="gc-area" d={`${line} L300 100 L0 100 Z`} />
             <path className="gc-line" d={line} pathLength={1} vectorEffect="non-scaling-stroke" />

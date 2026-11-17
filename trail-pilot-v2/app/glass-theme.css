@@ -5,33 +5,55 @@
    <html data-theme="glass">. Uniquement des dégradés CSS (aucune image pour les effets).
    ===================================================================== */
 
+/* ---------- Couleur de fond choisie (Compte › Apparence) ----------
+   Palette calculée par components/glassPalette.ts et posée sur <html> (variables --g-*), avant l'affichage
+   par le script du layout racine. Valeurs ci-dessous : la teinte indigo d'origine. Les variables sont déclarées
+   comme couleurs pour que le changement de teinte se fasse en fondu (motion design), pas d'un coup. */
+@property --g-0 { syntax: "<color>"; inherits: true; initial-value: #0b0b2b; }
+@property --g-1 { syntax: "<color>"; inherits: true; initial-value: #2a1f6e; }
+@property --g-2 { syntax: "<color>"; inherits: true; initial-value: #3b2fa6; }
+@property --g-3 { syntax: "<color>"; inherits: true; initial-value: #5b4bd6; }
+@property --g-ink { syntax: "<color>"; inherits: true; initial-value: #1b1550; }
+@property --g-glow { syntax: "<color>"; inherits: true; initial-value: #b48cff; }
+@property --g-blue { syntax: "<color>"; inherits: true; initial-value: #4f5bff; }
+@property --g-acc { syntax: "<color>"; inherits: true; initial-value: #3d46e8; }
+@property --g-acc-b { syntax: "<color>"; inherits: true; initial-value: #4a52ee; }
+@property --g-acc-2 { syntax: "<color>"; inherits: true; initial-value: #6a72ff; }
+:root {
+  --g-0: #0b0b2b; --g-1: #2a1f6e; --g-2: #3b2fa6; --g-3: #5b4bd6; --g-ink: #1b1550;
+  --g-glow: #b48cff; --g-blue: #4f5bff; --g-acc: #3d46e8; --g-acc-b: #4a52ee; --g-acc-2: #6a72ff;
+}
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-theme="glass"] { transition: --g-0 .9s ease, --g-1 .9s ease, --g-2 .9s ease, --g-3 .9s ease, --g-ink .9s ease, --g-glow .9s ease, --g-blue .9s ease, --g-acc .9s ease, --g-acc-b .9s ease, --g-acc-2 .9s ease; }
+}
+
 :root[data-theme="glass"] {
   /* Fond et surfaces : les surfaces sont translucides pour laisser voir la nuit. */
-  --ink: #0b0b2b; --ink-2: rgba(255, 255, 255, .09); --ink-3: rgba(255, 255, 255, .14); --ink-4: rgba(255, 255, 255, .2);
+  --ink: var(--g-0); --ink-2: rgba(255, 255, 255, .09); --ink-3: rgba(255, 255, 255, .14); --ink-4: rgba(255, 255, 255, .2);
   --line: rgba(255, 255, 255, .22);
   /* Textes : blanc, puis lavande claire. Chaque valeur garde au moins 4,5:1 sur le verre le plus clair (mesuré). */
-  --snow: #ffffff; --soft: #f3f1ff; --mute: #e4e0fb;
+  --snow: #ffffff; --soft: color-mix(in srgb, #fff 92%, var(--g-glow)); --mute: color-mix(in srgb, #fff 80%, var(--g-glow));
   /* Accents : orange de la marque éclairci pour rester lisible sur le violet, couleurs d'état éclaircies aussi. */
   --ember: #ff9466; --ember-2: #ffb08c; --ember-t: #ffa47e;
   --ok: #74eaae; --lite: #ffd36e; --rest: #a9c1ff; --danger: #ff9c9c;
-  --accent-1: #3d46e8; --accent-2: #6a72ff;
+  --accent-1: var(--g-acc); --accent-2: var(--g-acc-2);
   --chart-grid: rgba(255, 255, 255, .12); --chart-zero: rgba(255, 255, 255, .3); --chart-bar: rgba(255, 255, 255, .22); --chart-bar-2: rgba(255, 255, 255, .3);
   --err-bg: rgba(120, 20, 60, .55); --err-fg: #ffe1ea;
   --glass: rgba(255, 255, 255, .11); --glass-line: rgba(255, 255, 255, .25);
-  --glass-shadow: 0 18px 40px -20px rgba(5, 4, 30, .6), inset 0 1px 0 rgba(255, 255, 255, .26), inset 0 18px 36px -26px rgba(255, 255, 255, .32);
+  --glass-shadow: 0 18px 40px -20px color-mix(in srgb, var(--g-0) 80%, #000 20%), inset 0 1px 0 rgba(255, 255, 255, .26), inset 0 18px 36px -26px rgba(255, 255, 255, .32);
   color-scheme: dark;
 }
 
 /* ---------- Fond de nuit (fixe) : dégradé, taches lumineuses floues, étoiles ---------- */
-:root[data-theme="glass"], :root[data-theme="glass"] body { background: #0b0b2b; }
+:root[data-theme="glass"], :root[data-theme="glass"] body { background: var(--g-0); }
 :root[data-theme="glass"] body { position: relative; isolation: isolate; min-height: 100svh; }
 :root[data-theme="glass"] body::before, :root[data-theme="glass"] body::after { content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none; }
 :root[data-theme="glass"] body::before {
   background:
-    radial-gradient(40vmax 30vmax at 12% 14%, rgba(180, 140, 255, .32), transparent 70%),
-    radial-gradient(44vmax 32vmax at 92% 46%, rgba(79, 91, 255, .26), transparent 72%),
-    radial-gradient(36vmax 26vmax at 28% 96%, rgba(180, 140, 255, .18), transparent 70%),
-    linear-gradient(165deg, #0b0b2b 0%, #2a1f6e 55%, #3b2fa6 100%);
+    radial-gradient(40vmax 30vmax at 12% 14%, color-mix(in srgb, var(--g-glow) 32%, transparent), transparent 70%),
+    radial-gradient(44vmax 32vmax at 92% 46%, color-mix(in srgb, var(--g-blue) 26%, transparent), transparent 72%),
+    radial-gradient(36vmax 26vmax at 28% 96%, color-mix(in srgb, var(--g-glow) 18%, transparent), transparent 70%),
+    linear-gradient(165deg, var(--g-0) 0%, var(--g-1) 55%, var(--g-2) 100%);
 }
 :root[data-theme="glass"] body::after {
   opacity: .5;
@@ -61,41 +83,41 @@
 :root[data-theme="glass"] .faq details[open] { background: rgba(255, 255, 255, .15); }
 /* Sans flou disponible : fond violet opaque, lisible. */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  :root[data-theme="glass"] :is(.card, .kpi, .banner, .sheet, .side-goal, .fcard, .free-card, .faq details, .telemetry, .auth-card) { background: rgba(40, 32, 110, .85); }
+  :root[data-theme="glass"] :is(.card, .kpi, .banner, .sheet, .side-goal, .fcard, .free-card, .faq details, .telemetry, .auth-card) { background: color-mix(in srgb, var(--g-1) 85%, transparent); }
 }
 /* Carte mise en avant (verdict du jour, carte « accent ») : bleu saturé. */
 :root[data-theme="glass"] :is(.free-card.accent) {
-  background: radial-gradient(70% 55% at 100% 0%, rgba(106, 114, 255, .9), transparent 70%), linear-gradient(160deg, var(--accent-1), #4a52ee);
+  background: radial-gradient(70% 55% at 100% 0%, color-mix(in srgb, var(--g-acc-2) 90%, transparent), transparent 70%), linear-gradient(160deg, var(--g-acc), var(--g-acc-b));
 }
 
 /* ---------- Navigation ---------- */
-:root[data-theme="glass"] .side { background: rgba(11, 11, 43, .35); border-right-color: rgba(255, 255, 255, .14); -webkit-backdrop-filter: blur(24px) saturate(140%); backdrop-filter: blur(24px) saturate(140%); }
+:root[data-theme="glass"] .side { background: color-mix(in srgb, var(--g-0) 35%, transparent); border-right-color: rgba(255, 255, 255, .14); -webkit-backdrop-filter: blur(24px) saturate(140%); backdrop-filter: blur(24px) saturate(140%); }
 :root[data-theme="glass"] .navbtn:hover { background: rgba(255, 255, 255, .08); }
 :root[data-theme="glass"] .navbtn.on { background: rgba(255, 255, 255, .14); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .2); }
 :root[data-theme="glass"] .navbtn.on svg { color: #fff; }
-:root[data-theme="glass"] .tabbar { background: rgba(20, 16, 64, .62); border: 1px solid rgba(255, 255, 255, .2); -webkit-backdrop-filter: blur(24px) saturate(140%); backdrop-filter: blur(24px) saturate(140%); box-shadow: 0 18px 40px -16px rgba(5, 4, 30, .8), inset 0 1px 0 rgba(255, 255, 255, .2); }
-:root[data-theme="glass"] .nav.scrolled { background: rgba(11, 11, 43, .55); }
+:root[data-theme="glass"] .tabbar { background: color-mix(in srgb, var(--g-0) 62%, transparent); border: 1px solid rgba(255, 255, 255, .2); -webkit-backdrop-filter: blur(24px) saturate(140%); backdrop-filter: blur(24px) saturate(140%); box-shadow: 0 18px 40px -16px color-mix(in srgb, var(--g-0) 85%, #000), inset 0 1px 0 rgba(255, 255, 255, .2); }
+:root[data-theme="glass"] .nav.scrolled { background: color-mix(in srgb, var(--g-0) 55%, transparent); }
 
 /* ---------- Boutons, choix, champs ---------- */
 :root[data-theme="glass"] .btn:not(.ghost):not(.danger):not(.strava):not(.btn-ghost) {
-  background: linear-gradient(160deg, var(--accent-1), #4a52ee); color: #fff;
-  box-shadow: 0 10px 24px -12px rgba(61, 70, 232, .9), inset 0 1px 0 rgba(255, 255, 255, .3);
+  background: linear-gradient(160deg, var(--accent-1), var(--g-acc-b)); color: #fff;
+  box-shadow: 0 10px 24px -12px color-mix(in srgb, var(--g-acc) 90%, transparent), inset 0 1px 0 rgba(255, 255, 255, .3);
 }
-:root[data-theme="glass"] .btn:not(.ghost):not(.danger):not(.strava):not(.btn-ghost):hover { background: linear-gradient(160deg, #4a52f0, #5a62f5); }
+:root[data-theme="glass"] .btn:not(.ghost):not(.danger):not(.strava):not(.btn-ghost):hover { background: linear-gradient(160deg, var(--g-acc-b), var(--g-acc-2)); }
 :root[data-theme="glass"] .btn.ghost, :root[data-theme="glass"] .btn-ghost { background: rgba(255, 255, 255, .08); color: #fff; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .3); }
 :root[data-theme="glass"] .btn.ghost:hover { background: rgba(255, 255, 255, .14); }
-:root[data-theme="glass"] .picks label { background: rgba(11, 11, 43, .35); border-color: rgba(255, 255, 255, .22); }
-:root[data-theme="glass"] .picks label.on { background: linear-gradient(160deg, var(--accent-1), #4a52ee); border-color: rgba(255, 255, 255, .45); color: #fff; }
+:root[data-theme="glass"] .picks label { background: color-mix(in srgb, var(--g-0) 35%, transparent); border-color: rgba(255, 255, 255, .22); }
+:root[data-theme="glass"] .picks label.on { background: linear-gradient(160deg, var(--accent-1), var(--g-acc-b)); border-color: rgba(255, 255, 255, .45); color: #fff; }
 :root[data-theme="glass"] :is(.input, .form select, .form input:not([type=range]):not([type=radio]):not([type=checkbox]), .form textarea, .auth-form input, textarea, select) {
-  background: rgba(11, 11, 43, .45); border-color: rgba(255, 255, 255, .24); color: #fff;
+  background: color-mix(in srgb, var(--g-0) 45%, transparent); border-color: rgba(255, 255, 255, .24); color: #fff;
 }
 :root[data-theme="glass"] ::placeholder { color: rgba(255, 255, 255, .6); }
 :root[data-theme="glass"] :focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
 :root[data-theme="glass"] ::selection { background: var(--accent-2); color: #fff; }
-:root[data-theme="glass"] .chip { background: rgba(11, 11, 43, .3); }
+:root[data-theme="glass"] .chip { background: color-mix(in srgb, var(--g-0) 30%, transparent); }
 :root[data-theme="glass"] .note { background: rgba(255, 255, 255, .1); }
-:root[data-theme="glass"] .sheet-back { background: rgba(5, 4, 30, .66); }
-:root[data-theme="glass"] .toast { background: #fff; color: #1b1550; }
+:root[data-theme="glass"] .sheet-back { background: color-mix(in srgb, var(--g-0) 66%, transparent); }
+:root[data-theme="glass"] .toast { background: #fff; color: var(--g-ink); }
 
 /* ---------- Typographie : gros chiffres poids 500, étiquettes en petites capitales espacées ---------- */
 :root[data-theme="glass"] .eyebrow { letter-spacing: .2em; color: var(--mute); }
@@ -103,20 +125,21 @@
 :root[data-theme="glass"] .kpi small, :root[data-theme="glass"] .chip { letter-spacing: .16em; }
 :root[data-theme="glass"] .head h1 { font-weight: 600; }
 
-/* ---------- Bloc « Ma sortie du jour » : il garde son propre fond de nuit, tel que validé ---------- */
-:root[data-theme="glass"] .night { box-shadow: 0 24px 60px -30px rgba(5, 4, 30, .9), inset 0 0 0 1px rgba(255, 255, 255, .08); }
-:root[data-theme="glass"] .tmap-layers { background: rgba(11, 11, 43, .72); }
+/* ---------- Bloc « Ma sortie du jour » : même teinte que le reste du mode Verre ---------- */
+:root[data-theme="glass"] .night { --n-0: var(--g-0); --n-1: var(--g-1); --n-2: var(--g-3); --n-violet: var(--g-glow); --n-blue: var(--g-blue); --n-acc: var(--g-acc); --n-acc-b: var(--g-acc-b); --n-acc-2: var(--g-acc-2); }
+:root[data-theme="glass"] .night { box-shadow: 0 24px 60px -30px color-mix(in srgb, var(--g-0) 90%, #000), inset 0 0 0 1px rgba(255, 255, 255, .08); }
+:root[data-theme="glass"] .tmap-layers { background: color-mix(in srgb, var(--g-0) 72%, transparent); }
 
 /* ---------- Pages publiques ---------- */
-:root[data-theme="glass"] .hero-stage { background: #0b0b2b; }
-:root[data-theme="glass"] .hero-shade { background: linear-gradient(90deg, rgba(11, 11, 43, .92) 0%, rgba(42, 31, 110, .6) 40%, rgba(42, 31, 110, .12) 72%), linear-gradient(0deg, #0b0b2b 0%, rgba(11, 11, 43, 0) 42%), linear-gradient(180deg, rgba(11, 11, 43, .55) 0%, rgba(11, 11, 43, 0) 26%); }
+:root[data-theme="glass"] .hero-stage { background: var(--g-0); }
+:root[data-theme="glass"] .hero-shade { background: linear-gradient(90deg, color-mix(in srgb, var(--g-0) 92%, transparent) 0%, color-mix(in srgb, var(--g-1) 60%, transparent) 40%, color-mix(in srgb, var(--g-1) 12%, transparent) 72%), linear-gradient(0deg, var(--g-0) 0%, rgba(11, 11, 43, 0) 42%), linear-gradient(180deg, color-mix(in srgb, var(--g-0) 55%, transparent) 0%, rgba(11, 11, 43, 0) 26%); }
 :root[data-theme="glass"] .hero-media img { filter: saturate(.7) hue-rotate(-12deg) brightness(.85); }
-:root[data-theme="glass"] .hero-sub { color: #ebe8ff; }
-:root[data-theme="glass"] :is(.marquee) { background: rgba(11, 11, 43, .4); }
-:root[data-theme="glass"] :is(.fviz, .step .dot) { background: rgba(11, 11, 43, .45); }
-:root[data-theme="glass"] .phone { background: #0d0a2e; box-shadow: 0 0 0 1px rgba(255, 255, 255, .22), 0 60px 120px -30px #000; }
-:root[data-theme="glass"] .screen .notch { background: #0d0a2e; }
-:root[data-theme="glass"] .free-card .btn { background: #fff; color: #1b1550; }
+:root[data-theme="glass"] .hero-sub { color: color-mix(in srgb, #fff 88%, var(--g-glow)); }
+:root[data-theme="glass"] :is(.marquee) { background: color-mix(in srgb, var(--g-0) 40%, transparent); }
+:root[data-theme="glass"] :is(.fviz, .step .dot) { background: color-mix(in srgb, var(--g-0) 45%, transparent); }
+:root[data-theme="glass"] .phone { background: var(--g-0); box-shadow: 0 0 0 1px rgba(255, 255, 255, .22), 0 60px 120px -30px #000; }
+:root[data-theme="glass"] .screen .notch { background: var(--g-0); }
+:root[data-theme="glass"] .free-card .btn { background: #fff; color: var(--g-ink); }
 :root[data-theme="glass"] .auth-switch { background: rgba(255, 255, 255, .09); }
 
 /* ---------- Mouvement : rien de plus que l'existant ; le fond est fixe et ne bouge pas ---------- */
@@ -125,12 +148,98 @@
 }
 
 /* ---------- Choix sélectionnés et pastilles : même bleu que les boutons, texte blanc ---------- */
-:root[data-theme="glass"] .terr-kinds button.on { background: linear-gradient(160deg, var(--accent-1), #4a52ee); border-color: rgba(255, 255, 255, .45); color: #fff; }
-:root[data-theme="glass"] .q-head span { background: linear-gradient(160deg, var(--accent-1), #4a52ee); color: #fff; }
-:root[data-theme="glass"] .info-q { background: rgba(11, 11, 43, .7); color: #fff; border-color: rgba(255, 255, 255, .4); }
+:root[data-theme="glass"] .terr-kinds button.on { background: linear-gradient(160deg, var(--accent-1), var(--g-acc-b)); border-color: rgba(255, 255, 255, .45); color: #fff; }
+:root[data-theme="glass"] .q-head span { background: linear-gradient(160deg, var(--accent-1), var(--g-acc-b)); color: #fff; }
+:root[data-theme="glass"] .info-q { background: color-mix(in srgb, var(--g-0) 70%, transparent); color: #fff; border-color: rgba(255, 255, 255, .4); }
 :root[data-theme="glass"] .info-q:hover, :root[data-theme="glass"] .info-q.on { background: var(--accent-1); border-color: #fff; }
 
 /* ---------- Pastilles de statut : texte coloré sur fond sombre (le fond teinté de la V2 n'était pas lisible sur le violet) ---------- */
-:root[data-theme="glass"] .gc-status { background: rgba(11, 11, 43, .62) !important; }
+:root[data-theme="glass"] .gc-status { background: color-mix(in srgb, var(--g-0) 62%, transparent) !important; }
 :root[data-theme="glass"] .photo-credit { color: rgba(255, 255, 255, .88); text-shadow: 0 1px 6px rgba(0, 0, 0, .6); }
 :root[data-theme="glass"] .view-switch button:not(.on) { color: #fff; }
+
+/* =====================================================================
+   Charte pointillée : toutes les pages suivent le bloc « Ma sortie du jour »
+   - aplats, barres et jauges en trame de points (couleur d'origine gardée : seul le motif change) ;
+   - courbes en pointillés ronds ;
+   - grands chiffres en poids 500, blancs ; petites capitales espacées en mono pour les étiquettes.
+   Les masques SVG #tp-dots / #tp-dots-l sont définis une fois dans le layout racine (components/DotDefs.tsx).
+   ===================================================================== */
+
+/* ---------- Graphiques SVG ---------- */
+:root[data-theme="glass"] :is(.chart .ch-bar, .chart .ch-area, .chart .profile-fill, .gc-seg, .gc-gauge-val, .gauge .g-val, .radar .radar-you, .radar .radar-target) { mask: url(#tp-dots); }
+/* Graphiques larges (720 unités) : trame plus grosse en unités, pour garder des points de même taille à l'écran. */
+:root[data-theme="glass"] svg.chart[viewBox^="0 0 720"] :is(.ch-bar, .ch-area, .profile-fill) { mask: url(#tp-dots-l); }
+/* Fond des jauges et anneaux : points espacés. */
+:root[data-theme="glass"] :is(.gc-track, .gauge .g-bg) { stroke-dasharray: 0 5.2; stroke-linecap: round; }
+/* Courbes : pointillés ronds (les longueurs sont relatives, les tracés étant normalisés à 1). */
+:root[data-theme="glass"] :is(.chart .ch-line, .chart .profile-line, .gc-line) { stroke-dasharray: 0 .016 !important; stroke-linecap: round; stroke-width: 3.4; }
+:root[data-theme="glass"] svg.chart[viewBox^="0 0 720"] :is(.ch-line, .profile-line) { stroke-dasharray: 0 .011 !important; stroke-width: 4.6; }
+:root[data-theme="glass"] :is(.gc-line, .terr-spark .l) { stroke-width: 3.2; }
+:root[data-theme="glass"] .terr-spark .l { stroke-dasharray: 0 6; stroke-linecap: round; }
+:root[data-theme="glass"] .terr-spark .a { fill: none; }
+/* Lignes de grille : pointillées, discrètes. */
+:root[data-theme="glass"] .chart line:not(.runner-stem) { stroke-dasharray: 1 5; }
+
+/* ---------- Aplat sous les courbes des cartes (graphiques étirés) : trame CSS découpée selon la courbe ---------- */
+:root[data-theme="glass"] .gc-plot[style*="--area"] .gc-area { fill: none; }
+:root[data-theme="glass"] .gc-plot[style*="--area"]::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none; clip-path: var(--area);
+  background: radial-gradient(circle, color-mix(in srgb, var(--gc, var(--snow)) 75%, transparent) 1.6px, transparent 2.1px) 0 100% / 7px 7px;
+}
+:root[data-theme="glass"] .ready-plot[style*="--area"]::before { background-image: radial-gradient(circle, color-mix(in srgb, var(--ember) 75%, transparent) 1.6px, transparent 2.1px); }
+@media (prefers-reduced-motion: no-preference) {
+  /* Les points montent de gauche à droite à l'arrivée de la carte (comme le profil du bloc « Ma sortie du jour »). */
+  html.mo:root[data-theme="glass"] .gc-plot[style*="--area"]::before { animation: dots-sweep 1.2s cubic-bezier(.2, .8, .2, 1) .15s both; }
+  @keyframes dots-sweep { from { -webkit-mask-size: 0% 100%; mask-size: 0% 100%; } to { -webkit-mask-size: 100% 100%; mask-size: 100% 100%; } }
+  html.mo:root[data-theme="glass"] .gc-plot[style*="--area"]::before { -webkit-mask-image: linear-gradient(#000, #000); mask-image: linear-gradient(#000, #000); -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; }
+}
+
+/* ---------- Barres HTML : colonnes de points ---------- */
+:root[data-theme="glass"] :is(.week-bars i, .month-bars i, .gc-bars i, .gc-days i) {
+  -webkit-mask: radial-gradient(circle, #000 2.2px, transparent 2.7px) 50% 100% / 6.5px 6.5px;
+  mask: radial-gradient(circle, #000 2.2px, transparent 2.7px) 50% 100% / 6.5px 6.5px;
+  border-radius: 0;
+}
+/* Jauges horizontales : rail et remplissage en une ligne de points (le rail en points pâles). */
+:root[data-theme="glass"] :is(.meter, .shoe-bar, .sg-bar, .gap-bar, .wk-prog > i, .review-bar) {
+  -webkit-mask: radial-gradient(circle, #000 2.2px, transparent 2.7px) 0 50% / 6px 6px;
+  mask: radial-gradient(circle, #000 2.2px, transparent 2.7px) 0 50% / 6px 6px;
+  height: 6px; border-radius: 0; background-color: rgba(255, 255, 255, .3);
+}
+:root[data-theme="glass"] .wk-prog > i::after, :root[data-theme="glass"] :is(.meter, .shoe-bar, .sg-bar, .gap-bar) > i { border-radius: 0; }
+:root[data-theme="glass"] .review-bar { background: transparent; }
+:root[data-theme="glass"] :is(.need-bar i, .rd-prog i) {
+  -webkit-mask: radial-gradient(circle, #000 2.4px, transparent 2.9px) 0 50% / 6.5px 6.5px;
+  mask: radial-gradient(circle, #000 2.4px, transparent 2.9px) 0 50% / 6.5px 6.5px;
+}
+:root[data-theme="glass"] .need-bar { background: transparent; border-style: dashed; }
+:root[data-theme="glass"] :is(.vo2-scale::before, .vo2-scale .range) {
+  -webkit-mask: radial-gradient(circle, #000 2.6px, transparent 3.1px) 0 50% / 7px 7px;
+  mask: radial-gradient(circle, #000 2.6px, transparent 3.1px) 0 50% / 7px 7px;
+  border-radius: 0;
+}
+:root[data-theme="glass"] .vo2-scale .range { opacity: .9; }
+
+/* ---------- Chiffres : même dessin que le bloc « Ma sortie du jour » ---------- */
+:root[data-theme="glass"] :is(.kpi b, .gc-big, .ready-now b, .vo2-big, .zbig, .week-kpis b, .gauge b, .race-time b, .specs b, .rd-next b) {
+  font-family: var(--display); font-weight: 500; letter-spacing: -.02em; font-variant-numeric: tabular-nums;
+}
+:root[data-theme="glass"] :is(.vo2-big, .zbig, .ready-now b) { color: var(--snow); }
+:root[data-theme="glass"] .race-time b { font-size: 30px; }
+:root[data-theme="glass"] .specs b { font-size: 22px; }
+:root[data-theme="glass"] :is(.specs small, .race-time small, .kpi small, .gc-axis, .week-bars small, .month-bars small, .gc-days small) { font-family: var(--mono); letter-spacing: .18em; text-transform: uppercase; }
+/* Encadré du temps estimé : verre intérieur, comme les petites cartes du bloc. */
+:root[data-theme="glass"] .race-time { background: rgba(255, 255, 255, .08); border-color: rgba(255, 255, 255, .22); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .2); border-radius: 22px; }
+/* Titres : poids moyen, comme le bloc. */
+:root[data-theme="glass"] :is(.card h2, .card h3, .q-head, .race-name) { font-weight: 600; }
+:root[data-theme="glass"] .head h1 { letter-spacing: -.03em; }
+/* Filets de séparation et contours en pointillés. */
+:root[data-theme="glass"] :is(.card hr, .race-verdict, .tint-pick) { border-top-style: dashed; }
+/* Tuiles intérieures (sur fond le plus sombre ailleurs) : verre intérieur, comme les petites cartes du bloc. */
+:root[data-theme="glass"] :is(.vo2-races > div, .session, .strat-sum > div, .format, .fix-list li, .race-guide, .sg-list > li, .gear-list li, .tip) {
+  background: rgba(255, 255, 255, .08); border-color: rgba(255, 255, 255, .2); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .16);
+}
+:root[data-theme="glass"] .vo2-races > div { border-radius: 20px; }
+:root[data-theme="glass"] .vo2-races b { font-family: var(--display); font-weight: 500; font-size: 24px; letter-spacing: -.02em; }
+:root[data-theme="glass"] .vo2-races small { letter-spacing: .18em; }

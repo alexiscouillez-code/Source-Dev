@@ -50,6 +50,37 @@ scenario("Planning, check-in et validation automatique", async () => {
     const done = month.sessions.find((s) => s.date === iso(-1) && s.title === "Footing test");
     check(done?.status === "done" && done?.activity_id, "une sortie le jour d'une séance la valide automatiquement", done?.status);
 
+    // Temps de course au plus près du réel : un vrai résultat, puis le temps du vainqueur précédent.
+    await tab(page, "plan");
+    const before = await api.get(`/api/plan?today=${iso(0)}`);
+    await page.locator(".race-refine").click();
+    await page.waitForSelector(".race-anchor[open]");
+    await page.locator('.race-anchor input[placeholder="30"]').fill("25");
+    await page.locator('.race-anchor input[placeholder="1500"]').fill("1200");
+    await page.locator('.race-anchor input[placeholder="4h05"]').fill("3h30");
+    await page.locator(".race-form button[type=submit]").click();
+    // Le plan se recharge après l'enregistrement : on attend le nouveau texte.
+    await page.waitForFunction(() => document.querySelector(".race-time")?.textContent.includes("d’après ton résultat"), null, { timeout: 20000 }).catch(() => {});
+    const withRef = await api.get(`/api/plan?today=${iso(0)}`);
+    check(withRef.plan.estimateFrom === "reference" && withRef.goal.anchor?.ref?.min === 210, "le temps vient du résultat de référence", withRef.plan.estimateFrom);
+    check(/d’après ton résultat : 25 km, 1\s?200 m D\+ en 3 h 30/.test(await page.locator(".race-time").innerText()), "l'écran dit d'où vient le temps", await page.locator(".race-time").innerText());
+    check(withRef.plan.estimate.low !== before.plan.estimate.low || withRef.plan.estimate.high !== before.plan.estimate.high, "le temps estimé change avec le vrai résultat", [before.plan.estimate, withRef.plan.estimate]);
+    await page.locator(".race-refine").click();
+    await page.waitForSelector(".race-anchor[open]");
+    check((await page.locator('.race-anchor input[placeholder="4h05"]').inputValue()) === "3 h 30", "les repères sont pré-remplis");
+    await page.locator('.race-anchor input[placeholder="6h42"]').fill("3h40");
+    await page.locator(".race-form button[type=submit]").click();
+    await page.waitForFunction(() => document.querySelector(".race-time")?.textContent.includes("vainqueur précédent"), null, { timeout: 20000 }).catch(() => {});
+    const withWin = await api.get(`/api/plan?today=${iso(0)}`);
+    check(withWin.plan.estimateCourse?.from === "vainqueur", "le temps du vainqueur corrige le parcours", withWin.plan.estimateCourse);
+    check(/parcours [+−±]\d+ % \(temps du vainqueur précédent\)/.test(await page.locator(".race-time").innerText()), "la correction du parcours est affichée");
+    // Saisie incomplète : message clair, rien n'est enregistré.
+    await page.locator(".race-refine").click();
+    await page.locator('.race-anchor input[placeholder="4h05"]').fill("");
+    await page.locator(".race-form button[type=submit]").click();
+    check(await page.locator(".race-form .note.err").isVisible(), "résultat incomplet : message clair");
+    await page.locator(".race-form .link", { hasText: "Annuler" }).click();
+
     check((await overflow(page)) <= 0, "pas de débordement horizontal");
     check(errors.length === 0, "aucune erreur dans la page", errors.slice(0, 3));
   }

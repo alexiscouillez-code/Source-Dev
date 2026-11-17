@@ -1,6 +1,7 @@
 import { addDays, diffDays, mondayOf } from "./dates";
 import { isFoot, type ActivityLike } from "./load";
 import { raceTime } from "./vo2";
+import { cleanAnchor, courseCorrection, fromReference, refRatio, trailTime, type RaceAnchor } from "./race-anchor";
 
 /**
  * Plan d’entraînement pour une course choisie.
@@ -16,7 +17,9 @@ import { raceTime } from "./vo2";
  */
 export type Level = "debutant" | "regulier" | "confirme";
 export interface PlannerProfile { daysPerWeek: number; longDay: number; maxWeeklyMinutes: number | null; level: Level }
-export interface PlannerGoal { name: string; date: string; distanceKm: number | null; gainM: number | null }
+export interface PlannerGoal { name: string; date: string; distanceKm: number | null; gainM: number | null; anchor?: RaceAnchor | null }
+/** D'où vient le temps estimé : un vrai résultat du coureur, sa VO2max, ou son niveau déclaré. */
+export type EstimateFrom = "reference" | "vo2" | "niveau";
 export interface LoadState { ctl: number; atl: number; ratio: number | null; calibrated: boolean }
 export interface PlanItem {
   date: string; template: Template; title: string; sport: string; durationMin: number;
@@ -31,7 +34,11 @@ export interface RacePlan {
   race: { name: string; date: string; distanceKm: number; gainM: number; effortKm: number; daysTo: number; assumed: boolean };
   estimate: { low: number; high: number };
   /** D’où vient le temps estimé : la VO2max du coureur, sinon son niveau déclaré. */
-  estimateFrom?: "vo2" | "niveau";
+  estimateFrom?: EstimateFrom;
+  /** Correction du parcours (vainqueur précédent ou terrain déclaré), quand il y en a une. */
+  estimateCourse?: { factor: number; from: "vainqueur" | "terrain" | null };
+  /** Résultat de référence utilisé pour l'estimation. */
+  estimateRef?: { km: number; gain: number; min: number } | null;
   /** Temps du modèle sans calibrage, et calibrage appliqué */
   modelMid?: number; calib?: { factor: number; n: number } | null;
   demands: { weeklyMin: number; longMin: number; weeklyGain: number; backToBack: boolean };
@@ -97,19 +104,8 @@ export function recentLongest(activities: ActivityLike[], today: string) {
 const recentGain = (acts: ActivityLike[], today: string) => recentFoot(acts, today).reduce((s, a) => s + (a.gainM ?? 0), 0) / 4;
 
 // ---------- Ce que demande la course ----------
-/**
- * Temps de course à partir de la VO2max : le km-effort (km + D+/100) couru comme une distance à plat
- * (modèle Daniels), puis trois corrections de terrain : sentier (8 %), raideur du parcours (jusqu’à 6 %)
- * et usure des longues durées (marche, ravitaillements, nuit) : +4 % par heure de 4 h à 12 h, puis +1,2 % par heure.
- * Repères de calage (temps de vainqueurs et de milieu de classement publiés) : UTMB ≈ 22 h au niveau élite, ≈ 31 h
- * pour un coureur à 3 h au marathon ; les formats de moins de 4 h ne sont pas concernés.
- */
-export function trailTime(vdot: number, distanceKm: number, gainM: number) {
-  const effortKm = distanceKm + gainM / 100;
-  const base = raceTime(vdot, effortKm) * (1.08 + Math.min(0.06, gainM / Math.max(1, distanceKm) / 1000));
-  const h = base / 60;
-  return base * (h <= 4 ? 1 : 1 + 0.04 * (Math.min(h, 12) - 4) + 0.012 * Math.max(0, h - 12));
-}
+// Temps de course à partir de la VO2max : voir engine/race-anchor (gardé exporté ici pour les appels existants).
+export { trailTime };
 
 /** `calib` : facteur personnel tiré de tes courses passées (engine/calibration), appliqué au seul temps estimé. */
 export function raceDemands(goal: PlannerGoal, level: Level, ctl = 0, vdot: number | null = null, calib = 1) {
@@ -122,14 +118,25 @@ export function raceDemands(goal: PlannerGoal, level: Level, ctl = 0, vdot: numb
   const pace = PACE[level] * (1 + Math.max(0, effortKm - 30) / 400) * fitness;
   // Avec une VO2max connue (montre ou sorties), le temps vient de ta capacité réelle et non du niveau déclaré.
   const fromVo2 = vdot != null && vdot >= 28 && vdot <= 85;
-  const mid = fromVo2 ? trailTime(vdot!, distanceKm, gainM) : effortKm * pace;
+  // Un vrai résultat de trail passe avant tout : il contient la technique, les descentes et la gestion de course.
+  const anchor = cleanAnchor(goal.anchor);
+  const ref = anchor?.ref ?? null, ratio = ref ? refRatio(ref, distanceKm, gainM) : 1;
+  const from: EstimateFrom = ref ? "reference" : fromVo2 ? "vo2" : "niveau";
+  const generic = from === "reference" ? fromReference(ref!, distanceKm, gainM) : fromVo2 ? trailTime(vdot!, distanceKm, gainM) : effortKm * pace;
+  // Parcours : difficulté mesurée par le vainqueur précédent, sinon terrain déclaré.
+  const course = courseCorrection(anchor, distanceKm, gainM);
+  const mid = generic * course.factor;
   const raceMin = Math.round(mid / 5) * 5;
   const longMin = raceMin <= 180 ? Math.max(60, raceMin * 0.8) : clamp(raceMin * 0.4, 150, 330);
   const weeklyMin = clamp((150 + effortKm * 5) * VOLUME_FACTOR[level], 180, 720);
   const weeklyGain = clamp(gainM * (effortKm > 100 ? 0.8 : 1.2), 300, 6000);
+  // Fourchette : plus serrée avec un vrai résultat (sauf extrapolation à plus de 3 fois sa distance), plus large au niveau déclaré.
+  const [lo, hi] = from === "reference" ? (ratio > 3 || ratio < 1 / 3 ? [0.93, 1.12] : [0.95, 1.07]) : fromVo2 ? [0.94, 1.1] : [0.92, 1.15];
   return {
     distanceKm, gainM, effortKm: Math.round(effortKm), assumed, raceMin,
-    estimate: { low: Math.round((mid * calib * (fromVo2 ? 0.94 : 0.92)) / 5) * 5, high: Math.round((mid * calib * (fromVo2 ? 1.1 : 1.15)) / 5) * 5 }, fromVo2,
+    estimate: { low: Math.round((mid * calib * lo) / 5) * 5, high: Math.round((mid * calib * hi) / 5) * 5 }, fromVo2, from,
+    /** Correction du parcours appliquée (1 = aucune) et sa source. */
+    course: { factor: Math.round(course.factor * 1000) / 1000, from: course.from },
     /** Temps médian du modèle, sans calibrage personnel : sert à recaler le facteur après la course. */
     modelMid: Math.round(mid),
     longMin: round5(longMin), weeklyMin: round5(weeklyMin), weeklyGain: round50(weeklyGain), backToBack: raceMin > 360,
@@ -256,7 +263,7 @@ export function buildRacePlan(input: { today: string; profile: PlannerProfile; g
   const plan: RacePlan = {
     generatedOn: today, engine: ENGINE,
     race: { name: goal.name, date: goal.date, distanceKm: d.distanceKm, gainM: d.gainM, effortKm: d.effortKm, daysTo, assumed: d.assumed },
-    estimate: d.estimate, estimateFrom: d.fromVo2 ? "vo2" : "niveau", modelMid: d.modelMid, calib: input.calib && input.calib.n ? input.calib : null,
+    estimate: d.estimate, estimateFrom: d.from, estimateCourse: d.course.from ? d.course : undefined, estimateRef: goal.anchor?.ref ?? undefined, modelMid: d.modelMid, calib: input.calib && input.calib.n ? input.calib : null,
     demands: { weeklyMin: d.weeklyMin, longMin: d.longMin, weeklyGain: d.weeklyGain, backToBack: d.backToBack },
     current: { weeklyMin: round5(base), longestMin: round5(longest), weeklyGain: round50(baseGain), hasHistory },
     reach: { weeklyMin: reachWeekly, longMin: reachLong },

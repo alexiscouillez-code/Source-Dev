@@ -1,4 +1,5 @@
-// Parcours : tour de tous les écrans (pages publiques et application) en mode Verre, à 375 px et 1280 px.
+// Parcours : tour de tous les écrans (pages publiques et application) en mode Verre, à 375 px (teinte indigo
+// d'origine) et 1280 px (teinte « Braise » : fond rouge-orangé, la plus proche des accents orange).
 // Enregistre une capture par écran, une capture sans texte, et la position de chaque texte visible,
 // pour la mesure de contraste sur tout le site (audit-contrast.py).
 const fs = require("fs");
@@ -30,11 +31,18 @@ async function shoot(page, name, boxes) {
   await page.addStyleTag({ content: "*, *::before, *::after { animation-duration: 0s !important; animation-delay: 0s !important; transition: none !important; }" });
   await page.waitForTimeout(200);
   await page.screenshot({ path: `${OUT}/tour-${name}.png` });
+  // Page entière, pour relire la charte graphique d'un coup d'œil (pas utilisée par la mesure de contraste).
+  await page.screenshot({ path: `${OUT}/page-${name}.png`, fullPage: true });
   boxes[name] = await textBoxes(page);
   const css = await page.addStyleTag({ content: "body * { color: transparent !important; text-shadow: none !important; -webkit-text-fill-color: transparent !important; } input::placeholder, textarea::placeholder { color: transparent !important; }" });
   await page.screenshot({ path: `${OUT}/tour-${name}-fond.png` });
   await css.evaluate((e) => e.remove());
 }
+
+/** Pose le mode Verre et, à 1280 px, la teinte Braise (palette calculée comme dans l'appli). */
+const { glassPalette, TINTS } = require("../../components/glassPalette.ts");
+const BRAISE = { ...TINTS.find((t) => t.id === "braise").tint, p: glassPalette(TINTS.find((t) => t.id === "braise").tint) };
+const tintScript = ([w, braise]) => { try { localStorage.setItem("trail-pilot-theme", "glass"); if (w > 400) localStorage.setItem("trail-pilot-glass", JSON.stringify(braise)); } catch {} };
 
 scenario("Tour de tous les écrans (mode Verre)", async () => {
   const boxes = {};
@@ -42,7 +50,7 @@ scenario("Tour de tous les écrans (mode Verre)", async () => {
     console.log(`— ${width} px`);
     // Pages publiques
     const anon = await (await require("playwright").chromium.launch()).newContext({ viewport: { width, height: width === 375 ? 812 : 900 }, deviceScaleFactor: 2 });
-    await anon.addInitScript(() => { try { localStorage.setItem("trail-pilot-theme", "glass"); } catch {} });
+    await anon.addInitScript(tintScript, [width, BRAISE]);
     const pub = await anon.newPage();
     for (const [name, url] of [["accueil", "/"], ["connexion", "/connexion"]]) {
       await pub.goto(BASE + url);
@@ -55,6 +63,7 @@ scenario("Tour de tous les écrans (mode Verre)", async () => {
 
     // Application, avec des données
     const { page, errors, api } = await newUser(device, { theme: "glass", profile: { hrMax: 188, hrRest: 48, daysPerWeek: 5, longDay: 6, maxWeeklyMinutes: 480, level: "confirme" } });
+    await page.context().addInitScript(tintScript, [width, BRAISE]);
     await page.setViewportSize({ width, height: width === 375 ? 812 : 900 });
     await api.put("/api/goal", { today: iso(0), name: "Trail des Crêtes", date: iso(90), distanceKm: 42, gainM: 2500 });
     for (let i = 0; i < 30; i++) await api.activity({ date: iso(-1 - i * 2), sport: i % 2 ? "course" : "trail", durationMin: 45 + (i % 5) * 15, distanceKm: 8 + (i % 5) * 2, gainM: 200 + i * 15, rpe: 3 + (i % 4), avgHr: 138 + (i % 4) * 6 });

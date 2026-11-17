@@ -6,7 +6,7 @@ import InfoTip, { EXPLAIN } from "./InfoTip";
 import { TargetsTable } from "./Targets";
 import TrailProfile from "./TrailProfile";
 import Progress from "./Progress";
-import GraphCards, { type GraphData } from "./GraphCards";
+import GraphCards, { areaClip, type GraphData } from "./GraphCards";
 import { api, dayLabel, fmtDur, fmtKm, fmtNum, SPORT_LABEL } from "./client";
 import type { Suspect } from "@/lib/engine/suspects";
 
@@ -87,7 +87,7 @@ function Readiness({ go }: Pick<Ctx, "go">) {
         <>
           <div className="ready-now"><b>{fmt(r.current)}</b><span className="muted small">avec ta forme du jour{r.target ? ` · objectif du plan au jour J : ${fmt(r.target.low)} – ${fmt(r.target.high)}` : ""}</span></div>
           {pts.length >= 2 && (
-            <div className="gc-plot ready-plot" onPointerMove={(e) => { const b = e.currentTarget.getBoundingClientRect(); setHi(Math.max(0, Math.min(pts.length - 1, Math.round(((e.clientX - b.left) / b.width) * (pts.length - 1))))); }} onPointerLeave={(e) => { if (e.pointerType === "mouse") setHi(null); }} onPointerDown={(e) => { const b = e.currentTarget.getBoundingClientRect(); setHi(Math.max(0, Math.min(pts.length - 1, Math.round(((e.clientX - b.left) / b.width) * (pts.length - 1))))); }}>
+            <div className="gc-plot ready-plot" style={{ ["--area" as string]: areaClip(pts.map((p, i) => [(X(i) / 300) * 100, (Y(p.minutes) / 90) * 100])) }} onPointerMove={(e) => { const b = e.currentTarget.getBoundingClientRect(); setHi(Math.max(0, Math.min(pts.length - 1, Math.round(((e.clientX - b.left) / b.width) * (pts.length - 1))))); }} onPointerLeave={(e) => { if (e.pointerType === "mouse") setHi(null); }} onPointerDown={(e) => { const b = e.currentTarget.getBoundingClientRect(); setHi(Math.max(0, Math.min(pts.length - 1, Math.round(((e.clientX - b.left) / b.width) * (pts.length - 1))))); }}>
               <svg viewBox="0 0 300 90" preserveAspectRatio="none" aria-hidden="true"><path className="gc-area" d={`${line} L300 90 L0 90 Z`} /><path className="gc-line" d={line} pathLength={1} vectorEffect="non-scaling-stroke" /></svg>
               {pts.map((p, i) => <i key={p.date} className={`gc-dot${hi === i ? " on" : ""}${i === pts.length - 1 ? " now" : ""}`} style={{ left: `${(X(i) / 300) * 100}%`, top: `${(Y(p.minutes) / 90) * 100}%` }} />)}
               {h && <div className="gc-tip" style={{ left: `${Math.max(14, Math.min(86, (X(hi!) / 300) * 100))}%` }}><b>{fmt(h.minutes)}</b>VO2max {String(h.vo2).replace(".", ",")}<small>sem. du {dayLabel(h.date, { day: "numeric", month: "short" })}</small></div>}

@@ -237,4 +237,9 @@ export const MIGRATIONS: { tag: string; statements: string[] }[] = [
       `ALTER TABLE activities ADD COLUMN ai_review TEXT`,
     ],
   },
+  {
+    tag: "019_race_anchor",
+    // Repères pour un temps de course au plus près du réel : { ref: { km, gain, min }, terrain, winnerMin } (engine/race-anchor).
+    statements: [`ALTER TABLE goals ADD COLUMN anchor TEXT`],
+  },
 ];

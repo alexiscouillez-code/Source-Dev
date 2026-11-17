@@ -20,9 +20,10 @@ import { buildRacePlan, ENGINE, maintenancePlan, phaseFor, raceDemands, type Lev
 import { withSideRaces, withStrength, type SideRace } from "./engine/extras";
 import { timeline, weeklySummary } from "./engine/timeline";
 import { HttpError } from "./api";
+import { cleanAnchor, type RaceAnchor } from "./engine/race-anchor";
 
 export interface ProfileRow { hr_max: number | null; hr_rest: number | null; vo2_watch: number | null; vdot_ref?: number | null; days_per_week: number; long_day: number; max_weekly_minutes: number | null; level: Level }
-export interface GoalRow { name: string; date: string; distance_km: number | null; gain_m: number | null; plan_meta?: string | null; route?: string | null; gear?: string | null }
+export interface GoalRow { name: string; date: string; distance_km: number | null; gain_m: number | null; plan_meta?: string | null; route?: string | null; gear?: string | null; anchor?: string | null }
 export interface ActivityRow { id: number; date: string; sport: Sport; name: string | null; duration_min: number; distance_km: number | null; gain_m: number | null; loss_m: number | null; avg_hr: number | null; max_hr: number | null; rpe: number | null; source: string; strava_id: string | null; analysis?: string | null; check_state?: number | null }
 export interface PlanRow { id: number; date: string; template: string; title: string; sport: string; duration_min: number; gain_m: number | null; rpe_target: number; description: string; phase: string; status: string; activity_id: number | null; locked: number; original: string | null }
 export interface CheckinRow { date: string; sleep: number; legs: number; motivation: number; pain: 0 | 1 | 2; note: string | null; pain_zones?: string | null; sleep_h?: number | null; rhr?: number | null; hrv?: number | null }
@@ -55,9 +56,11 @@ export const physioOf = (p: { hr_max: number | null; hr_rest: number | null; vo2
   ({ hrMax: p.hr_max, hrRest: p.hr_rest, vdot: p.vo2_watch ?? p.vdot_ref ?? null });
 export const loadSideRaces = (userId: number) =>
   all<SideRace & { id: number }>("SELECT id, name, date, distance_km AS distanceKm, gain_m AS gainM, priority FROM side_races WHERE user_id = ? ORDER BY date", [userId]);
-export const loadGoal = (userId: number) => one<GoalRow>("SELECT name, date, distance_km, gain_m, plan_meta, route, gear FROM goals WHERE user_id = ?", [userId]);
+export const loadGoal = (userId: number) => one<GoalRow>("SELECT name, date, distance_km, gain_m, plan_meta, route, gear, anchor FROM goals WHERE user_id = ?", [userId]);
 export type GearItem = { label: string; checked: boolean };
 export const readGear = (g: { gear?: string | null } | null | undefined): GearItem[] => { try { const a = g?.gear ? JSON.parse(g.gear) : []; return Array.isArray(a) ? a : []; } catch { return []; } };
+/** Repères du temps de course enregistrés avec la course (résultat de référence, terrain, vainqueur précédent). */
+export const readAnchor = (g: GoalRow | null | undefined): RaceAnchor | null => { try { return g?.anchor ? cleanAnchor(JSON.parse(g.anchor)) : null; } catch { return null; } };
 export const readPlanMeta = (g: GoalRow | null | undefined): RacePlan | null => { try { return g?.plan_meta ? JSON.parse(g.plan_meta) : null; } catch { return null; } };
 /** Sorties depuis une date. Les séances exclues par l’utilisateur (doublon, chrono oublié…) ne comptent dans aucun calcul, sauf demande explicite. */
 export const loadActivities = (userId: number, since: string, withExcluded = false) =>
@@ -110,7 +113,7 @@ export async function regeneratePlan(userId: number, today: string) {
   const likes = acts.map(toActivityLike);
   let items;
   if (goal && goal.date > today) {
-    const r = buildRacePlan({ today, profile: pp, goal: { name: goal.name, date: goal.date, distanceKm: goal.distance_km, gainM: goal.gain_m }, activities: likes,
+    const r = buildRacePlan({ today, profile: pp, goal: { name: goal.name, date: goal.date, distanceKm: goal.distance_km, gainM: goal.gain_m, anchor: readAnchor(goal) }, activities: likes,
       load: { ctl: tl.ctl, atl: tl.atl, ratio: tl.ratio, calibrated: tl.calibrated },
       // Temps de course estimé depuis la VO2max (montre, sinon sorties) plutôt que depuis le niveau déclaré.
       vdot: estimateVo2(acts.map(toVo2Run), today, { hrMax: profile.hr_max, hrRest: profile.hr_rest, watch: profile.vo2_watch }).paceVdot,
@@ -305,7 +308,7 @@ export async function dashboard(userId: number, today: string) {
   return {
     today,
     profile,
-    goal: goal ? { name: goal.name, date: goal.date, distance_km: goal.distance_km, gain_m: goal.gain_m, daysToGoal, phase: upcoming[0]?.phase ?? phaseFor(daysToGoal), verdict: readPlanMeta(goal)?.verdict ?? null,
+    goal: goal ? { name: goal.name, date: goal.date, distance_km: goal.distance_km, gain_m: goal.gain_m, anchor: readAnchor(goal), daysToGoal, phase: upcoming[0]?.phase ?? phaseFor(daysToGoal), verdict: readPlanMeta(goal)?.verdict ?? null,
       gear: (() => { const g = readGear(goal); return g.length ? { total: g.length, ready: g.filter((x) => x.checked).length } : null; })() } : null,
     load: { atl: tl.atl, ctl: tl.ctl, form: tl.form, ratio: tl.ratio, monotony: tl.monotony, load7: tl.load7, calibrated: tl.calibrated, historyDays: tl.historyDays },
     checkin, decision,
@@ -544,7 +547,7 @@ export async function planView(userId: number, today: string) {
   for (const a of done) if (isFoot(a.sport)) { const m = mondayOf(a.date); doneByWeek[m] = Math.round((doneByWeek[m] ?? 0) + a.duration_min); }
   return {
     today,
-    goal: goal ? { name: goal.name, date: goal.date, distance_km: goal.distance_km, gain_m: goal.gain_m, gear: readGear(goal), route: (() => { try { return goal.route ? JSON.parse(goal.route) : null; } catch { return null; } })() } : null,
+    goal: goal ? { name: goal.name, date: goal.date, distance_km: goal.distance_km, gain_m: goal.gain_m, anchor: readAnchor(goal), gear: readGear(goal), route: (() => { try { return goal.route ? JSON.parse(goal.route) : null; } catch { return null; } })() } : null,
     plan: goal && goal.date > today ? meta : null,
     // Prévu / réalisé : chaque séance faite est comparée à ce qui était prévu.
     sessions: sessions.map(({ a_analysis, ...p }) => ({

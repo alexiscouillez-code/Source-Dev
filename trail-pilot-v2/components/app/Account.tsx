@@ -1,7 +1,7 @@
 "use client";
 
 import Fold from "./Fold";
-import AppearancePicker from "@/components/AppearancePicker";
+import AppearancePicker, { TintPicker } from "@/components/AppearancePicker";
 import Feedback from "./Feedback";
 import { useEffect, useState } from "react";
 import type { Ctx } from "./AppShell";
@@ -26,6 +26,7 @@ export default function Account({ me, refresh, toast, go }: Ctx) {
         <Fold id="acc-appearance" title="Apparence" defaultOpen>
           <p className="soft small" style={{ margin: 0 }}>Jour, Nuit ou Verre. Le bouton en haut de l’écran passe aussi de l’une à l’autre.</p>
           <AppearancePicker />
+          <TintPicker />
         </Fold>
         <EmailCard me={me} toast={toast} />
         <HealthCard me={me} refresh={refresh} toast={toast} />

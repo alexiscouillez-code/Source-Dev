@@ -19,7 +19,7 @@ const root = join(here, "../..");
 const tmp = join(here, ".tmp");
 const args = process.argv.slice(2);
 const only = args.filter((a) => !a.startsWith("--"));
-const SCENARIOS = ["engines", "planning", "suspects", "account", "charts", "night", "tour", "appearance"].filter((s) => !only.length || only.includes(s));
+const SCENARIOS = ["engines", "planning", "suspects", "account", "charts", "night", "tour", "appearance", "charter"].filter((s) => !only.length || only.includes(s));
 const PORT = 3100, MOCK = 3200;
 
 const env = {
@@ -74,7 +74,7 @@ for (;;) {
 
 const results = [];
 for (const s of SCENARIOS) {
-  const r = spawnSync(process.execPath, [join(here, `${s}.cjs`)], { cwd: root, stdio: "inherit", env: { ...process.env, E2E_BASE: `http://localhost:${PORT}`, E2E_OUT: tmp, E2E_DB: `file:${join(tmp, "e2e.db")}` } });
+  const r = spawnSync(process.execPath, ["--import", "tsx", join(here, `${s}.cjs`)], { cwd: root, stdio: "inherit", env: { ...process.env, E2E_BASE: `http://localhost:${PORT}`, E2E_OUT: tmp, E2E_DB: `file:${join(tmp, "e2e.db")}` } });
   results.push([s, r.status === 0]);
 }
 console.log("\nBilan des parcours :");
