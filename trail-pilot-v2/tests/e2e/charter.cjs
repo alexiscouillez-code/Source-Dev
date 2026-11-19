@@ -103,15 +103,14 @@ scenario("Charte pointillée, couleur de fond et transition du mode Verre", asyn
   await page.waitForTimeout(1600);
   check((await page.evaluate(() => document.documentElement.dataset.theme)) === "glass", "choisir une couleur en mode Jour passe en mode Verre");
 
-  // ---------- Transition en trame de points ----------
-  const btn = page.locator(".ap-toggle >> visible=true").first();
-  await btn.click(); // Verre → Jour
-  const during = await page.evaluate(() => document.documentElement.classList.contains("vt-dots"));
-  check(during, "quitter le mode Verre : transition en trame de points");
+  // ---------- Transition en trame de points (vignettes du réglage d'apparence) ----------
+  const tile = (label) => page.locator(".ap-tile", { hasText: label }).first();
+  await tile("Jour").scrollIntoViewIfNeeded();
+  await tile("Jour").click(); // Verre → Jour : l'effet du mode qu'on quitte
+  check(await page.evaluate(() => document.documentElement.classList.contains("vt-dots")), "quitter le mode Verre : transition en trame de points");
   await page.waitForTimeout(1600);
   check(!(await page.evaluate(() => document.documentElement.classList.contains("vt-dots"))), "la transition se referme");
-  await btn.click(); await page.waitForTimeout(2300); // Jour → Nuit (liquide)
-  await btn.click(); // Nuit → Verre : trame de points, puis les cartes se givrent
+  await tile("Verre").click(); // Jour → Verre : trame de points, puis les cartes se givrent
   const frost = await page.evaluate(() => ["vt-dots", "glass-frost"].every((c) => document.documentElement.classList.contains(c)));
   check(frost, "arrivée en mode Verre : trame de points et cartes qui se givrent");
   await page.waitForTimeout(500);

@@ -5,36 +5,88 @@ import { switchTheme, THEME_EVENT } from "./liquidTheme";
 import { cleanTint, glassPalette, TINT_KEY, type GlassTint } from "./glassPalette";
 
 /**
- * Apparence du site : Jour (clair), Nuit (sombre) ou Verre (nuit et verre dépoli).
+ * Apparence du site : Jour (clair), Nuit (sombre), Verre (nuit et verre dépoli), Topo (carte de randonnée)
+ * ou Frontale (rouge sur noir, pour courir de nuit).
  * Le choix est gardé dans le navigateur (même clé que l'ancien choix clair / sombre, qui reste valable)
  * et posé avant l'affichage par le script du layout racine.
  *
- * Transitions
+ * Sur <html> : `data-theme` donne la famille de couleurs (light, dark ou glass) et `data-ap` l'apparence.
+ * Topo s'appuie sur le thème clair et Frontale sur le thème sombre : tous leurs réglages s'appliquent, puis
+ * modes.css change les couleurs. Rien d'autre à maintenir pour les nouvelles pages.
+ *
+ * Transitions : chaque changement joue un effet, celui de l'apparence d'arrivée.
  *  - Jour ↔ Nuit : le « liquide versé » d'origine (liquidTheme.ts).
- *  - Vers ou depuis Verre : la nouvelle apparence se révèle par une trame de points qui part du bouton
- *    cliqué (des points qui grossissent puis se rejoignent), le style pointillé du mode Verre ; en arrivant
- *    en mode Verre, le flou des cartes se pose en fondu (elles se givrent).
+ *  - Vers Verre : une trame de points part du bouton (des points qui grossissent puis se rejoignent), puis
+ *    les cartes se givrent.
+ *  - Vers Topo : les courbes de niveau se dessinent autour du bouton et la carte se déplie avec elles.
+ *  - Vers Frontale : l'écran s'éteint, puis le faisceau d'une lampe frontale balaie depuis le bouton.
+ *  - Depuis Verre, Topo ou Frontale vers Jour ou Nuit : l'effet de l'apparence qu'on quitte, à l'envers
+ *    (la nouvelle apparence apparaît par le même motif).
  *  - Couleur de fond du mode Verre : fondu de la teinte (variables de couleur animées, voir glass-theme.css).
  *  - Sans transitions de vue, ou si l'appareil demande moins d'animations : changement immédiat.
  */
-export type Appearance = "light" | "dark" | "glass";
+export type Appearance = "light" | "dark" | "glass" | "topo" | "frontale";
 export const APPEARANCES: { id: Appearance; label: string; hint: string }[] = [
   { id: "light", label: "Jour", hint: "Clair, pour l'extérieur en plein soleil" },
   { id: "dark", label: "Nuit", hint: "Sombre, reposant pour les yeux" },
   { id: "glass", label: "Verre", hint: "Nuit étoilée et cartes en verre dépoli" },
+  { id: "topo", label: "Topo", hint: "Papier et courbes de niveau, comme une carte de randonnée" },
+  { id: "frontale", label: "Frontale", hint: "Rouge sur noir : n'éblouit pas et garde ta vision de nuit" },
 ];
+/** Famille de couleurs de chaque apparence (attribut data-theme). */
+export const FAMILY: Record<Appearance, "light" | "dark" | "glass"> = { light: "light", dark: "dark", glass: "glass", topo: "light", frontale: "dark" };
 export const APPEARANCE_EVENT = THEME_EVENT;
 const KEY = "trail-pilot-theme";
 
 type VTDocument = Document & { startViewTransition?: (cb: () => void) => { finished: Promise<void> } };
 
 export const currentAppearance = (): Appearance => {
-  const t = document.documentElement.dataset.theme;
+  const { theme: t, ap } = document.documentElement.dataset;
+  if (ap === "topo" && t === "light") return "topo";
+  if (ap === "frontale" && t === "dark") return "frontale";
   return t === "light" || t === "glass" ? t : "dark";
 };
 
-/** Apparence suivante dans le cycle du bouton : Jour → Nuit → Verre → Jour. */
-export const nextAppearance = (a: Appearance): Appearance => (a === "light" ? "dark" : a === "dark" ? "glass" : "light");
+/** Apparence suivante dans le cycle du bouton : Jour → Nuit → Verre → Topo → Frontale → Jour. */
+const CYCLE: Appearance[] = ["light", "dark", "glass", "topo", "frontale"];
+export const nextAppearance = (a: Appearance): Appearance => CYCLE[(CYCLE.indexOf(a) + 1) % CYCLE.length];
+
+/** Pose l'apparence sur <html> (famille de couleurs + apparence). */
+function paint(a: Appearance) {
+  const html = document.documentElement;
+  html.dataset.theme = FAMILY[a];
+  if (a === "topo" || a === "frontale") html.dataset.ap = a; else delete html.dataset.ap;
+}
+
+/** Effet propre à chaque apparence (classe posée sur <html> pendant la transition, voir liquid.css et modes.css). */
+const EFFECT: Partial<Record<Appearance, string>> = { glass: "vt-dots", topo: "vt-topo", frontale: "vt-beam" };
+
+/** Courbes de niveau qui se dessinent autour du point de départ (effet Topo), dans leur propre calque de transition. */
+function contourOverlay(x: number, y: number) {
+  const NS = "http://www.w3.org/2000/svg";
+  const box = document.createElement("div");
+  box.className = "vt-topo-lines"; box.setAttribute("aria-hidden", "true");
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${innerWidth} ${innerHeight}`);
+  const R = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
+  for (let k = 1; k <= 9; k++) {
+    // Anneau irrégulier : un cercle déformé par quelques vagues, comme une courbe de niveau autour d'un sommet.
+    const r = (R * k) / 8, pts: string[] = [];
+    for (let i = 0; i <= 72; i++) {
+      const a = (i / 72) * Math.PI * 2;
+      const w = 1 + 0.07 * Math.sin(3 * a + k) + 0.05 * Math.sin(5 * a - k * 0.7) + 0.03 * Math.sin(9 * a + k * 1.3);
+      pts.push(`${(x + Math.cos(a) * r * w).toFixed(1)} ${(y + Math.sin(a) * r * w).toFixed(1)}`);
+    }
+    const p = document.createElementNS(NS, "path");
+    p.setAttribute("d", `M${pts.join(" L")}Z`);
+    p.setAttribute("pathLength", "1");
+    p.setAttribute("class", k % 4 === 0 ? "idx" : "");
+    p.style.setProperty("--k", String(k));
+    svg.appendChild(p);
+  }
+  box.appendChild(svg);
+  return box;
+}
 
 function announce(a: Appearance) {
   try { localStorage.setItem(KEY, a); } catch { /* navigation privée : le choix vaut pour la session */ }
@@ -49,17 +101,23 @@ export function setAppearance(next: Appearance, from?: HTMLElement | null) {
   if (from && ((cur === "light" && next === "dark") || (cur === "dark" && next === "light"))) { switchTheme(from); return; }
 
   const doc = document as VTDocument;
-  const apply = () => { html.dataset.theme = next; };
   announce(next);
-  if (!doc.startViewTransition || window.matchMedia("(prefers-reduced-motion: reduce)").matches) { apply(); return; }
-  // Trame de points depuis le bouton (ou depuis le centre de l'écran).
+  if (!doc.startViewTransition || window.matchMedia("(prefers-reduced-motion: reduce)").matches) { paint(next); return; }
+  // Effet de l'apparence d'arrivée ; vers Jour ou Nuit, celui de l'apparence qu'on quitte.
+  const effect = EFFECT[next] ?? EFFECT[cur] ?? "vt-dots";
   const r = from?.getBoundingClientRect();
-  html.style.setProperty("--vt-x", `${r ? r.left + r.width / 2 : innerWidth / 2}px`);
-  html.style.setProperty("--vt-y", `${r ? r.top + r.height / 2 : innerHeight / 2}px`);
-  html.classList.add("vt-dots");
+  const x = r ? r.left + r.width / 2 : innerWidth / 2, y = r ? r.top + r.height / 2 : innerHeight / 2;
+  html.style.setProperty("--vt-x", `${x}px`);
+  html.style.setProperty("--vt-y", `${y}px`);
+  html.classList.add(effect);
   if (next === "glass") html.classList.add("glass-frost");
-  doc.startViewTransition(apply).finished.catch(() => {}).finally(() => {
-    html.classList.remove("vt-dots");
+  let lines: HTMLElement | null = null;
+  doc.startViewTransition(() => {
+    paint(next);
+    if (effect === "vt-topo") { lines = contourOverlay(x, y); document.body.appendChild(lines); }
+  }).finished.catch(() => {}).finally(() => {
+    html.classList.remove(effect);
+    lines?.remove();
     window.setTimeout(() => html.classList.remove("glass-frost"), 1400);
   });
 }

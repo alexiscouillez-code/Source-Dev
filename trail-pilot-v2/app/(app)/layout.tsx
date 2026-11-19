@@ -10,6 +10,7 @@ import "./motion2.css";
 import "./graphcards.css";
 import "./night.css";
 import "../glass-theme.css";
+import "../modes.css";
 import ErrorReporter from "@/components/ErrorReporter";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {

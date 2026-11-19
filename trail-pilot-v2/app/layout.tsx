@@ -31,7 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="fr" suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: "try{const t=localStorage.getItem('trail-pilot-theme');document.documentElement.dataset.theme=t==='dark'||t==='light'||t==='glass'?t:(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light')}catch{}try{const g=JSON.parse(localStorage.getItem('trail-pilot-glass')||'null');if(g&&g.p)for(const k in g.p)if(/^--g-[a-z0-9-]+$/.test(k)&&/^#[0-9a-f]{6}$/i.test(g.p[k]))document.documentElement.style.setProperty(k,g.p[k])}catch{}" }} />
+        <script dangerouslySetInnerHTML={{ __html: "try{const t=localStorage.getItem('trail-pilot-theme'),h=document.documentElement,f={topo:'light',frontale:'dark'}[t];h.dataset.theme=f||(t==='dark'||t==='light'||t==='glass'?t:(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'));if(f)h.dataset.ap=t}catch{}try{const g=JSON.parse(localStorage.getItem('trail-pilot-glass')||'null');if(g&&g.p)for(const k in g.p)if(/^--g-[a-z0-9-]+$/.test(k)&&/^#[0-9a-f]{6}$/i.test(g.p[k]))document.documentElement.style.setProperty(k,g.p[k])}catch{}" }} />
       </head>
       <body>
         <DotDefs />

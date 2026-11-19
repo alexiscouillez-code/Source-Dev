@@ -61,7 +61,7 @@ export function TintPicker() {
 }
 
 /**
- * Choix direct de l'apparence (Jour, Nuit, Verre), avec une vignette d'aperçu pour chacune.
+ * Choix direct de l'apparence (Jour, Nuit, Verre, Topo, Frontale), avec une vignette d'aperçu pour chacune.
  * Groupe de boutons radio : flèches du clavier pour changer, l'apparence s'applique aussitôt.
  */
 export default function AppearancePicker() {
