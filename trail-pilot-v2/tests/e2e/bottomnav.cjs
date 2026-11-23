@@ -53,6 +53,31 @@ scenario("Barre de navigation inférieure (BottomNav)", async () => {
   await page.locator(".subnav.seg button", { hasText: "Séances" }).click(); await page.waitForTimeout(700);
   check((await bar(page)).on === "analysis", "Séances garde Analyse active dans la barre");
 
+  // ---------- Changement d'onglet sans saut ----------
+  // Page défilée, on change d'onglet : la vue ne doit pas « voler » de son ancienne place à la nouvelle,
+  // et la barre du bas reste en place (pas de fondu avec la page).
+  await tab(page, "today"); await page.waitForTimeout(800);
+  await page.evaluate(() => window.scrollTo(0, 500)); await page.waitForTimeout(500);
+  const during = page.evaluate(() => new Promise((res) => {
+    const look = () => {
+      const anims = document.getAnimations().filter((a) => (a.effect?.pseudoElement ?? "").includes("view-transition"));
+      if (!anims.length) return void requestAnimationFrame(look);
+      res({
+        anims: anims.map((a) => ({ pe: a.effect.pseudoElement, tr: a.effect.getKeyframes().map((k) => k.transform ?? "").join(" → ") })),
+        dy: getComputedStyle(document.documentElement).getPropertyValue("--vt-dy").trim(),
+      });
+    };
+    requestAnimationFrame(look);
+  }));
+  await page.click("[data-tab=plan] >> visible=true");
+  const vt = await during;
+  const group = vt.anims.filter((a) => a.pe === "::view-transition-group(tp-view)");
+  check(group.every((a) => !/translate|matrix/.test(a.tr)), "changement d'onglet : la page ne saute pas d'une place à l'autre", vt.anims.map((a) => `${a.pe} ${a.tr.slice(0, 60)}`));
+  check(Math.abs(parseInt(vt.dy) + 500) < 40, "l'ancienne page reste là où on la voyait (décalage du défilement compensé)", vt.dy);
+  check(!vt.anims.some((a) => a.pe.includes("tp-bnav")), "la barre du bas reste en place pendant le changement d'onglet", vt.anims.map((a) => a.pe));
+  await page.waitForTimeout(900);
+  check((await bar(page)).on === "plan", "puis Planning est actif");
+
   // ---------- Rangement au défilement ----------
   await tab(page, "today");
   // Défilement progressif, comme au doigt (un saut d'un coup ne range pas la barre).

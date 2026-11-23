@@ -120,8 +120,18 @@ type VTDoc = Document & { startViewTransition?: (cb: () => void | Promise<void>)
 export function withTransition(update: () => void, kind?: string) {
   const d = document as VTDoc;
   if (!d.startViewTransition || !motionOk()) { update(); return; }
-  if (kind) document.documentElement.dataset.vt = kind;
-  const t = d.startViewTransition(update);
+  const html = document.documentElement;
+  if (kind) html.dataset.vt = kind;
+  // Changement d'onglet : la vue ne « vole » pas de son ancienne place à la nouvelle (retour en haut de page,
+  // sélecteur Analyse qui apparaît…) : l'ancienne reste exactement où on la voyait, la nouvelle arrive à sa place.
+  // On mesure le décalage entre les deux et on le donne à l'ancienne image (--vt-dy, voir motion2.css).
+  const page = kind === "fwd" || kind === "back";
+  const top = () => document.querySelector<HTMLElement>(".view")?.getBoundingClientRect().top ?? 0;
+  const before = page ? top() : 0;
+  const t = d.startViewTransition(() => {
+    update();
+    if (page) html.style.setProperty("--vt-dy", `${Math.round(before - top())}px`);
+  });
   // Une transition interrompue (nouvel état pendant l’animation) n’est pas une erreur : on l’ignore.
   t.ready?.catch(() => {});
   t.updateCallbackDone?.catch(() => {});

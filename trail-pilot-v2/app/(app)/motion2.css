@@ -175,6 +175,14 @@
   /* Les séances glissent vers leur nouvelle place (statut, déplacement, détail) */
   ::view-transition-group(*) { animation-duration: .45s; animation-timing-function: var(--ease); }
   html[data-vt="fwd"] .view, html[data-vt="back"] .view { animation: none; }
+  /* Changement d'onglet sans saut : la vue ne se déplace pas d'une place à l'autre (l'ancienne image est posée
+     là où on la voyait, --vt-dy mesuré dans motion.ts) ; seuls le glissé latéral et le fondu restent. */
+  html:is([data-vt="fwd"], [data-vt="back"])::view-transition-group(tp-view) { animation: none; }
+  html:is([data-vt="fwd"], [data-vt="back"])::view-transition-old(tp-view) { translate: 0 var(--vt-dy, 0px); }
+  /* La barre du bas ne participe pas au fondu de la page : elle reste en place, vivante (son fond actif glisse). */
+  html:is([data-vt="fwd"], [data-vt="back"]) .bnav { view-transition-name: tp-bnav; }
+  html::view-transition-group(tp-bnav), html::view-transition-new(tp-bnav) { animation: none; }
+  html::view-transition-old(tp-bnav) { display: none; }
 
   /* Décision : le verdict tombe comme un tampon, la jauge se remplit */
   .verdict-stamp { animation: stamp .75s cubic-bezier(.2, 1.4, .4, 1) both; transform-origin: 30% 60%; }
