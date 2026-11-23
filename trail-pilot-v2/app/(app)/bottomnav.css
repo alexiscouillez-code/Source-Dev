@@ -1,0 +1,217 @@
+/* =====================================================================
+   Barre de navigation inférieure flottante (components/app/BottomNav.tsx)
+   Couleurs par apparence via les variables --bn-* ; la forme et le mouvement sont communs.
+   ===================================================================== */
+.bnav {
+  /* Nuit (et par défaut) : noir profond, accent orange. */
+  --bn-bg: linear-gradient(180deg, #161616 0%, #0a0a0a 100%);
+  --bn-border: rgba(255, 255, 255, .09);
+  --bn-shadow: 0 18px 40px -12px rgba(0, 0, 0, .85), 0 2px 6px rgba(0, 0, 0, .35);
+  --bn-hi: inset 0 1px 0 rgba(255, 255, 255, .07);
+  --bn-fg: rgba(255, 255, 255, .62);
+  --bn-fg-hover: rgba(255, 255, 255, .9);
+  --bn-on: #ff8a3d;
+  --bn-ind: rgba(255, 107, 0, .16);
+  --bn-ind-line: rgba(255, 107, 0, .35);
+  --bn-sep: rgba(255, 255, 255, .1);
+  --bn-plus: linear-gradient(135deg, #ff6b00 0%, #ffb400 52%, #3ddc84 100%);
+  --bn-plus-fg: #111;
+  --bn-glow: conic-gradient(from 0deg, #ff6b00, #ffb400, #3ddc84, #ff6b00);
+  --bn-glow-shadow: 0 8px 22px -6px rgba(255, 107, 0, .75), 0 0 20px -4px rgba(255, 180, 0, .55);
+  --bn-menu-bg: #111;
+  --bn-menu-fg: #f4f4f4;
+  --bn-menu-sub: rgba(255, 255, 255, .66);
+  --bn-menu-ico: rgba(255, 107, 0, .16);
+  --bn-menu-ico-fg: #ff8a3d;
+  --bn-scrim: rgba(0, 0, 0, .45);
+  --bn-pill-blur: none;
+
+  display: none;
+  position: fixed; z-index: 40; left: 0; right: 0;
+  bottom: calc(12px + env(safe-area-inset-bottom));
+  justify-content: center; pointer-events: none;
+  transition: transform .45s cubic-bezier(.3, 1.25, .5, 1), opacity .3s ease;
+}
+@media (max-width: 900px) { .bnav { display: flex; } }
+.bnav > * { pointer-events: auto; }
+.bnav.is-hidden { transform: translateY(calc(100% + 30px)); opacity: 0; }
+.bnav.is-hidden .bnav-pill { pointer-events: none; }
+
+.bnav-pill {
+  position: relative; display: flex; align-items: center; gap: 5px;
+  width: min(calc(100vw - 24px), 440px); padding: 5px;
+  border-radius: 999px; border: 1px solid var(--bn-border);
+  background: var(--bn-bg); box-shadow: var(--bn-shadow), var(--bn-hi);
+  -webkit-backdrop-filter: var(--bn-pill-blur); backdrop-filter: var(--bn-pill-blur);
+}
+.bnav-bar { position: relative; flex: 1; display: flex; align-items: center; gap: 0; min-width: 0; }
+
+/* Fond de la section active, qui glisse d'une section à l'autre. */
+.bnav-ind {
+  position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; pointer-events: none; opacity: 0;
+  background: var(--bn-ind); box-shadow: inset 0 0 0 1px var(--bn-ind-line);
+  transition: transform .5s cubic-bezier(.3, 1.35, .5, 1), width .5s cubic-bezier(.3, 1.35, .5, 1), opacity .2s;
+}
+
+.bnav-item {
+  position: relative; z-index: 1; display: inline-flex; align-items: center; justify-content: center;
+  flex: 1 1 0; height: 46px; min-width: 38px; padding: 0 9px; border: 0; border-radius: 999px; background: none;
+  color: var(--bn-fg); font: inherit; font-size: 13px; font-weight: 650; letter-spacing: -.005em; white-space: nowrap;
+  cursor: pointer; -webkit-tap-highlight-color: transparent; transition: color .25s ease;
+}
+.bnav-item:hover { color: var(--bn-fg-hover); }
+.bnav-item[aria-current=page] { color: var(--bn-on); flex: 0 0 auto; padding: 0 13px 0 11px; }
+.bnav-item:focus-visible { outline: 2px solid var(--bn-on); outline-offset: 2px; }
+.bnav-ico { display: grid; place-items: center; }
+.bnav-ico svg { width: 21px; height: 21px; }
+/* Nom de la section : replié, il s'ouvre pour la section active (et au survol à la souris). */
+.bnav-label {
+  display: inline-block; overflow: hidden; max-width: 0; opacity: 0; margin-left: 0;
+  transform: translateX(-4px);
+  transition: max-width .45s cubic-bezier(.3, 1.1, .4, 1), opacity .25s ease, margin-left .45s cubic-bezier(.3, 1.1, .4, 1), transform .4s ease;
+}
+.bnav-item[aria-current=page] .bnav-label { max-width: 96px; opacity: 1; margin-left: 7px; transform: none; }
+@media (hover: hover) and (pointer: fine) {
+  .bnav-item:hover .bnav-label { max-width: 96px; opacity: 1; margin-left: 7px; transform: none; }
+}
+/* Très petits écrans : on ne garde que les icônes ; le nom de la section active reste lisible au-dessus. */
+@media (max-width: 359px) {
+  .bnav-item, .bnav-item[aria-current=page] { flex: 1 1 0; padding: 0 6px; min-width: 36px; }
+  .bnav-item[aria-current=page] .bnav-label { max-width: 0; opacity: 0; margin-left: 0; }
+}
+
+.bnav-sep { width: 1px; height: 24px; background: var(--bn-sep); flex: none; }
+
+/* Bouton + : dégradé des couleurs du dehors, halo qui respire. */
+.bnav-plus {
+  position: relative; flex: none; display: grid; place-items: center; width: 46px; height: 46px; margin-left: 1px; border: 0; border-radius: 50%;
+  background: var(--bn-plus); color: var(--bn-plus-fg); cursor: pointer; isolation: isolate;
+  box-shadow: var(--bn-glow-shadow), inset 0 1px 0 rgba(255, 255, 255, .45), inset 0 -2px 6px rgba(0, 0, 0, .18);
+  -webkit-tap-highlight-color: transparent; transition: transform .35s cubic-bezier(.3, 1.5, .5, 1), box-shadow .3s ease;
+}
+.bnav-plus svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; transition: transform .45s cubic-bezier(.3, 1.5, .5, 1); }
+.bnav-plus:focus-visible { outline: 2px solid var(--bn-on); outline-offset: 3px; }
+.bnav-plus[aria-expanded=true] svg { transform: rotate(135deg); }
+.bnav-glow { position: absolute; inset: -5px; border-radius: 50%; z-index: -1; background: var(--bn-glow); filter: blur(9px); opacity: .55; }
+
+/* ---------- Menu d'actions rapides ---------- */
+.bnav-scrim { position: fixed; inset: 0; z-index: -1; background: var(--bn-scrim); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); pointer-events: auto; }
+.bnav-menu {
+  position: absolute; right: 0; bottom: calc(100% + 14px);
+  display: grid; gap: 8px; justify-items: end; width: min(300px, calc(100vw - 24px));
+}
+.bnav-menu[hidden] { display: none; }
+.bnav-act {
+  display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 14px 10px 10px; border-radius: 20px;
+  border: 1px solid var(--bn-border); background: var(--bn-menu-bg); color: var(--bn-menu-fg);
+  box-shadow: var(--bn-shadow); font: inherit; text-align: left; cursor: pointer;
+  -webkit-backdrop-filter: var(--bn-pill-blur); backdrop-filter: var(--bn-pill-blur);
+}
+.bnav-act:hover, .bnav-act:focus-visible { border-color: var(--bn-ind-line); outline: none; }
+.bnav-act:focus-visible { box-shadow: var(--bn-shadow), 0 0 0 2px var(--bn-on); }
+.bnav-act-ico { display: grid; place-items: center; width: 40px; height: 40px; flex: none; border-radius: 14px; background: var(--bn-menu-ico); color: var(--bn-menu-ico-fg); }
+.bnav-act-ico svg { width: 21px; height: 21px; }
+.bnav-act-txt { display: grid; gap: 1px; min-width: 0; }
+.bnav-act-txt b { font-size: 15px; font-weight: 650; }
+.bnav-act-txt small { font-size: 12.5px; color: var(--bn-menu-sub); }
+
+/* ---------- Mouvement ---------- */
+@media (prefers-reduced-motion: no-preference) {
+  /* Arrivée de la barre. */
+  .bnav-pill { animation: bnav-rise .7s cubic-bezier(.25, 1.3, .5, 1) .15s both; }
+  @keyframes bnav-rise { from { transform: translateY(90px) scale(.92); opacity: 0; } }
+  /* Icône touchée : petit rebond. */
+  .bnav-ico { animation: bnav-bump .45s cubic-bezier(.3, 1.6, .5, 1); }
+  @keyframes bnav-bump { 0% { transform: scale(1); } 35% { transform: scale(.78); } 70% { transform: scale(1.12); } 100% { transform: scale(1); } }
+  .bnav-item:active .bnav-ico { transform: scale(.88); }
+  /* Halo du + : il tourne doucement et respire ; plus fort quand le menu est ouvert. */
+  .bnav-glow { animation: bnav-spin 7s linear infinite, bnav-breathe 3.2s ease-in-out infinite; }
+  @keyframes bnav-spin { to { transform: rotate(360deg); } }
+  @keyframes bnav-breathe { 50% { opacity: .85; } }
+  .bnav-plus:hover { transform: translateY(-1px) scale(1.05); }
+  .bnav-plus:active { transform: scale(.9); }
+  .bnav.is-open .bnav-glow { opacity: .95; }
+  /* Menu : voile en fondu, actions qui se déploient l'une après l'autre depuis le +. */
+  .bnav-scrim { animation: bnav-fade .3s ease both; }
+  @keyframes bnav-fade { from { opacity: 0; } }
+  .bnav-act { transform-origin: 90% 100%; animation: bnav-pop .42s cubic-bezier(.25, 1.4, .5, 1) calc(var(--i) * 45ms) both; }
+  @keyframes bnav-pop { from { opacity: 0; transform: translateY(14px) scale(.9); } }
+  .bnav-act:hover .bnav-act-ico { transform: rotate(-6deg) scale(1.06); }
+  .bnav-act-ico { transition: transform .3s cubic-bezier(.3, 1.5, .5, 1); }
+}
+
+/* =====================================================================
+   Couleurs par apparence
+   ===================================================================== */
+/* Jour : île graphite qui ressort sur le fond clair, ombre plus douce. */
+:root[data-theme="light"]:not([data-ap]) .bnav {
+  --bn-bg: linear-gradient(180deg, #1d2126 0%, #121519 100%);
+  --bn-border: rgba(255, 255, 255, .06);
+  --bn-shadow: 0 16px 34px -12px rgba(20, 26, 33, .55), 0 2px 6px rgba(20, 26, 33, .2);
+  --bn-menu-bg: #181b20;
+  --bn-scrim: rgba(20, 26, 33, .28);
+}
+/* Verre : pilule en verre dépoli, aux couleurs de la teinte choisie. */
+:root[data-theme="glass"] .bnav {
+  --bn-bg: color-mix(in srgb, var(--g-0) 58%, transparent);
+  --bn-border: rgba(255, 255, 255, .24);
+  --bn-shadow: 0 18px 40px -14px color-mix(in srgb, var(--g-0) 90%, #000), 0 0 0 1px rgba(255, 255, 255, .04);
+  --bn-hi: inset 0 1px 0 rgba(255, 255, 255, .28);
+  --bn-fg: rgba(255, 255, 255, .72);
+  --bn-fg-hover: #fff;
+  --bn-on: #fff;
+  --bn-ind: rgba(255, 255, 255, .16);
+  --bn-ind-line: rgba(255, 255, 255, .3);
+  --bn-sep: rgba(255, 255, 255, .2);
+  --bn-menu-bg: color-mix(in srgb, var(--g-0) 72%, transparent);
+  --bn-menu-sub: rgba(255, 255, 255, .78);
+  --bn-menu-ico: color-mix(in srgb, var(--g-acc) 60%, transparent);
+  --bn-menu-ico-fg: #fff;
+  --bn-scrim: color-mix(in srgb, var(--g-0) 45%, transparent);
+  --bn-pill-blur: blur(22px) saturate(160%);
+}
+/* Topo : encre de carte (brun foncé) avec un voile de courbes de niveau, accent vert forêt. */
+:root[data-ap="topo"] .bnav {
+  --bn-bg: url("/topo.svg") 0 0 / 260px repeat, linear-gradient(180deg, #2e2619 0%, #1f190f 100%);
+  --bn-border: rgba(239, 230, 210, .14);
+  --bn-shadow: 0 16px 32px -12px rgba(60, 40, 15, .55), 0 2px 6px rgba(60, 40, 15, .25);
+  --bn-hi: inset 0 1px 0 rgba(239, 230, 210, .1);
+  --bn-fg: rgba(239, 230, 210, .68);
+  --bn-fg-hover: #efe6d2;
+  --bn-on: #a9dc8f;
+  --bn-ind: rgba(124, 196, 98, .17);
+  --bn-ind-line: rgba(124, 196, 98, .38);
+  --bn-sep: rgba(239, 230, 210, .16);
+  --bn-plus: linear-gradient(135deg, #d9581f 0%, #e9a62a 52%, #4f9a3e 100%);
+  --bn-glow: conic-gradient(from 0deg, #d9581f, #e9a62a, #4f9a3e, #d9581f);
+  --bn-glow-shadow: 0 8px 20px -6px rgba(217, 88, 31, .6), 0 0 16px -4px rgba(233, 166, 42, .45);
+  --bn-menu-bg: #241d12;
+  --bn-menu-fg: #f6efdf;
+  --bn-menu-sub: rgba(239, 230, 210, .74);
+  --bn-menu-ico: rgba(124, 196, 98, .18);
+  --bn-menu-ico-fg: #a9dc8f;
+  --bn-scrim: rgba(42, 34, 22, .3);
+}
+/* Frontale : noir pur, tout en rouge (ni vert ni bleu, pour garder la vision de nuit). */
+:root[data-ap="frontale"] .bnav {
+  --bn-bg: #000;
+  --bn-border: #3d1c13;
+  --bn-shadow: 0 0 0 1px rgba(255, 61, 31, .08), 0 16px 34px -14px rgba(255, 61, 31, .25);
+  --bn-hi: inset 0 1px 0 rgba(255, 122, 82, .08);
+  --bn-fg: #c4573a;
+  --bn-fg-hover: #ff8a64;
+  --bn-on: #ff8a64;
+  --bn-ind: rgba(255, 61, 31, .16);
+  --bn-ind-line: rgba(255, 61, 31, .42);
+  --bn-sep: #3d1c13;
+  --bn-plus: linear-gradient(135deg, #ff2a12 0%, #ff5a1f 50%, #ff9a3d 100%);
+  --bn-plus-fg: #000;
+  --bn-glow: conic-gradient(from 0deg, #ff2a12, #ff9a3d, #ff2a12);
+  --bn-glow-shadow: 0 8px 22px -8px rgba(255, 61, 31, .8), 0 0 18px -6px rgba(255, 90, 31, .6);
+  --bn-menu-bg: #0d0605;
+  --bn-menu-fg: #ff8a64;
+  --bn-menu-sub: #ec6e4a;
+  --bn-menu-ico: rgba(255, 61, 31, .16);
+  --bn-menu-ico-fg: #ff8a64;
+  --bn-scrim: rgba(0, 0, 0, .6);
+}

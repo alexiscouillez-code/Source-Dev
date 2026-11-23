@@ -31,7 +31,7 @@
    vert des forêts, bleu des lacs. */
 :root[data-ap="topo"] {
   --ink: #efe6d2; --ink-2: #faf5e9; --ink-3: #ebe0c8; --ink-4: #dccdab; --line: #d4c39f;
-  --snow: #2a2216; --soft: #4d4230; --mute: #6a5c43;
+  --snow: #2a2216; --soft: #4d4230; --mute: #5f523a;
   --ember: #d9581f; --ember-2: #e2662c; --ember-t: #a63a14;
   --ok: #3c7a35; --lite: #8a6a00; --rest: #2c6aa8; --danger: #b23a26;
   --chart-grid: #2a221614; --chart-zero: #2a221638; --chart-bar: #e2d6bb; --chart-bar-2: #d4c5a3;
@@ -43,7 +43,7 @@
 :root[data-ap="topo"] :is(.card, .kpi, .banner, .fcard, .free-card, .auth-card, .side-goal) {
   border-color: var(--line); box-shadow: 0 1px 0 #fffdf6 inset, 0 10px 24px -18px rgba(80, 55, 20, .45);
 }
-:root[data-ap="topo"] :is(.tabbar, .topbar, .site-nav) { background: color-mix(in srgb, var(--ink-2) 92%, transparent); }
+:root[data-ap="topo"] :is(.topbar, .site-nav) { background: color-mix(in srgb, var(--ink-2) 92%, transparent); }
 :root[data-ap="topo"] .eyebrow { color: var(--ember-t); }
 
 /* ---------- Bouton et vignettes du sélecteur ---------- */

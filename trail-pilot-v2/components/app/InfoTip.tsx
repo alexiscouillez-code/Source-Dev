@@ -24,8 +24,8 @@ export default function InfoTip({ title, children }: { title: string; children: 
   useLayoutEffect(() => {
     if (!pos || pos.measured || !tip.current || !btn.current) return;
     const r = btn.current.getBoundingClientRect(), h = tip.current.offsetHeight;
-    const bar = document.querySelector<HTMLElement>(".tabbar");
-    const bottom = window.innerHeight - (bar && getComputedStyle(bar).display !== "none" ? bar.offsetHeight + 24 : 16);
+    const bar = document.querySelector<HTMLElement>(".bnav-pill");
+    const bottom = window.innerHeight - (bar && bar.offsetHeight ? bar.offsetHeight + 24 : 16);
     const up = r.bottom + 8 + h > bottom && r.top - 8 - h >= 16;
     setPos({ ...pos, top: up ? r.top - 8 : Math.max(16, Math.min(r.bottom + 8, bottom - h)), up, measured: true });
   }, [pos]);

@@ -40,13 +40,7 @@
 .btn.where { justify-self: start; margin-top: 4px; }
 .btn.where svg { width: 16px; height: 16px; }
 
-/* Sept onglets dans la barre du bas */
-@media (max-width: 900px) {
-  .tabbar .navbtn { font-size: 9.5px; padding: 8px 2px; letter-spacing: -.01em; }
-}
 @media (max-width: 380px) {
-  .tabbar .navbtn { font-size: 8.5px; }
-  .tabbar .navbtn svg { width: 19px; height: 19px; }
   .picks.terr-p4 { grid-template-columns: repeat(2, 1fr); }
 }
 

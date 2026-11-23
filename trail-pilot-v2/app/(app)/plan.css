@@ -8,7 +8,6 @@
   --chart-grid: #141a2112; --chart-zero: #141a2133; --chart-bar: #e3ddd3; --chart-bar-2: #d6cec2; --err-bg: #fde6dc; --err-fg: #8a2a12;
   color-scheme: light;
 }
-:root[data-theme="light"] .tabbar { box-shadow: 0 16px 36px -14px #141a2140; }
 :root[data-theme="light"] .toast { box-shadow: 0 16px 36px -12px #141a2155; }
 :root[data-theme="light"] .sheet-back { background: #141a2166; }
 :root[data-theme="light"] .card, :root[data-theme="light"] .kpi { box-shadow: 0 1px 2px #141a210a; }

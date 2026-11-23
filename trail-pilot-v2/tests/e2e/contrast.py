@@ -31,7 +31,7 @@ def parse(color):
 
 QUIET = "-q" in sys.argv
 ARGS = [a for a in sys.argv[1:] if not a.startswith("-")]
-PREFIX = "tour-" if ARGS and ARGS[0].startswith("tour") else "night-"
+PREFIX = ARGS[0].split("-boxes")[0] + "-" if ARGS else "night-"
 worst_fail = 0
 for key, boxes in json.load(open(os.path.join(HERE, ARGS[0] if ARGS else "night-boxes.json"))).items():
     img = Image.open(os.path.join(HERE, f"{PREFIX}{key}-fond.png")).convert("RGB")

@@ -2,7 +2,7 @@
 
 import TodayRun from "@/components/night/TodayRun";
 import StrengthButton from "./StrengthButton";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Ctx } from "./AppShell";
 import InfoTip, { EXPLAIN } from "./InfoTip";
 import { SessionTarget } from "./Targets";
@@ -12,9 +12,21 @@ import Onboarding from "./Onboarding";
 import Coach from "./Coach";
 import WeekCard from "./WeekCard";
 import { api, dayLabel, fmtDur, fmtNum, localToday, SPORT_LABEL, VERDICT, type Me, type PlanSession } from "./client";
+import { QUICK_EVENT, takeQuick } from "./quick";
 
 export default function Today({ me, refresh, go, toast }: Ctx) {
   const [editing, setEditing] = useState(!me.checkin);
+  // Action rapide « Check-in du jour » (bouton + de la barre du bas) : ouvre le check-in et l'amène à l'écran.
+  useEffect(() => {
+    const on = () => {
+      if (!takeQuick("checkin")) return;
+      setEditing(true);
+      window.setTimeout(() => document.querySelector(".ci-card")?.scrollIntoView({ behavior: "smooth", block: "center" }), 450);
+    };
+    on();
+    window.addEventListener(QUICK_EVENT, on);
+    return () => window.removeEventListener(QUICK_EVENT, on);
+  }, []);
   const [busy, setBusy] = useState(false);
   const [ask, setAsk] = useState(false);
   const firstName = me.user.name?.split(" ")[0];

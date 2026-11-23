@@ -96,7 +96,7 @@ html.vt-dots::view-transition-new(root) {
 /* Arrivée en mode Verre : le flou du verre se pose en fondu sur les cartes (elles se givrent derrière la trame).
    Une transition et non une animation : les animations d'apparition des cartes ne sont pas rejouées. */
 @media (prefers-reduced-motion: no-preference) {
-  :root[data-theme="glass"].glass-frost :is(.card, .kpi, .banner, .sheet, .side-goal, .fcard, .free-card, .auth-card, .tabbar, .night .glass:not(.glass-accent)) {
+  :root[data-theme="glass"].glass-frost :is(.card, .kpi, .banner, .sheet, .side-goal, .fcard, .free-card, .auth-card, .bnav-pill, .night .glass:not(.glass-accent)) {
     transition: -webkit-backdrop-filter 1.1s cubic-bezier(.2, .8, .2, 1) .15s, backdrop-filter 1.1s cubic-bezier(.2, .8, .2, 1) .15s, background-color .9s ease .15s, border-color .9s ease .15s;
   }
 }

@@ -151,7 +151,7 @@ scenario("Bloc « Ma sortie du jour »", async () => {
 
     check((await overflow(page)) <= 0, "pas de débordement horizontal");
     // La barre de navigation fixe recouvrirait le bas du bloc sur la capture : on la masque le temps des captures.
-    await page.addStyleTag({ content: "nav, .tabbar { visibility: hidden !important; }" });
+    await page.addStyleTag({ content: "nav, .bnav { visibility: hidden !important; }" });
     // Captures de l'état final : on retire le déclencheur des animations à l'apparition, sinon les cartes
     // hors de l'écran au moment de la capture resteraient dans leur état de départ (invisibles).
     await page.evaluate(() => document.documentElement.classList.remove("mo"));

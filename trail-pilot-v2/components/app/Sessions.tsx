@@ -7,6 +7,7 @@ import type { Ctx } from "./AppShell";
 import { api, dayLabel, dayNum, fmtDur, fmtKm, fmtNum, localToday, shortDay, SPORT_LABEL, type Activity, type Me } from "./client";
 import { IconPin, IconPlus, IconSync, IconTrash } from "./icons";
 import { parseActivityFile } from "@/lib/activity-file";
+import { QUICK_EVENT, takeQuick } from "./quick";
 
 const TrackMap = dynamic(() => import("./TrackMap"), { ssr: false, loading: () => <div className="tmap" style={{ height: 300 }}><div className="tmap-loading">Chargement de la carte…</div></div> });
 
@@ -80,6 +81,17 @@ export default function Sessions({ me, refresh, toast }: Ctx) {
   const load = useCallback(async () => { const r = await api<{ activities: Activity[]; shoes?: MiniShoe[]; ai?: boolean }>("/api/activities"); setActs(r.activities); setShoes(r.shoes ?? []); setAi(!!r.ai); }, []);
   useEffect(() => { load().catch((e) => toast(e.message)); }, [load, toast]);
   useEffect(() => { const on = () => { load().catch(() => {}); }; window.addEventListener("tp-synced", on); return () => window.removeEventListener("tp-synced", on); }, [load]);
+  // Action rapide du bouton + (barre du bas) : ajouter une sortie à la main, ou lire le fichier choisi.
+  useEffect(() => {
+    const on = () => {
+      const q = takeQuick("add", "file");
+      if (q?.kind === "add") setSheet({ source: "manual" });
+      else if (q?.kind === "file") onFileRef.current(q.file);
+    };
+    on();
+    window.addEventListener(QUICK_EVENT, on);
+    return () => window.removeEventListener(QUICK_EVENT, on);
+  }, []);
 
   async function sync() {
     setSyncing(true);
@@ -104,6 +116,8 @@ export default function Sessions({ me, refresh, toast }: Ctx) {
     try { await api(`/api/activities/${a.id}`, { method: "DELETE" }); await Promise.all([load(), refresh()]); }
     catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }
   }
+  const onFileRef = useRef<(f?: File) => void>(() => {});
+  onFileRef.current = (f?: File) => { onFile(f); };
   async function onFile(file?: File) {
     if (!file) return;
     try {

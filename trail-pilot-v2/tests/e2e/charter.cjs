@@ -63,7 +63,7 @@ scenario("Charte pointillée, couleur de fond et transition du mode Verre", asyn
   await page.waitForTimeout(450);
   const lit = await card.evaluate((e) => { const st = getComputedStyle(e, "::after"); return { o: st.opacity, c: st.content, bg: st.backgroundImage.slice(0, 40), cls: e.className }; });
   check(Number(lit.o) > 0.9, "le reflet apparaît", { op, lit });
-  const nb = await page.locator(".tabbar [data-tab=analysis]").boundingBox();
+  const nb = await page.locator(".bnav [data-tab=analysis]").boundingBox();
   await page.mouse.move(nb.x + nb.width / 2, nb.y + nb.height / 2); await page.mouse.down();
   check((await page.locator(".tap-dots i").count()) === 10, "un toucher fait éclater un anneau de points");
   await page.mouse.up();

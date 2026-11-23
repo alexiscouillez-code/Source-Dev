@@ -4,7 +4,9 @@ import WatchHelp from "./WatchHelp";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { api, localToday, type Me } from "./client";
-import { IconChart, IconPlan, IconRuns, IconTerrain, IconToday, IconUser, Logo } from "./icons";
+import { IconChart, IconCheck, IconPlan, IconPlus, IconRuns, IconSync, IconTerrain, IconToday, IconUser, Logo } from "./icons";
+import BottomNav, { type QuickAction } from "./BottomNav";
+import { setQuick } from "./quick";
 import Today from "./Today";
 import Planning from "./Planning";
 import Sessions from "./Sessions";
@@ -20,6 +22,10 @@ import Tour from "./Tour";
 export type Tab = "today" | "plan" | "terrains" | "xray" | "runs" | "analysis" | "account";
 const IconXray = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 3.5c-.5 3 .2 5.5 1 8l-.6 5 1.1 4M16 3.5c.5 3-.2 5.5-1 8l.6 5-1.1 4" /><path d="M8.6 7.5h6.8M9.2 12h5.6" /></svg>
+);
+/** Importer : flèche qui monte vers un plateau. */
+const IconUpload = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5" /><path d="M4 14.5V18a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3.5" /></svg>
 );
 /** Sur téléphone, la barre du bas n’a que cinq onglets : X-Ray et Séances se rangent sous Analyse (sélecteur en haut de page). */
 const GROUPED: Tab[] = ["analysis", "xray", "runs"];
@@ -105,11 +111,11 @@ export default function AppShell({ user }: { user: { name: string | null; email:
     return () => { document.removeEventListener("visibilitychange", onVis); window.removeEventListener("focus", onVis); window.clearInterval(timer); };
   }, [linked, refresh, toast]);
 
-  // Indicateur d’onglet qui glisse sous l’onglet actif (barre latérale et barre du bas).
-  const sideNav = useRef<HTMLElement>(null), tabNav = useRef<HTMLElement>(null), mainRef = useRef<HTMLElement>(null);
+  // Indicateur d’onglet qui glisse sous l’onglet actif (barre latérale ; la barre du bas a le sien, BottomNav).
+  const sideNav = useRef<HTMLElement>(null), mainRef = useRef<HTMLElement>(null);
   useLayoutEffect(() => {
     const place = () => {
-      for (const nav of [sideNav.current, tabNav.current]) {
+      for (const nav of [sideNav.current]) {
         const ind = nav?.querySelector<HTMLElement>(".nav-ind"), on = nav?.querySelector<HTMLElement>(".navbtn.on");
         if (!ind || !on) continue;
         ind.style.width = `${on.offsetWidth}px`; ind.style.height = `${on.offsetHeight}px`;
@@ -132,6 +138,25 @@ export default function AppShell({ user }: { user: { name: string | null; email:
     withTransition(() => { flushSync(() => setTab(t)); window.scrollTo({ top: 0 }); }, dir);
   };
   const ctx = me ? { me, refresh, go, toast } : null;
+
+  // Actions rapides du bouton + de la barre du bas.
+  const syncNow = async () => {
+    toast("Synchro Strava en cours…");
+    try {
+      const r = await api<{ added?: number }>(`/api/strava/sync?today=${localToday()}`, { method: "POST" });
+      await refresh();
+      window.dispatchEvent(new CustomEvent("tp-synced", { detail: r.added ?? 0 }));
+      toast(r.added ? `${r.added} nouvelle${r.added > 1 ? "s" : ""} sortie${r.added > 1 ? "s" : ""} importée${r.added > 1 ? "s" : ""}.` : "Tout est à jour : aucune nouvelle sortie.");
+    } catch (e) { toast(e instanceof Error ? e.message : "La synchro a échoué."); }
+  };
+  const quick: QuickAction[] = [
+    { id: "add", label: "Ajouter une sortie", hint: "Saisie à la main", Icon: IconPlus, onSelect: () => { setQuick({ kind: "add" }); go("runs"); } },
+    { id: "file", label: "Importer un fichier", hint: "GPX, FIT ou TCX de ta montre", Icon: IconUpload, file: { accept: ".gpx,.fit,.tcx,application/gpx+xml", onFile: (f) => { setQuick({ kind: "file", file: f }); go("runs"); } } },
+    { id: "checkin", label: "Check-in du jour", hint: "Sommeil, jambes, motivation", Icon: IconCheck, onSelect: () => { setQuick({ kind: "checkin" }); go("today"); } },
+    ...(me?.strava.connected
+      ? [{ id: "sync", label: "Synchro Strava", hint: "Importer tes dernières sorties", Icon: IconSync, onSelect: syncNow }]
+      : me?.strava.configured ? [{ id: "strava", label: "Connecter Strava", hint: "Tes sorties arrivent toutes seules", Icon: IconSync, onSelect: () => { window.location.href = "/api/strava/connect"; } }] : []),
+  ];
   const initial = (user.name ?? user.email).slice(0, 1).toUpperCase();
 
   return (
@@ -204,13 +229,12 @@ export default function AppShell({ user }: { user: { name: string | null; email:
         )}
       </main>
 
-      <nav className="tabbar" aria-label="Sections" ref={tabNav}>
-        <span className="nav-ind" aria-hidden="true" />
-        {TABS.filter((t) => !GROUPED.includes(t.id) || t.id === "analysis").map(({ id, label, Icon }) => {
-          const on = tab === id || (id === "analysis" && GROUPED.includes(tab));
-          return <button key={id} data-tab={id} className={`navbtn ${on ? "on" : ""}`} onClick={() => go(id)} aria-current={on ? "page" : undefined}><Icon />{label}</button>;
-        })}
-      </nav>
+      <BottomNav
+        items={TABS.filter((t) => !GROUPED.includes(t.id) || t.id === "analysis")}
+        active={GROUPED.includes(tab) ? "analysis" : tab}
+        onSelect={(id) => go(id as Tab)}
+        actions={ctx ? quick : []}
+      />
       {toastMsg && <div className="toast" role="status" key={toastMsg}>{toastMsg}</div>}
       {ctx && !ctx.me.onboarding && <Tour go={go} />}
     </div>

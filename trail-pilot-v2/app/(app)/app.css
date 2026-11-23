@@ -39,14 +39,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .head h1 { margin: 4px 0 0; font-size: clamp(30px, 4vw, 44px); letter-spacing: -.04em; line-height: 1; font-weight: 750; }
 .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--mute); }
 
-.tabbar { display: none; }
 @media (max-width: 900px) {
   .shell { grid-template-columns: 1fr; }
   .side { display: none; }
   .main { padding: calc(18px + env(safe-area-inset-top)) 16px calc(110px + env(safe-area-inset-bottom)); }
-  .tabbar { display: flex; position: fixed; z-index: 30; left: 10px; right: 10px; bottom: calc(10px + env(safe-area-inset-bottom)); padding: 6px; border-radius: 22px; background: color-mix(in srgb, var(--ink-2) 88%, transparent); backdrop-filter: blur(16px); border: 1px solid var(--line); box-shadow: 0 20px 40px -10px #000c; justify-content: space-between; }
-  .tabbar .navbtn { flex-direction: column; gap: 3px; font-size: 10.5px; padding: 8px 4px; justify-content: center; align-items: center; border-radius: 16px; }
-  .tabbar .navbtn svg { width: 21px; height: 21px; }
   .mobile-top { display: flex !important; }
 }
 .mobile-top { display: none; align-items: center; justify-content: space-between; margin-bottom: 18px; }

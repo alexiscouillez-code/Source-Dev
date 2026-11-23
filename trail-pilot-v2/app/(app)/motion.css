@@ -5,10 +5,8 @@
 /* Indicateur d’onglet qui glisse */
 .side nav { position: relative; }
 .side nav .navbtn { position: relative; z-index: 1; }
-.side nav .navbtn.on, .tabbar .navbtn.on { background: transparent; }
+.side nav .navbtn.on { background: transparent; }
 .nav-ind { position: absolute; left: 0; top: 0; border-radius: 12px; background: var(--ink-3); z-index: 0; pointer-events: none; transition: transform .5s var(--ease), width .35s var(--ease), height .35s var(--ease), opacity .2s; }
-.tabbar .nav-ind { border-radius: 16px; }
-.tabbar .navbtn { position: relative; z-index: 1; }
 
 /* Écran « analyse » du check-in */
 .ci-card { position: relative; overflow: hidden; }
