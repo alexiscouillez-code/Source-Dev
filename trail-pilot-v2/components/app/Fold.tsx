@@ -27,7 +27,7 @@ export default function Fold({ id, title, eyebrow, aside, defaultOpen = false, o
   const toggle = () => (onToggle ? onToggle(!open) : setOwn(!open));
   const body = useId();
   return (
-    <section ref={sectionRef} className={`card fold ${open ? "is-open" : "is-closed"} ${className}`} style={style}>
+    <section ref={sectionRef} data-fold={id} className={`card fold ${open ? "is-open" : "is-closed"} ${className}`} style={style}>
       {/* Tout l’en-tête est cliquable, sauf les boutons et liens qu’il contient. */}
       <div className="card-head fold-head" onClick={(e) => { if (!(e.target as HTMLElement).closest("a, input, select, .tip, button:not(.fold-btn)")) toggle(); }}>
         <div style={{ minWidth: 0 }}>

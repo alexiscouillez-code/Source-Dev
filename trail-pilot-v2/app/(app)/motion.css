@@ -20,11 +20,15 @@
 
 @media (prefers-reduced-motion: no-preference) {
   /* Changement d’onglet */
-  .view { animation: view-in .5s var(--ease) both; }
+  /* « backwards » et non « both » : une fois jouée, l'animation ne laisse aucune transformation sur la vue (sinon les
+     fenêtres fixes, comme les fenêtres du bas, se placeraient par rapport à la vue et non à l'écran). */
+  .view { animation: view-in .5s var(--ease) backwards; }
+  /* Vue arrivée par une transition de page (glissé) : son entrée est déjà animée, on ne la rejoue pas ensuite. */
+  .view.no-in { animation: none; }
   @keyframes view-in { from { opacity: 0; transform: translateY(16px); filter: blur(5px); } to { opacity: 1; transform: none; filter: none; } }
 
   /* Cartes en cascade */
-  .view .grid > *, .view .xray-side > *, .view > .card, .view > section { animation: card-in .65s var(--ease) both; }
+  .view .grid > *, .view .xray-side > *, .view > .card, .view > section { animation: card-in .65s var(--ease) backwards; }
   @keyframes card-in { from { opacity: 0; transform: translateY(18px) scale(.985); } to { opacity: 1; transform: none; } }
   .view .grid > :nth-child(1), .view .xray-side > :nth-child(1) { animation-delay: 60ms; }
   .view .grid > :nth-child(2), .view .xray-side > :nth-child(2) { animation-delay: 130ms; }

@@ -1,11 +1,22 @@
 // Parcours : choix de l'apparence (Jour, Nuit, Verre, Topo, Frontale) par le bouton et par le réglage du compte,
 // mémorisé après rechargement ; chaque changement joue un effet.
-const { OUT, iso, check, newUser, openApp, tab, scenario } = require("./lib.cjs");
+const { BASE, OUT, iso, check, newUser, openApp, tab, scenario } = require("./lib.cjs");
 
 scenario("Apparence : Jour, Nuit, Verre, Topo et Frontale", async () => {
   for (const device of ["phone", "desktop"]) {
     console.log(`— ${device}`);
-    const { page, errors } = await newUser(device, { theme: "light" });
+    // Accueil des nouveaux comptes déjà passé : sa fenêtre (plein écran) ne s'ouvre pas.
+    const { page, errors, api } = await newUser(device, { theme: "light" });
+    // Pas openApp ici : il ferme la fenêtre d'accueil, qu'on veut d'abord mesurer.
+    await page.goto(BASE + "/espace");
+    // Fenêtre d'accueil d'un nouveau compte : elle couvre tout l'écran (elle n'est plus décalée par l'animation
+    // d'entrée de la page), sa carte reste visible. Puis on la passe.
+    await page.waitForSelector(".onb-back", { timeout: 8000 }).catch(() => {});
+    const vp = page.viewportSize();
+    const onb = await page.evaluate(() => { const b = document.querySelector(".onb-back"); if (!b) return null; const r = b.getBoundingClientRect(), c = document.querySelector(".onb").getBoundingClientRect(); return { b: [r.x, r.y, r.width, r.height], c: [Math.round(c.y), Math.round(c.bottom)] }; });
+    check(onb && onb.b[0] === 0 && onb.b[1] === 0 && onb.b[2] === vp.width && onb.b[3] === vp.height && onb.c[0] >= 0 && onb.c[1] <= vp.height + 1, "fenêtre d'accueil : couvre l'écran, carte visible", onb);
+    await page.screenshot({ path: `${OUT}/accueil-${device}.png` });
+    await api.post("/api/onboarding", {});
     await openApp(page);
     const theme = () => page.evaluate(() => document.documentElement.dataset.theme);
     // Apparence affichée (famille de couleurs + apparence) et effet en cours.

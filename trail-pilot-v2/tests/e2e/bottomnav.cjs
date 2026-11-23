@@ -16,7 +16,7 @@ const bar = (page) => page.evaluate(() => {
 /** Textes de la barre et du menu, pour la mesure de contraste (contrast.py bnav-boxes.json). */
 const boxes = (page) => page.evaluate(() => {
   const out = [{ sel: "racine", w: innerWidth, h: innerHeight }];
-  for (const e of document.querySelectorAll(".bnav-label, .bnav-act-txt b, .bnav-act-txt small")) {
+  for (const e of document.querySelectorAll(".bnav-label, .bnav-act-txt b, .bnav-act-txt small, .bnav-msg-txt, .ctop-title")) {
     const r = e.getBoundingClientRect(), st = getComputedStyle(e);
     if (r.width < 4 || +st.opacity < 0.5) continue;
     out.push({ sel: e.className || e.tagName.toLowerCase(), text: e.textContent.trim().slice(0, 30), x: r.left, y: r.top, w: r.width, h: r.height, color: st.color, size: parseFloat(st.fontSize), weight: Number(st.fontWeight) });
@@ -77,6 +77,8 @@ scenario("Barre de navigation inférieure (BottomNav)", async () => {
   check(!vt.anims.some((a) => a.pe.includes("tp-bnav")), "la barre du bas reste en place pendant le changement d'onglet", vt.anims.map((a) => a.pe));
   await page.waitForTimeout(900);
   check((await bar(page)).on === "plan", "puis Planning est actif");
+  const after = await page.evaluate(() => { const v = document.querySelector(".view"), st = getComputedStyle(v); return { anim: st.animationName, tr: st.transform, f: st.filter }; });
+  check(after.anim === "none" && after.tr === "none" && after.f === "none", "l'animation d'entrée ne se rejoue pas après le glissé et ne laisse rien sur la page", after);
 
   // ---------- Rangement au défilement ----------
   await tab(page, "today");
@@ -134,11 +136,123 @@ scenario("Barre de navigation inférieure (BottomNav)", async () => {
   await page.waitForTimeout(1600);
   check((await page.evaluate(() => location.hash)) === "#today" && (await page.locator(".ci-card").count()) === 1, "« Check-in du jour » ouvre le check-in sur Aujourd'hui");
 
+  // ---------- Gestes au doigt (événements tactiles réels via le protocole du navigateur) ----------
+  const cdp = await page.context().newCDPSession(page);
+  const touch = (type, x, y) => cdp.send("Input.dispatchTouchEvent", { type, touchPoints: type === "touchEnd" ? [] : [{ x, y, radiusX: 4, radiusY: 4, force: 1 }] });
+  const drag = async (x0, y0, x1, y1, steps = 14, hold = 0) => {
+    await touch("touchStart", x0, y0);
+    if (hold) await page.waitForTimeout(hold);
+    for (let k = 1; k <= steps; k++) { await touch("touchMove", x0 + ((x1 - x0) * k) / steps, y0 + ((y1 - y0) * k) / steps); await page.waitForTimeout(16); }
+  };
+  const lift = () => touch("touchEnd", 0, 0);
+  const hash = () => page.evaluate(() => location.hash);
+  const indX = () => page.evaluate(() => new DOMMatrix(getComputedStyle(document.querySelector(".bnav-ind")).transform).m41);
+
+  // Balayage entre onglets : vers la gauche → section suivante ; le fond actif suit le doigt.
+  await tab(page, "today"); await page.evaluate(() => window.scrollTo(0, 0)); await page.waitForTimeout(1600);
+  const x0 = await indX();
+  await drag(330, 300, 150, 306, 10);
+  const xMid = await indX();
+  check(xMid > x0 + 10, "balayage : le fond actif de la barre suit le doigt", { x0, xMid });
+  await drag(150, 306, 90, 308, 3); await lift(); await page.waitForTimeout(1200);
+  check((await hash()) === "#plan" && (await bar(page)).on === "plan", "balayage vers la gauche : Aujourd'hui → Planning", await hash());
+  await page.waitForTimeout(900);
+  await drag(60, 320, 300, 324, 10); await lift(); await page.waitForTimeout(1200);
+  check((await hash()) === "#today", "balayage vers la droite : Planning → Aujourd'hui", await hash());
+  await page.waitForTimeout(900);
+  await drag(330, 300, 300, 302, 6); await lift(); await page.waitForTimeout(700);
+  check((await hash()) === "#today" && !(await page.evaluate(() => document.querySelector(".view").style.transform)), "geste trop court : rien ne change, la page revient en place");
+  await drag(120, 260, 140, 520, 12); await lift(); await page.waitForTimeout(700);
+  check((await hash()) === "#today", "un défilement vertical ne change pas d'onglet");
+
+  // Tirer pour actualiser (en haut de page) : témoin, seuil, puis message dans la barre.
+  await page.evaluate(() => window.scrollTo(0, 0)); await page.waitForTimeout(300);
+  await drag(190, 150, 190, 420, 18);
+  const ptr = await page.evaluate(() => ({ cls: document.querySelector(".ptr").className, label: document.querySelector(".ptr-label").textContent }));
+  check(/is-on/.test(ptr.cls) && /is-ready/.test(ptr.cls) && /Relâche/.test(ptr.label), "tirer : le témoin descend et annonce le relâché", ptr);
+  await lift();
+  const busy = await page.waitForFunction(() => document.querySelector(".ptr").classList.contains("is-busy") || document.querySelector(".bnav-msg"), null, { timeout: 3000 }).then(() => true, () => false);
+  check(busy, "relâcher : l'actualisation se lance");
+  await page.waitForSelector(".bnav-pill.is-msg", { timeout: 8000 }).catch(() => {});
+  const msg = await page.evaluate(() => ({ pill: document.querySelector(".bnav-pill").className, text: document.querySelector(".bnav-msg-txt")?.textContent, items: getComputedStyle(document.querySelector(".bnav-bar")).opacity }));
+  check(/is-msg/.test(msg.pill) && /à jour/.test(msg.text ?? ""), "île dynamique : le message s'affiche dans la barre", msg);
+  await page.screenshot({ path: `${OUT}/bnav-ile.png` });
+  await page.locator(".bnav-msg").click(); await page.waitForTimeout(400);
+  check((await page.locator(".bnav-msg").count()) === 0, "toucher le message le ferme et la barre revient");
+
+  // Pastilles : nouvelle sortie → nombre sur Analyse ; disparaît après visite. Check-in à faire → point sur Aujourd'hui.
+  await api.activity({ date: iso(0), sport: "trail", durationMin: 61, distanceKm: 10.2, gainM: 410, rpe: 4, avgHr: 145 });
+  await page.reload(); await page.waitForTimeout(1800);
+  await tab(page, "plan"); await page.waitForTimeout(600);
+  const bd = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll(".bnav-item")].map((b) => [b.dataset.tab, b.querySelector(".bnav-badge")?.textContent ?? null])));
+  check(bd.analysis === "1", "pastille : 1 nouvelle sortie sur Analyse", bd);
+  const ci = (await api.get("/api/me")).checkin;
+  check(ci ? bd.today === null : bd.today === "", "pastille : check-in à faire sur Aujourd'hui (s'il n'est pas fait)", { checkin: !!ci, today: bd.today });
+  check(/nouvelle sortie/.test(await page.locator(".bnav-item[data-tab=analysis]").innerText()), "la pastille est annoncée aux lecteurs d'écran");
+  await page.screenshot({ path: `${OUT}/bnav-pastilles.png` });
+  await tab(page, "analysis"); await tab(page, "plan");
+  check((await page.locator(".bnav-item[data-tab=analysis] .bnav-badge").count()) === 0, "après la visite d'Analyse, la pastille disparaît");
+
+  // Appui long : raccourcis de Planning ; « Ma course » amène la carte de la course à l'écran.
+  await tab(page, "today"); await page.waitForTimeout(800);
+  const pb = await page.locator(".bnav-item[data-tab=plan]").boundingBox();
+  await touch("touchStart", pb.x + pb.width / 2, pb.y + pb.height / 2); await page.waitForTimeout(700);
+  const ctxm = await page.evaluate(() => ({ title: document.querySelector(".bnav-ctx-title")?.textContent, items: [...document.querySelectorAll(".bnav-ctx .bnav-act b")].map((e) => e.textContent) }));
+  await lift(); await page.waitForTimeout(300);
+  check(ctxm.title === "Planning" && ctxm.items.join() === "Séance du jour,Ma course,Je ne peux pas courir", "appui long sur Planning : ses raccourcis s'ouvrent", ctxm);
+  check((await hash()) === "#today" && (await page.locator(".bnav-ctx").count()) === 1, "l'appui long n'ouvre pas la page (le menu reste ouvert)");
+  await page.screenshot({ path: `${OUT}/bnav-raccourcis.png` });
+  await page.locator(".bnav-ctx .bnav-act", { hasText: "Ma course" }).click();
+  const flashed = await page.waitForFunction(() => document.querySelector(".race.is-flash"), null, { timeout: 6000 }).then(() => true, () => false);
+  check((await hash()) === "#plan" && flashed, "« Ma course » : Planning s'ouvre sur la carte de la course", await hash());
+  // Clic droit (souris) sur Compte : « Apparence » déplie et montre le réglage.
+  await page.locator(".bnav-item[data-tab=account]").click({ button: "right" }); await page.waitForTimeout(400);
+  await page.keyboard.press("ArrowDown"); await page.keyboard.press("ArrowUp");
+  check((await page.evaluate(() => document.activeElement?.textContent)).includes("Apparence"), "clic droit : menu au clavier");
+  await page.keyboard.press("Enter");
+  const ap = await page.waitForFunction(() => document.querySelector("[data-fold=acc-appearance].is-open.is-flash"), null, { timeout: 6000 }).then(() => true, () => false);
+  check((await hash()) === "#account" && ap, "« Apparence » : Compte s'ouvre sur le réglage, déplié");
+
+  // Fenêtre du bas : la faire glisser par sa poignée la ferme ; un petit glissé la laisse en place.
+  await page.locator(".bnav-plus").click(); await page.waitForTimeout(400);
+  await page.locator(".bnav-act", { hasText: "Ajouter une sortie" }).click();
+  await page.waitForSelector(".sheet .sheet-grab", { timeout: 5000 }); await page.waitForTimeout(700);
+  let gb = await page.locator(".sheet-grab").boundingBox();
+  check(gb && gb.height > 20, "fenêtre du bas : une poignée en haut", gb);
+  await drag(gb.x + gb.width / 2, gb.y + 12, gb.x + gb.width / 2, gb.y + 52, 6); await lift(); await page.waitForTimeout(600);
+  check((await page.locator(".sheet").count()) === 1, "petit glissé : la fenêtre revient en place");
+  gb = await page.locator(".sheet-grab").boundingBox();
+  await drag(gb.x + gb.width / 2, gb.y + 12, gb.x + gb.width / 2, gb.y + 320, 12);
+  const dragSt = await page.evaluate(() => document.querySelector(".sheet")?.style.transform ?? "");
+  check(/translateY\(\d{3}/.test(dragSt), "la fenêtre suit le doigt pendant le glissé", dragSt);
+  await lift(); await page.waitForTimeout(700);
+  check((await page.locator(".sheet").count()) === 0, "glisser la poignée vers le bas ferme la fenêtre");
+
+  // En-tête compact : le titre passe dans une petite barre en haut ; la toucher remonte.
+  await tab(page, "plan"); await page.waitForTimeout(900);
+  await page.evaluate(() => window.scrollTo(0, 420)); await page.waitForTimeout(600);
+  const top = await page.evaluate(() => ({ on: document.querySelector(".ctop").classList.contains("is-on"), title: document.querySelector(".ctop-title").textContent }));
+  check(top.on && top.title === "Planning", "en-tête compact : « Planning » apparaît en haut en défilant", top);
+  await page.screenshot({ path: `${OUT}/bnav-entete.png` });
+  await page.locator(".ctop").click(); await page.waitForTimeout(1200);
+  check((await page.evaluate(() => window.scrollY)) < 5 && !(await page.evaluate(() => document.querySelector(".ctop").classList.contains("is-on"))), "toucher l'en-tête compact remonte en haut");
+
   // ---------- Les cinq apparences : couleurs propres, contraste ----------
   const looks = {}, all = {};
   for (const m of MODES) {
     await setMode(page, m); await page.waitForTimeout(500);
     looks[m[0]] = (await bar(page)).bg;
+    // Île dynamique dans chaque apparence (mesurée avec le reste).
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("tp-toast", { detail: "Séance enregistrée." })));
+    await page.waitForTimeout(700);
+    const isl = await still(page);
+    all[`${m[0]}-ile`] = await boxes(page);
+    await page.screenshot({ path: `${OUT}/bnav-${m[0]}-ile.png` });
+    const h0 = await page.addStyleTag({ content: ".bnav * { color: transparent !important; -webkit-text-fill-color: transparent !important; }" });
+    await page.screenshot({ path: `${OUT}/bnav-${m[0]}-ile-fond.png` });
+    await h0.evaluate((e) => e.remove()); await isl.evaluate((e) => e.remove());
+    await page.locator(".bnav-msg").click({ timeout: 1500 }).catch(() => {});
+    await page.waitForSelector(".bnav-msg", { state: "detached", timeout: 6000 }).catch(() => {});
     await plus.click(); await page.waitForTimeout(700);
     const css = await still(page); await page.waitForTimeout(150);
     await page.screenshot({ path: `${OUT}/bnav-${m[0]}.png` });
@@ -150,7 +264,7 @@ scenario("Barre de navigation inférieure (BottomNav)", async () => {
   }
   fs.writeFileSync(`${OUT}/bnav-boxes.json`, JSON.stringify(all));
   check(new Set(Object.values(looks)).size === 5, "la barre change d'aspect dans chacune des cinq apparences", looks);
-  check(Object.values(all).every((bx) => bx.length >= 1 + 1 + want.length * 2), "nom actif et textes du menu mesurés dans chaque apparence", Object.fromEntries(Object.entries(all).map(([k, v]) => [k, v.length])));
+  check(Object.entries(all).every(([k, bx]) => bx.length >= (k.endsWith("-ile") ? 2 : 1 + 1 + want.length * 2)), "nom actif et textes du menu mesurés dans chaque apparence", Object.fromEntries(Object.entries(all).map(([k, v]) => [k, v.length])));
 
   // ---------- Grand écran : la barre latérale reste, la barre du bas disparaît ----------
   await setMode(page, MODES[1]);
@@ -167,4 +281,5 @@ scenario("Barre de navigation inférieure (BottomNav)", async () => {
   await tab(page, "terrains");
   check((await bar(page)).on === "terrains", "mouvement réduit : la navigation fonctionne");
   check(errors.length === 0, "aucune erreur dans la page", errors.slice(0, 3));
+
 });

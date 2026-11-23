@@ -1,9 +1,13 @@
 /**
  * Action rapide demandée depuis le bouton + de la barre du bas, reprise par l'écran qui s'ouvre ensuite
- * (Séances : ajouter une sortie ou lire un fichier ; Aujourd'hui : ouvrir le check-in).
+ * (Séances : ajouter une sortie ou lire un fichier ; Aujourd'hui : ouvrir le check-in), ou par un raccourci
+ * d'appui long (aller à un élément de la page).
  * Une seule action en attente ; elle est consommée par le premier écran qui la prend.
  */
-export type Quick = { kind: "add" } | { kind: "file"; file: File } | { kind: "checkin" };
+export type Quick =
+  | { kind: "add" } | { kind: "file"; file: File } | { kind: "checkin" }
+  /** Amener un élément à l'écran sur la page ouverte : l'ouvrir s'il est replié, toucher un bouton qu'il contient. */
+  | { kind: "jump"; sel: string; text?: string; press?: boolean };
 
 let pending: Quick | null = null;
 export const QUICK_EVENT = "tp-quick";

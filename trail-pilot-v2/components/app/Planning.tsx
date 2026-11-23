@@ -670,6 +670,7 @@ function AbsenceSheet({ a, today, onClose, onSaved }: { a: Absence | null; today
   return (
     <div className="sheet-back" role="dialog" aria-modal="true" aria-labelledby="abs-title" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <form className="sheet form" onSubmit={submit}>
+        <div className="sheet-grab" aria-hidden="true" />
         <div className="card-head"><h2 id="abs-title">Un imprévu ?</h2><button type="button" className="link small" onClick={onClose}>Fermer</button></div>
         <div className="picks" role="radiogroup" aria-label="Motif">
           {(Object.keys(ABS_LABEL) as Absence["kind"][]).map((k) => (

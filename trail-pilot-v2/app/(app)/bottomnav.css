@@ -25,6 +25,7 @@
   --bn-menu-ico-fg: #ff8a3d;
   --bn-scrim: rgba(0, 0, 0, .45);
   --bn-pill-blur: none;
+  --bn-badge: #ff6b00; --bn-badge-ring: #0d0d0d; --bn-badge-fg: #111;
 
   display: none;
   position: fixed; z-index: 40; left: 0; right: 0;
@@ -118,7 +119,7 @@
 /* ---------- Mouvement ---------- */
 @media (prefers-reduced-motion: no-preference) {
   /* Arrivée de la barre. */
-  .bnav-pill { animation: bnav-rise .7s cubic-bezier(.25, 1.3, .5, 1) .15s both; }
+  .bnav { animation: bnav-rise .7s cubic-bezier(.25, 1.3, .5, 1) .15s backwards; }
   @keyframes bnav-rise { from { transform: translateY(90px) scale(.92); opacity: 0; } }
   /* Icône touchée : petit rebond. */
   .bnav-ico { animation: bnav-bump .45s cubic-bezier(.3, 1.6, .5, 1); }
@@ -138,6 +139,66 @@
   @keyframes bnav-pop { from { opacity: 0; transform: translateY(14px) scale(.9); } }
   .bnav-act:hover .bnav-act-ico { transform: rotate(-6deg) scale(1.06); }
   .bnav-act-ico { transition: transform .3s cubic-bezier(.3, 1.5, .5, 1); }
+}
+
+.bnav .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.bnav-item { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+.bnav-ind.is-drag { transition: opacity .2s; }
+
+/* ---------- Pastilles ---------- */
+.bnav-ico { position: relative; }
+.bnav-badge {
+  position: absolute; top: -3px; right: -4px; width: 9px; height: 9px; border-radius: 999px;
+  background: var(--bn-badge, #ff6b00); box-shadow: 0 0 0 2px var(--bn-badge-ring, #0d0d0d);
+}
+.bnav-badge.has-n {
+  top: -7px; right: -10px; width: auto; min-width: 17px; height: 17px; padding: 0 4px;
+  display: grid; place-items: center; font-size: 10.5px; font-weight: 800; line-height: 1; color: var(--bn-badge-fg, #111);
+}
+
+/* ---------- Anneau de synchro autour du + ---------- */
+.bnav-ring { position: absolute; inset: -7px; width: calc(100% + 14px); height: calc(100% + 14px); pointer-events: none; }
+.bnav-ring circle { fill: none; stroke: var(--bn-on); stroke-width: 2.6; stroke-linecap: round; stroke-dasharray: 26 74; transform-origin: 50% 50%; }
+
+/* ---------- Île dynamique : un message dans la barre ---------- */
+.bnav-msg {
+  position: absolute; inset: 5px; z-index: 3; display: flex; align-items: center; gap: 11px; padding: 0 14px 0 12px;
+  border: 0; border-radius: 999px; background: transparent; color: var(--bn-menu-fg); font: inherit; text-align: left; cursor: pointer;
+}
+.bnav-msg-dot { width: 10px; height: 10px; flex: none; border-radius: 50%; background: var(--bn-plus); box-shadow: 0 0 12px var(--bn-on); }
+.bnav-msg-txt { font-size: 13.5px; font-weight: 600; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.bnav-pill.is-msg > :is(.bnav-bar, .bnav-sep, .bnav-plus) { opacity: 0; filter: blur(4px); transform: scale(.94); pointer-events: none; }
+.bnav-pill > :is(.bnav-bar, .bnav-sep, .bnav-plus) { transition: opacity .3s ease, filter .3s ease, transform .4s cubic-bezier(.3, 1.3, .5, 1); }
+.bnav-msg:focus-visible { outline: 2px solid var(--bn-on); outline-offset: 2px; }
+
+/* ---------- Raccourcis (appui long) ---------- */
+.bnav-ctx { right: auto; left: clamp(0px, calc(var(--cx) - 130px), calc(100% - 260px)); width: 260px; justify-items: stretch; }
+.bnav-ctx-title { justify-self: start; padding: 0 6px 2px; font-family: var(--mono); font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--bn-menu-fg); text-shadow: 0 1px 8px rgba(0, 0, 0, .5); }
+.bnav-ctx .bnav-act { padding: 8px 12px 8px 8px; border-radius: 18px; }
+.bnav-ctx .bnav-act-ico { width: 34px; height: 34px; border-radius: 12px; }
+.bnav-ctx .bnav-act-txt b { font-size: 14.5px; }
+/* L'icône appuyée se soulève pendant que ses raccourcis sont ouverts. */
+.bnav.is-open .bnav-item[aria-haspopup]:focus-within .bnav-ico { transform: translateY(-2px); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .bnav-badge { animation: badge-in .5s cubic-bezier(.3, 1.8, .5, 1) both; }
+  .bnav-badge::after { content: ""; position: absolute; inset: -3px; border-radius: inherit; border: 2px solid var(--bn-badge, #ff6b00); opacity: 0; animation: badge-ring 2.4s ease-out 1s infinite; }
+  @keyframes badge-in { from { transform: scale(0); } }
+  @keyframes badge-ring { 0% { opacity: .7; transform: scale(.8); } 70%, 100% { opacity: 0; transform: scale(1.9); } }
+  .bnav-ring circle { animation: ring-spin 1s linear infinite; }
+  @keyframes ring-spin { to { transform: rotate(360deg); } }
+  .bnav-plus.is-busy .bnav-glow { opacity: .9; }
+  /* Île : la pilule « respire » à l'arrivée du message, le texte glisse en place. */
+  .bnav-pill.is-msg { animation: island .55s cubic-bezier(.3, 1.4, .5, 1); }
+  @keyframes island { 0% { transform: scale(1); } 40% { transform: scale(1.035, 1.12); } 100% { transform: scale(1); } }
+  .bnav-msg { animation: msg-in .45s cubic-bezier(.2, .9, .3, 1) .08s both; }
+  @keyframes msg-in { from { opacity: 0; transform: translateY(8px); filter: blur(4px); } }
+  .bnav-msg-dot { animation: msg-dot 1.6s ease-in-out infinite; }
+  @keyframes msg-dot { 50% { transform: scale(.7); } }
+  .bnav-ctx { transform-origin: var(--cx) 100%; }
+  .bnav-ctx .bnav-act { transform-origin: 50% 100%; }
+  .bnav-ctx-title { animation: bnav-fade .3s ease both; }
+  .bnav-ico { transition: transform .3s cubic-bezier(.3, 1.5, .5, 1); }
 }
 
 /* =====================================================================
@@ -169,6 +230,7 @@
   --bn-menu-ico-fg: #fff;
   --bn-scrim: color-mix(in srgb, var(--g-0) 45%, transparent);
   --bn-pill-blur: blur(22px) saturate(160%);
+  --bn-badge: #ff9466; --bn-badge-ring: var(--g-0); --bn-badge-fg: #1a0d05;
 }
 /* Topo : encre de carte (brun foncé) avec un voile de courbes de niveau, accent vert forêt. */
 :root[data-ap="topo"] .bnav {
@@ -191,6 +253,7 @@
   --bn-menu-ico: rgba(124, 196, 98, .18);
   --bn-menu-ico-fg: #a9dc8f;
   --bn-scrim: rgba(42, 34, 22, .3);
+  --bn-badge: #e9a62a; --bn-badge-ring: #241d12; --bn-badge-fg: #241d12;
 }
 /* Frontale : noir pur, tout en rouge (ni vert ni bleu, pour garder la vision de nuit). */
 :root[data-ap="frontale"] .bnav {
@@ -214,4 +277,109 @@
   --bn-menu-ico: rgba(255, 61, 31, .16);
   --bn-menu-ico-fg: #ff8a64;
   --bn-scrim: rgba(0, 0, 0, .6);
+  --bn-badge: #ff3d1f; --bn-badge-ring: #000; --bn-badge-fg: #000;
 }
+
+/* =====================================================================
+   Autour de la barre : messages, gestes, fenêtres du bas, en-tête compact
+   ===================================================================== */
+/* Sur téléphone, les messages passent dans la barre (île dynamique) : plus de bulle à part. */
+@media (max-width: 900px) {
+  .toast { display: none; }
+  /* La page laisse les gestes horizontaux à l'appli (balayage entre onglets) et garde le défilement vertical. */
+  .main { touch-action: pan-y; }
+  html { overscroll-behavior-y: contain; }
+}
+
+/* ---------- Raccourci « aller à » : bref halo sur l'élément visé ---------- */
+.is-flash { box-shadow: 0 0 0 2px var(--ember), 0 0 0 8px color-mix(in srgb, var(--ember) 22%, transparent) !important; transition: box-shadow .4s ease; }
+
+/* ---------- Fenêtres du bas : même allure que la barre (flottantes, arrondies), poignée à glisser ---------- */
+.sheet-grab { display: none; }
+@media (max-width: 600px) {
+  .sheet-back { padding: 0 8px calc(8px + env(safe-area-inset-bottom)); }
+  .sheet {
+    border-radius: 28px; padding-top: 10px; padding-bottom: 22px;
+    box-shadow: 0 -10px 40px -16px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(255, 255, 255, .06);
+  }
+  .sheet-grab {
+    display: block; position: sticky; top: -10px; z-index: 2; height: 28px; margin: -10px -22px -8px;
+    border-radius: 28px 28px 0 0; background: inherit; touch-action: none; cursor: grab;
+  }
+  .sheet-grab::before { content: ""; position: absolute; left: 50%; top: 10px; width: 42px; height: 5px; margin-left: -21px; border-radius: 99px; background: var(--mute); opacity: .55; }
+  .sheet-grab:active::before { opacity: .9; }
+  :root[data-theme="glass"] .sheet-grab { background: transparent; }
+}
+@media (max-width: 600px) and (prefers-reduced-motion: no-preference) {
+  .sheet { animation: sheet-up .5s cubic-bezier(.25, 1.25, .5, 1) both; }
+  @keyframes sheet-up { from { transform: translateY(70px); opacity: 0; } }
+}
+
+/* ---------- Tirer pour actualiser ---------- */
+.ptr {
+  position: fixed; z-index: 45; left: 50%; top: calc(env(safe-area-inset-top) + 8px);
+  display: grid; justify-items: center; gap: 6px; pointer-events: none;
+  transform: translate(-50%, calc(var(--pull, 0px) - 64px)); opacity: 0;
+  transition: transform .35s cubic-bezier(.3, 1.3, .5, 1), opacity .2s ease;
+  --ptr-c: var(--ember);
+}
+.ptr.is-on { opacity: 1; }
+.ptr:not(.is-busy).is-on { transition: opacity .2s ease; }
+.ptr-disc { width: 46px; height: 46px; display: grid; place-items: center; border-radius: 50%; background: var(--ink-2); border: 1px solid var(--line); box-shadow: 0 10px 24px -10px rgba(0, 0, 0, .6); }
+.ptr-disc svg { width: 34px; height: 34px; overflow: visible; }
+.ptr-label { font-family: var(--mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--soft); padding: 3px 8px; border-radius: 99px; background: color-mix(in srgb, var(--ink-2) 85%, transparent); }
+.ptr svg > g { display: none; }
+/* Jour et Nuit : un arc. */
+.ptr .ptr-arc { display: inline; }
+.ptr-track { fill: none; stroke: var(--line); stroke-width: 3; }
+.ptr-fill { fill: none; stroke: var(--ptr-c); stroke-width: 3; stroke-linecap: round; stroke-dasharray: 1; stroke-dashoffset: calc(1 - var(--p, 0)); transform: rotate(-90deg); transform-origin: 20px 20px; }
+/* Verre : une ronde de points. */
+:root[data-theme="glass"] .ptr .ptr-arc { display: none; }
+:root[data-theme="glass"] .ptr .ptr-dots { display: inline; }
+.ptr-dots circle { fill: #fff; opacity: clamp(.15, calc(var(--p, 0) * 12 - var(--i)), 1); }
+/* Topo : des courbes de niveau. */
+:root[data-ap="topo"] .ptr .ptr-arc { display: none; }
+:root[data-ap="topo"] .ptr .ptr-topo { display: inline; }
+.ptr-topo path { fill: none; stroke: #a87b45; stroke-width: 1.6; stroke-dasharray: 1; stroke-dashoffset: clamp(0, calc(1 - (var(--p, 0) * 3 - var(--i))), 1); }
+.ptr-topo circle { fill: var(--ember); }
+/* Frontale : la lampe et son faisceau. */
+:root[data-ap="frontale"] .ptr .ptr-arc { display: none; }
+:root[data-ap="frontale"] .ptr .ptr-lamp { display: inline; }
+.ptr-lamp rect { fill: #170b08; stroke: #ff3d1f; stroke-width: 1.4; }
+.ptr-led { fill: #ff8a64; }
+.ptr-beam { fill: #ff3d1f; opacity: calc(var(--p, 0) * .55); transform-origin: 14px 20px; transform: scaleX(var(--p, 0)) scaleY(calc(.35 + var(--p, 0) * .65)); }
+:root[data-theme="glass"] .ptr-disc { background: color-mix(in srgb, var(--g-0) 70%, transparent); border-color: rgba(255, 255, 255, .25); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+:root[data-theme="glass"] .ptr-label { background: color-mix(in srgb, var(--g-0) 80%, transparent); color: #fff; }
+@media (prefers-reduced-motion: no-preference) {
+  .ptr.is-ready .ptr-disc { animation: ptr-ready .35s cubic-bezier(.3, 1.6, .5, 1); }
+  @keyframes ptr-ready { 50% { transform: scale(1.12); } }
+  .ptr.is-busy svg { animation: ptr-spin 1s linear infinite; }
+  @keyframes ptr-spin { to { transform: rotate(360deg); } }
+  .ptr.is-busy .ptr-fill { stroke-dashoffset: .7; }
+  :root[data-ap="topo"] .ptr.is-busy svg { animation: ptr-breathe 1.2s ease-in-out infinite; }
+  @keyframes ptr-breathe { 50% { transform: scale(.86); } }
+  :root[data-ap="frontale"] .ptr.is-busy svg { animation: ptr-sweep 1.1s ease-in-out infinite alternate; }
+  @keyframes ptr-sweep { from { transform: rotate(-22deg); } to { transform: rotate(22deg); } }
+}
+
+/* ---------- En-tête compact ---------- */
+.ctop { display: none; }
+@media (max-width: 900px) {
+  .ctop {
+    display: flex; align-items: center; justify-content: center; position: fixed; z-index: 35; left: 0; right: 0; top: 0;
+    height: calc(48px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) 64px 0; border: 0; border-bottom: 1px solid var(--line);
+    background: color-mix(in srgb, var(--ink) 82%, transparent); -webkit-backdrop-filter: blur(16px) saturate(140%); backdrop-filter: blur(16px) saturate(140%);
+    color: var(--snow); font: inherit; cursor: pointer;
+    transform: translateY(-100%); opacity: 0; pointer-events: none;
+    transition: transform .35s cubic-bezier(.3, 1.2, .5, 1), opacity .25s ease;
+  }
+  .ctop.is-on { transform: none; opacity: 1; pointer-events: auto; }
+  .ctop-title { font-size: 16px; font-weight: 700; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ctop.is-on .ctop-title { animation: ctop-in .4s cubic-bezier(.2, .9, .3, 1) both; }
+  @keyframes ctop-in { from { transform: translateY(10px); opacity: 0; } }
+  :root[data-theme="glass"] .ctop { background: color-mix(in srgb, var(--g-0) 62%, transparent); border-bottom-color: rgba(255, 255, 255, .16); }
+  :root[data-ap="topo"] .ctop { background: color-mix(in srgb, var(--ink-2) 90%, transparent); }
+  :root[data-ap="frontale"] .ctop { background: rgba(0, 0, 0, .9); }
+  .view .head h1 { will-change: transform; }
+}
+@media (prefers-reduced-motion: reduce) { .ctop, .ctop.is-on .ctop-title { transition: none; animation: none; } }

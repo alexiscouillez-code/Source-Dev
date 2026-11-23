@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import type { Ctx } from "./AppShell";
 import { api, DAYS, localToday } from "./client";
 
@@ -25,7 +26,8 @@ export default function Onboarding({ me, refresh, go, toast }: Ctx) {
   }
 
   const steps = ["Ta course", "Ton profil", "Tes sorties"];
-  return (
+  // Rendue dans <body> : ainsi l'animation d'entrée de la page (ou un glissement d'onglet) ne la décale jamais.
+  return createPortal(
     <div className="onb-back" role="dialog" aria-modal="true" aria-labelledby="onb-title">
       <div className="onb card">
         <div className="onb-steps" aria-hidden="true">{steps.map((s, i) => <span key={s} className={i <= step ? "on" : ""}><i>{i + 1}</i>{s}</span>)}</div>
@@ -87,6 +89,7 @@ export default function Onboarding({ me, refresh, go, toast }: Ctx) {
 
         <button className="onb-skip link small" onClick={() => finish()} disabled={busy}>Passer l’accueil</button>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

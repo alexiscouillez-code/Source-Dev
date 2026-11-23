@@ -221,6 +221,7 @@ function SessionSheet({ initial, onClose, onSaved }: { initial: Partial<Draft>; 
   return (
     <div className="sheet-back" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <form className="sheet form" onSubmit={submit} aria-labelledby="sheet-title">
+        <div className="sheet-grab" aria-hidden="true" />
         <div className="row between"><h2 id="sheet-title" style={{ margin: 0 }}>{f.source === "fichier" ? `Séance depuis un fichier ${f.format ?? ""}` : f.source === "gpx" ? "Séance depuis un GPX" : "Nouvelle séance"}</h2><button type="button" className="link" onClick={onClose}>Fermer</button></div>
         <div className="fields">
           <label className="field">Date<input type="date" value={f.date} max={localToday()} onChange={set("date")} required /></label>

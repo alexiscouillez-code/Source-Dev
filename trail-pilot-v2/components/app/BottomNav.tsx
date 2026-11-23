@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent as RPointerEvent } from "react";
 
 export interface NavItem { id: string; label: string; Icon: () => React.JSX.Element }
 export interface QuickAction {
@@ -13,52 +13,89 @@ export interface QuickAction {
   /** Ou : choix d'un fichier (le sélecteur s'ouvre directement depuis le toucher, comme l'exigent les téléphones). */
   file?: { accept: string; onFile: (f: File) => void };
 }
+/** Pastille sur une icône : un point, ou un nombre ; `label` est lu par les lecteurs d'écran. */
+export interface Badge { label: string; count?: number }
+/** Message affiché dans la barre (île dynamique). `k` change à chaque nouveau message. */
+export interface IslandMessage { text: string; k: number }
+
+/** Événement de balayage entre onglets : `p` de −1 (vers la section précédente) à 1 (suivante), null au relâché. */
+export const SWIPE_EVENT = "tp-swipe";
+const LONG_PRESS_MS = 480;
 
 /**
  * Barre de navigation inférieure flottante (téléphone et tablette).
  *
  * - Pilule centrée en bas de l'écran : une icône par section ; la section active s'élargit et affiche son nom
- *   (au survol aussi, à la souris). Un fond glisse d'une section à l'autre, avec un léger rebond.
- * - Bouton + à droite (dégradé orange, jaune, vert et halo) : ouvre un petit menu d'actions rapides qui se
- *   déploie au-dessus, élément par élément. Échap ou un toucher à côté le referme.
- * - La barre se range quand on fait défiler vers le bas et revient dès qu'on remonte (et à chaque changement
- *   d'écran ; un saut de défilement d'un coup ne la range pas).
- * - Ses couleurs suivent l'apparence du site (Jour, Nuit, Verre, Topo, Frontale) : voir bottomnav.css.
- * - Sans animation si l'appareil demande moins de mouvement.
+ *   (au survol aussi, à la souris). Un fond glisse d'une section à l'autre, avec un léger rebond ; pendant un
+ *   balayage de la page, il suit le doigt vers la section voisine.
+ * - Pastilles : point ou nombre sur une icône (check-in à faire, nouvelles sorties…).
+ * - Appui long (ou clic droit, ou touche Menu) sur une icône : ses raccourcis s'ouvrent au-dessus.
+ * - Bouton + (dégradé orange, jaune, vert et halo) : menu d'actions rapides. Pendant une synchro, un anneau
+ *   tourne autour de lui.
+ * - Île dynamique : un message (enregistrement, synchro…) s'affiche dans la barre elle-même, puis elle revient.
+ * - La barre se range quand on fait défiler vers le bas et revient en remontant et à chaque changement d'écran.
+ * - Couleurs propres à chaque apparence (bottomnav.css). Sans animation si l'appareil demande moins de mouvement.
  */
-export default function BottomNav({ items, active, onSelect, actions = [], label = "Sections", plusLabel = "Actions rapides" }: {
+export default function BottomNav({ items, active, onSelect, actions = [], badges = {}, shortcuts = {}, message = null, onDismiss, busy = false, label = "Sections", plusLabel = "Actions rapides" }: {
   items: NavItem[];
   active: string;
   onSelect: (id: string) => void;
   actions?: QuickAction[];
+  badges?: Record<string, Badge | null | undefined>;
+  shortcuts?: Record<string, QuickAction[] | undefined>;
+  message?: IslandMessage | null;
+  onDismiss?: () => void;
+  busy?: boolean;
   label?: string;
   plusLabel?: string;
 }) {
   const bar = useRef<HTMLDivElement>(null), ind = useRef<HTMLSpanElement>(null), plus = useRef<HTMLButtonElement>(null);
-  const menu = useRef<HTMLDivElement>(null), fileInput = useRef<HTMLInputElement>(null), fileAction = useRef<QuickAction | null>(null);
+  const menu = useRef<HTMLDivElement>(null), ctxMenu = useRef<HTMLDivElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null), fileAction = useRef<QuickAction | null>(null);
   const [open, setOpen] = useState(false);
+  const [ctx, setCtx] = useState<{ id: string; x: number } | null>(null);
   const [hidden, setHidden] = useState(false);
   const [bump, setBump] = useState<{ id: string; k: number } | null>(null);
-  const menuId = useId();
+  const menuId = useId(), ctxId = useId();
+  const press = useRef<{ id: string; x: number; y: number; t: number; fired: boolean } | null>(null);
 
-  // Fond de la section active : suit sa position et sa largeur (qui change pendant que le nom s'affiche).
-  useLayoutEffect(() => {
+  // ---------- Fond de la section active ----------
+  const dragP = useRef<number | null>(null);
+  const place = useCallback(() => {
     const b = bar.current, i = ind.current;
     if (!b || !i) return;
-    const place = () => {
-      const on = b.querySelector<HTMLElement>(".bnav-item[aria-current=page]");
-      if (!on) { i.style.opacity = "0"; return; }
-      i.style.opacity = "1";
-      i.style.width = `${on.offsetWidth}px`;
-      i.style.transform = `translateX(${on.offsetLeft}px)`;
-    };
+    const list = [...b.querySelectorAll<HTMLElement>(".bnav-item")];
+    const at = list.findIndex((el) => el.getAttribute("aria-current") === "page");
+    if (at < 0) { i.style.opacity = "0"; return; }
+    i.style.opacity = "1";
+    let x = list[at].offsetLeft, w = list[at].offsetWidth;
+    // Balayage en cours : le fond va vers la section voisine, à proportion du geste.
+    const p = dragP.current;
+    if (p) {
+      const n = list[at + Math.sign(p)];
+      if (n) { const k = Math.min(1, Math.abs(p)); x += (n.offsetLeft - x) * k; w += (n.offsetWidth - w) * k; }
+    }
+    i.style.width = `${w}px`;
+    i.style.transform = `translateX(${x}px)`;
+  }, []);
+  useLayoutEffect(() => {
     place();
     const ro = new ResizeObserver(place);
-    b.querySelectorAll(".bnav-item").forEach((el) => ro.observe(el));
+    bar.current?.querySelectorAll(".bnav-item").forEach((el) => ro.observe(el));
     return () => ro.disconnect();
-  }, [active, items]);
+  }, [active, items, place, message]);
+  useEffect(() => {
+    const on = (e: Event) => {
+      const p = (e as CustomEvent<{ p: number | null }>).detail.p;
+      dragP.current = p;
+      ind.current?.classList.toggle("is-drag", p != null);
+      place();
+    };
+    window.addEventListener(SWIPE_EVENT, on);
+    return () => window.removeEventListener(SWIPE_EVENT, on);
+  }, [place]);
 
-  // La barre se range en descendant, revient en remontant (et toujours près du haut de la page).
+  // ---------- Rangement au défilement ----------
   // Juste après un changement d'écran, le défilement vient de l'appli (retour en haut, carte amenée à l'écran) : on l'ignore.
   const calm = useRef(0);
   useEffect(() => {
@@ -81,24 +118,27 @@ export default function BottomNav({ items, active, onSelect, actions = [], label
     window.addEventListener("resize", resize);
     return () => { window.removeEventListener("scroll", on); window.removeEventListener("resize", resize); cancelAnimationFrame(raf); };
   }, []);
-  useEffect(() => { if (open) setHidden(false); }, [open]);
-  // Nouvel écran : la barre revient.
+  useEffect(() => { if (open || ctx || message || busy) setHidden(false); }, [open, ctx, message, busy]);
   useEffect(() => { setHidden(false); calm.current = performance.now() + 1500; }, [active]);
 
-  const close = useCallback((focus = true) => { setOpen(false); if (focus) plus.current?.focus(); }, []);
-  // Menu ouvert : focus sur la première action, Échap pour fermer.
+  // ---------- Menus (bouton + et raccourcis) ----------
+  const closeAll = useCallback((focus: HTMLElement | null = null) => { setOpen(false); setCtx(null); focus?.focus(); }, []);
   useEffect(() => {
-    if (!open) return;
-    menu.current?.querySelector<HTMLElement>("[role=menuitem]")?.focus();
-    const esc = (e: globalThis.KeyboardEvent) => { if (e.key === "Escape") close(); };
+    if (!open && !ctx) return;
+    (open ? menu : ctxMenu).current?.querySelector<HTMLElement>("[role=menuitem]")?.focus();
+    const esc = (e: globalThis.KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      const back = open ? plus.current : bar.current?.querySelector<HTMLElement>(`.bnav-item[data-tab="${ctx?.id}"]`) ?? null;
+      closeAll(back);
+    };
     window.addEventListener("keydown", esc);
     return () => window.removeEventListener("keydown", esc);
-  }, [open, close]);
+  }, [open, ctx, closeAll]);
 
   const menuKeys = (e: KeyboardEvent<HTMLDivElement>) => {
     if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return;
     e.preventDefault();
-    const list = [...(menu.current?.querySelectorAll<HTMLElement>("[role=menuitem]") ?? [])];
+    const list = [...e.currentTarget.querySelectorAll<HTMLElement>("[role=menuitem]")];
     const at = list.indexOf(document.activeElement as HTMLElement);
     const next = e.key === "Home" ? 0 : e.key === "End" ? list.length - 1 : (at + (e.key === "ArrowDown" ? 1 : -1) + list.length) % list.length;
     list[next]?.focus();
@@ -108,26 +148,61 @@ export default function BottomNav({ items, active, onSelect, actions = [], label
     if (a.file) {
       fileAction.current = a;
       if (fileInput.current) { fileInput.current.accept = a.file.accept; fileInput.current.click(); }
-      close(false);
+      closeAll();
       return;
     }
-    close(false);
+    closeAll();
     a.onSelect?.();
   };
 
+  // ---------- Appui long sur une icône ----------
+  const openCtx = (id: string, el: HTMLElement) => {
+    if (!shortcuts[id]?.length) return false;
+    const b = el.closest(".bnav-pill")!.getBoundingClientRect(), r = el.getBoundingClientRect();
+    setOpen(false);
+    setCtx({ id, x: r.left + r.width / 2 - b.left });
+    try { navigator.vibrate?.(10); } catch { /* non pris en charge */ }
+    return true;
+  };
+  const down = (id: string) => (e: RPointerEvent<HTMLButtonElement>) => {
+    if (e.button > 0) return;
+    const el = e.currentTarget;
+    const t = window.setTimeout(() => { if (press.current?.id === id && openCtx(id, el)) press.current.fired = true; }, LONG_PRESS_MS);
+    press.current = { id, x: e.clientX, y: e.clientY, t, fired: false };
+  };
+  const moveP = (e: RPointerEvent<HTMLButtonElement>) => {
+    const p = press.current;
+    if (p && !p.fired && Math.hypot(e.clientX - p.x, e.clientY - p.y) > 10) { window.clearTimeout(p.t); press.current = null; }
+  };
+  const upP = () => { const p = press.current; if (p && !p.fired) { window.clearTimeout(p.t); press.current = null; } };
+
+  const ctxItems = ctx ? shortcuts[ctx.id] ?? [] : [];
+  const ctxName = ctx ? items.find((x) => x.id === ctx.id)?.label ?? "" : "";
+
   return (
-    <nav className={`bnav${hidden ? " is-hidden" : ""}${open ? " is-open" : ""}`} aria-label={label}>
-      {open && <div className="bnav-scrim" aria-hidden="true" onClick={() => close(false)} />}
-      <div className="bnav-pill">
-        <div className="bnav-bar" ref={bar}>
+    <nav className={`bnav${hidden ? " is-hidden" : ""}${open || ctx ? " is-open" : ""}`} aria-label={label}>
+      {(open || ctx) && <div className="bnav-scrim" aria-hidden="true" onClick={() => closeAll()} />}
+      <div className={`bnav-pill${message ? " is-msg" : ""}`}>
+        <div className="bnav-bar" ref={bar} aria-hidden={message ? true : undefined}>
           <span className="bnav-ind" ref={ind} aria-hidden="true" />
           {items.map(({ id, label: l, Icon }) => {
-            const on = id === active;
+            const on = id === active, bd = badges[id];
             return (
               <button key={id} type="button" data-tab={id} className="bnav-item" aria-current={on ? "page" : undefined}
-                onClick={() => { setBump({ id, k: Date.now() }); onSelect(id); }}>
-                <span className="bnav-ico" key={bump?.id === id ? bump.k : 0}><Icon /></span>
+                tabIndex={message ? -1 : undefined} aria-haspopup={shortcuts[id]?.length ? "menu" : undefined}
+                onPointerDown={down(id)} onPointerMove={moveP} onPointerUp={upP} onPointerCancel={upP} onPointerLeave={upP}
+                onContextMenu={(e) => { e.preventDefault(); if (!press.current?.fired) openCtx(id, e.currentTarget); }}
+                onKeyDown={(e) => { if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) { e.preventDefault(); openCtx(id, e.currentTarget); } }}
+                onClick={(e) => {
+                  if (press.current?.fired) { press.current = null; e.preventDefault(); return; }
+                  setBump({ id, k: Date.now() }); onSelect(id);
+                }}>
+                <span className="bnav-ico" key={bump?.id === id ? bump.k : 0}>
+                  <Icon />
+                  {bd && <span className={`bnav-badge${bd.count ? " has-n" : ""}`} aria-hidden="true">{bd.count ? (bd.count > 9 ? "9+" : bd.count) : ""}</span>}
+                </span>
                 <span className="bnav-label">{l}</span>
+                {bd && <span className="sr-only">, {bd.label}</span>}
               </button>
             );
           })}
@@ -135,17 +210,37 @@ export default function BottomNav({ items, active, onSelect, actions = [], label
         {actions.length > 0 && (
           <>
             <span className="bnav-sep" aria-hidden="true" />
-            <button ref={plus} type="button" className="bnav-plus" aria-label={plusLabel} aria-haspopup="menu" aria-expanded={open} aria-controls={menuId}
-              onClick={() => setOpen((o) => !o)}>
+            <button ref={plus} type="button" className={`bnav-plus${busy ? " is-busy" : ""}`} aria-label={busy ? `${plusLabel} (synchro en cours)` : plusLabel} aria-haspopup="menu" aria-expanded={open} aria-controls={menuId}
+              tabIndex={message ? -1 : undefined} onClick={() => { setCtx(null); setOpen((o) => !o); }}>
               <span className="bnav-glow" aria-hidden="true" />
+              {busy && <svg className="bnav-ring" viewBox="0 0 60 60" aria-hidden="true"><circle cx="30" cy="30" r="27" pathLength="100" /></svg>}
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
             </button>
           </>
+        )}
+        {message && (
+          // Île dynamique : la barre s'efface derrière le message ; un toucher le ferme.
+          <button type="button" className="bnav-msg" key={message.k} onClick={onDismiss} aria-label={`${message.text} Toucher pour fermer.`}>
+            <span className="bnav-msg-dot" aria-hidden="true" />
+            <span className="bnav-msg-txt" role="status">{message.text}</span>
+          </button>
         )}
         {actions.length > 0 && (
           <div className="bnav-menu" id={menuId} role="menu" aria-label={plusLabel} ref={menu} hidden={!open} onKeyDown={menuKeys}>
             {actions.map((a, i) => (
               <button key={a.id} type="button" role="menuitem" className="bnav-act" style={{ ["--i" as string]: actions.length - 1 - i }} onClick={() => run(a)}>
+                <span className="bnav-act-ico" aria-hidden="true"><a.Icon /></span>
+                <span className="bnav-act-txt"><b>{a.label}</b>{a.hint && <small>{a.hint}</small>}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {ctx && (
+          <div className="bnav-menu bnav-ctx" id={ctxId} role="menu" aria-label={`Raccourcis : ${ctxName}`} ref={ctxMenu} onKeyDown={menuKeys}
+            style={{ ["--cx" as string]: `${ctx.x}px` }}>
+            <span className="bnav-ctx-title" aria-hidden="true">{ctxName}</span>
+            {ctxItems.map((a, i) => (
+              <button key={a.id} type="button" role="menuitem" className="bnav-act" style={{ ["--i" as string]: ctxItems.length - 1 - i }} onClick={() => run(a)}>
                 <span className="bnav-act-ico" aria-hidden="true"><a.Icon /></span>
                 <span className="bnav-act-txt"><b>{a.label}</b>{a.hint && <small>{a.hint}</small>}</span>
               </button>

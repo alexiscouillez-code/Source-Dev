@@ -53,6 +53,7 @@ export default function StrengthGuide({ phase, minutes, onClose, onDone }: { pha
   return createPortal(
     <div className="sheet-back" role="dialog" aria-modal="true" aria-labelledby="sg-title" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="sheet sg" ref={ref}>
+        <div className="sheet-grab" aria-hidden="true" />
         <div className="row between"><h2 id="sg-title" style={{ margin: 0 }}>{p.title}</h2><button className="iconbtn" aria-label="Fermer" onClick={onClose}>×</button></div>
         {mode === "fiche" && (
           <>

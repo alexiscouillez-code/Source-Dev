@@ -19,6 +19,7 @@ export default function WatchHelp() {
   return createPortal(
     <div className="sheet-back" role="dialog" aria-modal="true" aria-labelledby="wh-title" onClick={(e) => { if (e.target === e.currentTarget) setOpen(null); }}>
       <div className="sheet wh">
+        <div className="sheet-grab" aria-hidden="true" />
         <div className="row between"><h2 id="wh-title" style={{ margin: 0 }}>Mettre la séance sur ta montre</h2><button className="iconbtn" aria-label="Fermer" onClick={() => setOpen(null)}>×</button></div>
         {open && <p className="soft small" style={{ margin: 0 }}>Fichier téléchargé : <b className="mono">{open}</b></p>}
         <section>
