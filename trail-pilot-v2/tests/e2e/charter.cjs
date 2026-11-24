@@ -119,7 +119,8 @@ scenario("Charte pointillée, couleur de fond et transition du mode Verre", asyn
   await tile("Jour").scrollIntoViewIfNeeded();
   await tile("Jour").click(); // Verre → Jour : l'effet du mode qu'on quitte
   check(await page.evaluate(() => document.documentElement.classList.contains("vt-dots")), "quitter le mode Verre : transition en trame de points");
-  await page.waitForTimeout(1600);
+  // Rendu logiciel du fond d'herbes pendant les tests : la transition peut finir un peu plus tard.
+  await page.waitForFunction(() => !document.documentElement.classList.contains("vt-dots"), null, { timeout: 5000 }).catch(() => {});
   check(!(await page.evaluate(() => document.documentElement.classList.contains("vt-dots"))), "la transition se referme");
   await tile("Verre").click(); // Jour → Verre : trame de points, puis les cartes se givrent
   const frost = await page.evaluate(() => ["vt-dots", "glass-frost"].every((c) => document.documentElement.classList.contains(c)));

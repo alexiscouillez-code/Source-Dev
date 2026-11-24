@@ -1,0 +1,27 @@
+/* Logo « Le cap » : toujours animé. Le cadran tourne, l'aiguille cherche le nord puis frémit sans jamais s'arrêter. */
+.cap { display: block; overflow: visible; }
+.cap :is(.cap-dial, .cap-needle, .cap-tremble) { transform-box: view-box; transform-origin: 50% 50%; }
+.cap-dial { animation: cap-turn 48s linear infinite; }
+.cap-needle { animation: cap-seek 7.5s cubic-bezier(.45, 0, .2, 1) infinite; }
+.cap-tremble { animation: cap-tremble 2.6s ease-in-out infinite alternate; }
+.cap-tip { animation: cap-glint 7.5s ease-in-out infinite; }
+@keyframes cap-turn { to { transform: rotate(360deg); } }
+/* Recherche du nord : grand écart, rebonds de plus en plus petits, puis tenue. */
+@keyframes cap-seek {
+  0% { transform: rotate(0deg); }
+  9% { transform: rotate(-22deg); }
+  19% { transform: rotate(15deg); }
+  28% { transform: rotate(-9deg); }
+  36% { transform: rotate(5deg); }
+  43% { transform: rotate(-2.5deg); }
+  50% { transform: rotate(1deg); }
+  56%, 100% { transform: rotate(0deg); }
+}
+@keyframes cap-tremble { from { transform: rotate(-1.8deg); } to { transform: rotate(1.8deg); } }
+@keyframes cap-glint { 0%, 52%, 100% { opacity: 0; } 60% { opacity: .9; } 70% { opacity: 0; } }
+.cap-tip { opacity: 0; }
+/* Survol du logo : l'aiguille repart chercher le cap. */
+a:hover > .cap .cap-needle, .cap:hover .cap-needle { animation-duration: 2.4s; }
+@media (prefers-reduced-motion: reduce) {
+  .cap :is(.cap-dial, .cap-needle, .cap-tremble, .cap-tip) { animation: none; }
+}

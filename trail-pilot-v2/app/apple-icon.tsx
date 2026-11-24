@@ -4,11 +4,14 @@ export const contentType = "image/png";
 export default function AppleIcon() {
   return new ImageResponse(
     (
-      <div style={{ width: "100%", height: "100%", display: "flex", background: "#0b0f14" }}>
+      <div style={{ width: "100%", height: "100%", display: "flex", background: "#1b2631" }}>
+        {/* Logo « Le cap » (image fixe : l'écran d'accueil n'anime pas les icônes). */}
         <svg width="180" height="180" viewBox="0 0 512 512">
-          <path d="M76 380 L196 196 L256 276 L320 156 L436 380 Z" fill="#1d2a36" />
-          <path d="M96 372 C170 360 196 300 236 300 C280 300 280 222 320 196" fill="none" stroke="#ff6a2b" strokeWidth="26" strokeLinecap="round" />
-          <circle cx="320" cy="196" r="26" fill="#f4efe6" />
+          <circle cx="256" cy="256" r="190" fill="none" stroke="#f4efe6" strokeOpacity=".35" strokeWidth="10" strokeLinecap="round" strokeDasharray="0 30" />
+          <circle cx="256" cy="66" r="11" fill="#f4efe6" fillOpacity=".7" />
+          <path d="M256 86 L334 256 H178 Z" fill="#ff6a2b" stroke="#ff6a2b" strokeWidth="8" strokeLinejoin="round" />
+          <path d="M178 256 H334 L256 426 Z" fill="#f4efe6" fillOpacity=".24" />
+          <circle cx="256" cy="256" r="17" fill="#1b2631" stroke="#f4efe6" strokeWidth="8" />
         </svg>
       </div>
     ),

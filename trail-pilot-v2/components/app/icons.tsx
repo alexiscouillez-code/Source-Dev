@@ -1,3 +1,4 @@
+import CapLogo from "../CapLogo";
 const p = { fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, viewBox: "0 0 24 24", "aria-hidden": true };
 export const IconToday = () => <svg {...p}><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></svg>;
 export const IconPlan = () => <svg {...p}><rect x="3.5" y="5" width="17" height="15" rx="3" /><path d="M3.5 10h17M8 3v4M16 3v4" /></svg>;
@@ -15,9 +16,8 @@ export const IconCal = () => <svg {...p}><rect x="3.5" y="5" width="17" height="
 export const IconTerrain = () => <svg {...p}><path d="M2.5 19.5l6.5-12 4.2 7.4 2.3-3.6 6 8.2z" /><path d="M7.2 11l1.8 1.6 1.7-1.4" /><circle cx="17.5" cy="5.5" r="1.8" /></svg>;
 export const IconWatch = () => <svg {...p}><rect x="6.5" y="6" width="11" height="12" rx="3" /><path d="M9 6l.6-3h4.8L15 6M9 18l.6 3h4.8L15 18M12 9.5V12l1.6 1.2" /></svg>;
 export const IconChat = () => <svg {...p}><path d="M4 5.5h16v10H9l-5 4z" /><path d="M8 10h8" /></svg>;
-export const Logo = () => (
-  <svg viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="112" fill="#1b2631" /><path d="M96 372 C170 360 196 300 236 300 C280 300 280 222 320 196" fill="none" stroke="#ff6a2b" strokeWidth="30" strokeLinecap="round" /><circle cx="320" cy="196" r="30" fill="#f4efe6" /></svg>
-);
+/** Logo « Le cap » (animé), partagé avec le site. */
+export const Logo = () => <CapLogo />;
 /** Partager : flèche qui sort d'une boîte. */
 export const IconShare = () => <svg {...p}><path d="M12 3v12M7.5 7.5 12 3l4.5 4.5" /><path d="M5 12v6.5A2.5 2.5 0 0 0 7.5 21h9a2.5 2.5 0 0 0 2.5-2.5V12" /></svg>;
 /** Comparer : deux colonnes et une double flèche. */
