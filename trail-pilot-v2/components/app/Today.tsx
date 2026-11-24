@@ -47,12 +47,13 @@ export default function Today({ me, refresh, go, toast }: Ctx) {
   return (
     <>
       {me.onboarding && <Onboarding me={me} refresh={refresh} go={go} toast={toast} />}
-      <header className="head">
+      {/* En-tête compact : l'action du jour doit arriver vite à l'écran. */}
+      <header className="head today-head">
         <div>
           <span className="eyebrow">{dayLabel(me.today)}</span>
           <h1>{hello}{firstName ? `, ${firstName}` : ""}.</h1>
         </div>
-        {me.goal && <span className="chip ember"><span className="dot" />{me.goal.phase} · {me.goal.name}</span>}
+        {me.goal && <span className="chip ember th-goal"><span className="dot" />{me.goal.phase} · {me.goal.name}</span>}
       </header>
 
       {!me.strava.connected && me.strava.configured && (
@@ -71,38 +72,26 @@ export default function Today({ me, refresh, go, toast }: Ctx) {
           <button className="btn sm" onClick={() => go("plan")}>Voir ma liste</button>
         </div>
       )}
-      <div className="grid g2">
-        {me.decision ? <DecisionCard me={me} onEdit={(el) => ci.open(true, el)} /> : <CheckinCta onOpen={(el) => ci.open(true, el)} />}
-
-        <section className="card" aria-labelledby="next-title">
-          <div className="card-head">
-            <h2 id="next-title">{me.todayPlan && me.todayPlan.status !== "done" ? "Aujourd’hui" : "Demain"}</h2>
-            <button className="link small" onClick={() => go("plan")}>Tout le planning</button>
-          </div>
-          {(() => {
-            const s = me.todayPlan && me.todayPlan.status !== "done" ? me.todayPlan : me.tomorrowPlan;
-            if (s) return <SessionTile s={s} onOpen={(el) => sheet.open(s, el)} />;
-            if (me.needsPlan) return (
-              <div className="empty">
-                Aucun planning pour l’instant. Trail Pilot le construit à partir de ton historique, de tes disponibilités et de ton objectif.
-                <div><button className="btn" onClick={generate} disabled={busy}>{busy ? "Calcul…" : "Générer mon planning"}</button></div>
-              </div>
-            );
-            return <p className="empty">Repos prévu. Profite-en pour bien dormir.</p>;
-          })()}
-        </section>
-      </div>
-
       {me.goal?.daysToGoal === 0 && (
-        <div className="banner raceday-banner" style={{ marginTop: 14 }}>
+        <div className="banner raceday-banner" style={{ marginBottom: 14 }}>
           <div><b>C’est le jour J</b><div className="small muted">Ouvre le mode jour de course : chrono, prochain ravito, rappels pour manger et boire.</div></div>
           <button className="btn sm" onClick={() => go("plan")}>Mode jour de course</button>
         </div>
       )}
-      <TodayRun today={me.today} onTerrains={() => go("terrains")} />
-      <FormCard me={me} go={go} onAsk={(el) => coach.open(true, el)} />
-      <WeekCard today={me.today} toast={toast} />
-      {Number(me.today.slice(8, 10)) <= 5 && me.recent.length > 0 && <RecapTeaser today={me.today} />}
+      {/* Téléphone : une colonne. Grand écran : « Ta journée » à gauche, la course, la forme et la semaine à droite. */}
+      <div className="today-grid">
+        <DayCard me={me} go={go} busy={busy} generate={generate} onCheckin={(el) => ci.open(true, el)} onSession={(x, el) => sheet.open(x, el)} />
+        {!me.goal && (
+          <div className="banner today-goal">
+            <div><b>Choisis ta course</b><div className="small muted">Un plan jusqu’au jour J, construit à partir de ta charge actuelle pour que tu finisses.</div></div>
+            <button className="btn sm" onClick={() => go("plan")}>Choisir ma course</button>
+          </div>
+        )}
+        <div className="today-run"><TodayRun today={me.today} onTerrains={() => go("terrains")} /></div>
+        <FormCard me={me} go={go} onAsk={(el) => coach.open(true, el)} />
+        <WeekCard today={me.today} toast={toast} />
+        {Number(me.today.slice(8, 10)) <= 5 && me.recent.length > 0 && <RecapTeaser today={me.today} />}
+      </div>
       <Fiche ctl={ci} kind="checkin">
         {ci.value && <CheckinCard me={me} close={ci.close} onDone={async (msg) => { ci.close(); await refresh(); toast(msg); }} />}
       </Fiche>
@@ -131,7 +120,7 @@ function FormCard({ me, go, onAsk }: { me: Me; go: Ctx["go"]; onAsk: (el: HTMLEl
     : "Tu as de la réserve : bon moment pour une séance clé ou une course.";
   const pace = l.ratio == null ? "—" : l.ratio > 1.3 ? "trop rapide" : l.ratio < 0.8 ? "en retrait" : "maîtrisé";
   return (
-    <section className="card form-card" style={{ marginTop: 14 }} aria-labelledby="form-title">
+    <section className="card form-card" aria-labelledby="form-title">
       <div className="card-head">
         <div><span className="eyebrow">Ma forme</span><h2 id="form-title" style={{ marginTop: 4 }}>{line}</h2></div>
       </div>
@@ -177,8 +166,70 @@ export function SessionBlock({ s, targets }: { s: PlanSession; targets?: Me["tar
   );
 }
 
-/** Séance du jour (ou de demain) en résumé ; la toucher ouvre sa fiche complète. */
-function SessionTile({ s, onOpen }: { s: PlanSession; onOpen: (el: HTMLElement) => void }) {
+/**
+ * « Ta journée » : une seule carte qui enchaîne check-in, décision et séance, avec un seul bouton principal à la
+ * fois. Avant le check-in, la séance n'est qu'un aperçu discret ; après, la décision colore la carte et la séance
+ * devient l'action. Trois étapes en haut montrent où on en est.
+ */
+function DayCard({ me, go, busy, generate, onCheckin, onSession }: { me: Me; go: Ctx["go"]; busy: boolean; generate: () => void; onCheckin: (el: HTMLElement) => void; onSession: (s: PlanSession, el: HTMLElement) => void }) {
+  const d = me.decision, v = d ? VERDICT[d.verdict] : null;
+  const doneToday = me.todayPlan?.status === "done";
+  const s = me.todayPlan && !doneToday ? me.todayPlan : me.tomorrowPlan;
+  const step = !d ? 0 : doneToday ? 3 : 2;
+  const card = (e: React.MouseEvent) => (e.currentTarget as HTMLElement).closest<HTMLElement>(".day-card") ?? (e.currentTarget as HTMLElement);
+  return (
+    <section className={`card day-card ${d ? "verdict" : "ci-cta"}`} style={v ? { ["--accent" as string]: v.color } : undefined} aria-labelledby="day-title" aria-live="polite">
+      <div className="row between dc-top">
+        <span className="eyebrow">Ta journée</span>
+        <ol className="dc-steps" style={{ ["--step" as string]: step }} aria-label={`Étape ${Math.min(step + 1, 3)} sur 3`}>
+          {["Check-in", "Décision", "Séance"].map((l, i) => <li key={l} className={i < step ? "is-done" : i === step ? "is-now" : undefined}><i aria-hidden="true" />{l}</li>)}
+        </ol>
+      </div>
+      {!d || !v ? (
+        <div className="dc-ask">
+          <h2 id="day-title">Comment tu te sens ce matin ?</h2>
+          <p className="soft small" style={{ margin: 0 }}>Sommeil, jambes, motivation, douleur : 10 secondes, et ta séance s’adapte à ta forme.</p>
+          <span className="cta-dots" aria-hidden="true">{[0, 1, 2, 3].map((i) => <i key={i} style={{ ["--i" as string]: i }} />)}</span>
+          <button type="button" className="btn" aria-haspopup="dialog" onClick={(e) => onCheckin(card(e))}>Faire mon check-in</button>
+        </div>
+      ) : (
+        <div className="dc-decision">
+          <div className="verdict-row">
+            <div><span className="eyebrow">Décision du jour</span><div id="day-title" className="verdict-big verdict-stamp" key={d.verdict}>{v.label}</div></div>
+            <FormGauge score={d.score} />
+          </div>
+          <div className="meter" role="img" aria-label={`Forme ressentie ${d.score} sur 100`}><i style={{ width: `${d.score}%` }} /></div>
+          <p style={{ margin: 0, fontSize: 17 }}>{v.line}</p>
+          <ul className="reasons">{d.reasons.map((r) => <li key={r}>{r}</li>)}</ul>
+          {me.checkin?.note && <p className="ci-said"><small>Ton commentaire</small>{me.checkin.note}{me.dayNote?.resume && <em>Compris par le coach : {me.dayNote.resume}</em>}</p>}
+          <button className="link small dc-edit" aria-haspopup="dialog" onClick={(e) => onCheckin(card(e))}>Modifier mon check-in</button>
+        </div>
+      )}
+      <div className={`dc-next${d ? "" : " is-quiet"}`}>
+        <div className="row between">
+          <span className="eyebrow" id="next-title">{s ? (s === me.todayPlan ? "Séance du jour" : "Demain") : "Au programme"}</span>
+          <button className="link small" onClick={() => go("plan")}>Tout le planning</button>
+        </div>
+        {s ? <SessionTile s={s} quiet={!d} onOpen={(el) => onSession(s, el)} />
+          : me.needsPlan ? (
+            <div className="empty">
+              Aucun planning pour l’instant. Trail Pilot le construit à partir de ton historique, de tes disponibilités et de ton objectif.
+              <div><button className={`btn${d ? "" : " ghost"}`} onClick={generate} disabled={busy}>{busy ? "Calcul…" : "Générer mon planning"}</button></div>
+            </div>
+          ) : <p className="empty">Repos prévu. Profite-en pour bien dormir.</p>}
+      </div>
+    </section>
+  );
+}
+
+/** Séance du jour (ou de demain) en résumé ; la toucher ouvre sa fiche complète. `quiet` : simple aperçu (avant le check-in). */
+function SessionTile({ s, onOpen, quiet = false }: { s: PlanSession; onOpen: (el: HTMLElement) => void; quiet?: boolean }) {
+  if (quiet) return (
+    <button type="button" className="session session-tile is-quiet" aria-haspopup="dialog" onClick={(e) => onOpen(e.currentTarget)}>
+      <span className="st-q"><b>{s.title}</b><small>{fmtDur(s.duration_min)} · effort {s.rpe_target}/10{s.gain_m ? ` · ${s.gain_m} m D+` : ""}</small></span>
+      <span className="st-go" aria-hidden="true">›</span>
+    </button>
+  );
   return (
     <button type="button" className="session session-tile" aria-haspopup="dialog" onClick={(e) => onOpen(e.currentTarget)}>
       <span className="row between"><span className="eyebrow">{dayLabel(s.date, { weekday: "long", day: "numeric", month: "short" })} · {s.phase}</span><StatusChip status={s.status} /></span>
@@ -191,37 +242,6 @@ function SessionTile({ s, onOpen }: { s: PlanSession; onOpen: (el: HTMLElement) 
       </span>
       <span className="tile-more">Allures, météo, description et actions<span aria-hidden="true">›</span></span>
     </button>
-  );
-}
-
-/** Pas encore de check-in aujourd'hui : l'invitation, qui ouvre la fiche du check-in. */
-function CheckinCta({ onOpen }: { onOpen: (el: HTMLElement) => void }) {
-  return (
-    <section className="card ci-cta" aria-labelledby="cta-title">
-      <span className="eyebrow">10 secondes</span>
-      <h2 id="cta-title" style={{ margin: "4px 0 0" }}>Comment tu te sens ce matin ?</h2>
-      <p className="soft small" style={{ margin: 0 }}>Sommeil, jambes, motivation, douleur : ta séance du jour s’adapte à ta forme.</p>
-      <span className="cta-dots" aria-hidden="true">{[0, 1, 2, 3].map((i) => <i key={i} style={{ ["--i" as string]: i }} />)}</span>
-      <button type="button" className="btn" aria-haspopup="dialog" onClick={(e) => onOpen(e.currentTarget.closest<HTMLElement>(".ci-cta") ?? e.currentTarget)}>Faire mon check-in</button>
-    </section>
-  );
-}
-
-function DecisionCard({ me, onEdit }: { me: Me; onEdit: (el: HTMLElement) => void }) {
-  const d = me.decision!;
-  const v = VERDICT[d.verdict];
-  return (
-    <section className="card verdict" style={{ ["--accent" as string]: v.color }} aria-live="polite">
-      <div className="row between"><span className="eyebrow">Décision du jour</span><button className="link small" aria-haspopup="dialog" onClick={(e) => onEdit(e.currentTarget.closest<HTMLElement>(".verdict") ?? e.currentTarget)}>Modifier mon check-in</button></div>
-      <div className="verdict-row">
-        <div className="verdict-big verdict-stamp" key={d.verdict}>{v.label}</div>
-        <FormGauge score={d.score} />
-      </div>
-      <div className="meter" role="img" aria-label={`Forme ressentie ${d.score} sur 100`}><i style={{ width: `${d.score}%` }} /></div>
-      <p style={{ margin: 0, fontSize: 18 }}>{v.line}</p>
-      <ul className="reasons">{d.reasons.map((r) => <li key={r}>{r}</li>)}</ul>
-      {me.checkin?.note && <p className="ci-said"><small>Ton commentaire</small>{me.checkin.note}{me.dayNote?.resume && <em>Compris par le coach : {me.dayNote.resume}</em>}</p>}
-    </section>
   );
 }
 
@@ -353,7 +373,7 @@ function RecapTeaser({ today }: { today: string }) {
   const d = new Date(`${today.slice(0, 7)}-01T12:00:00Z`); d.setUTCMonth(d.getUTCMonth() - 1);
   const month = d.toISOString().slice(0, 7), name = d.toLocaleDateString("fr-FR", { month: "long", timeZone: "UTC" });
   return (
-    <button type="button" className="card recap-teaser" style={{ marginTop: 14 }} onClick={(e) => openPanel({ kind: "recap", month }, e.currentTarget)}>
+    <button type="button" className="card recap-teaser" onClick={(e) => openPanel({ kind: "recap", month }, e.currentTarget)}>
       <span className="recap-dots" aria-hidden="true">{Array.from({ length: 14 }, (_, i) => <i key={i} style={{ ["--i" as string]: i }} />)}</span>
       <span><span className="eyebrow">Bilan du mois</span><b>Ton mois {/^[aeiouyéè]/i.test(name) ? "d’" : "de "}{name} en story</b><small>Kilomètres, dénivelé, régularité, plus belle sortie</small></span>
       <span className="recap-go" aria-hidden="true">›</span>

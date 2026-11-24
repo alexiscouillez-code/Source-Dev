@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
-import { motionOk } from "./motion";
+import { motionOk, REVEAL } from "./motion";
 
 /**
  * Fiches plein écran, ouvrables depuis n'importe quel écran (séance, check-in, coach, sortie, course…).
@@ -116,7 +116,8 @@ export function Fiche<T>({ ctl, kind, children }: { ctl: FicheCtl<T>; kind: stri
     const title = () => { const h = card?.querySelector<HTMLElement>(".panel-title"); if (h && card) { h.id = `fiche-t-${depth}`; card.setAttribute("aria-labelledby", h.id); } };
     const t0 = window.setTimeout(() => { title(); card?.querySelector<HTMLElement>(".panel-x")?.focus({ preventScroll: true }); }, 60);
     // Points et chiffres : ils s'animent dès qu'ils apparaissent (et le restent quand React réécrit leur classe).
-    const mark = () => { title(); card?.querySelectorAll(".dotprofile:not(.is-in), .reveal:not(.is-in)").forEach((el) => el.classList.add("is-in")); };
+    // Graphiques, jauges, barres : dans une fiche ils sont à l'écran dès l'ouverture, ils se dessinent tout de suite.
+    const mark = () => { title(); card?.querySelectorAll(`${REVEAL}, .reveal`).forEach((el) => { if (!el.classList.contains("is-in")) el.classList.add("is-in"); }); };
     const t1 = window.setTimeout(mark, 120);
     const mo = new MutationObserver(mark);
     if (card) mo.observe(card, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });

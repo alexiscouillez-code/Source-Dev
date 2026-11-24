@@ -28,3 +28,16 @@ export const IconX = () => <svg {...p}><path d="M6 6l12 12M18 6 6 18" /></svg>;
 export const IconSearch = () => <svg {...p}><circle cx="11" cy="11" r="6.5" /><path d="m20 20-4.2-4.2" /></svg>;
 /** Bilan : un calendrier en points. */
 export const IconRecap = () => <svg {...p}><rect x="3.5" y="4.5" width="17" height="16" rx="3" /><circle cx="8" cy="10" r="1" fill="currentColor" /><circle cx="12" cy="10" r="1.6" fill="currentColor" /><circle cx="16" cy="10" r=".8" fill="currentColor" /><circle cx="8" cy="15" r="1.8" fill="currentColor" /><circle cx="12" cy="15" r=".9" fill="currentColor" /><circle cx="16" cy="15" r="1.4" fill="currentColor" /></svg>;
+/* Rubriques (listes de fiches) */
+export const IconRoute = () => <svg {...p}><circle cx="6" cy="18" r="2.2" /><circle cx="18" cy="6" r="2.2" /><path d="M8.2 18H15a3.5 3.5 0 000-7H9a3.5 3.5 0 010-7h6.8" /></svg>;
+export const IconCloud = () => <svg {...p}><path d="M7 18h10.5a4 4 0 00.4-8 6 6 0 00-11.6 1.6A3.3 3.3 0 007 18z" /><path d="M12 3.5V2M5.5 5.5l-1-1M18.5 5.5l1-1" /></svg>;
+export const IconPack = () => <svg {...p}><path d="M7 8a5 5 0 0110 0v11a2 2 0 01-2 2H9a2 2 0 01-2-2z" /><path d="M10 3.5h4M7 13h10M10.5 13v3h3v-3" /></svg>;
+export const IconTarget = () => <svg {...p}><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="4.5" /><circle cx="12" cy="12" r="1" /></svg>;
+export const IconHeart = () => <svg {...p}><path d="M12 20s-7.5-4.4-7.5-10A4.3 4.3 0 0112 7.3 4.3 4.3 0 0119.5 10C19.5 15.6 12 20 12 20z" /><path d="M5 12h3.5l1.5-2.5 2 5 1.5-2.5H19" /></svg>;
+export const IconTrend = () => <svg {...p}><path d="M3 17l6-6 4 4 8-8" /><path d="M15 7h6v6" /></svg>;
+export const IconRadar = () => <svg {...p}><path d="M12 3l8 6-3 10H7L4 9z" /><path d="M12 8l4 3-1.5 4.5h-5L8 11z" /></svg>;
+export const IconMore = () => <svg {...p}><circle cx="5.5" cy="12" r="1.3" fill="currentColor" /><circle cx="12" cy="12" r="1.3" fill="currentColor" /><circle cx="18.5" cy="12" r="1.3" fill="currentColor" /></svg>;
+/** Pause : deux barres (absence). */
+export const IconPause = () => <svg {...p}><circle cx="12" cy="12" r="8.5" /><path d="M10 9v6M14 9v6" /></svg>;
+/** Importer : flèche qui monte vers un plateau. */
+export const IconUpload = () => <svg {...p}><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5" /><path d="M4 14.5V18a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3.5" /></svg>;

@@ -1,6 +1,6 @@
 // Parcours : graphiques et animations. Chaque élément animé doit finir entièrement visible et bien placé.
 const path = require("path");
-const { iso, check, newUser, openApp, tab, unfoldAll, overflow, scenario, db, userId } = require("./lib.cjs");
+const { iso, check, newUser, openApp, tab, unfoldAll, overflow, scenario, db, userId, openFiche, closeFiche } = require("./lib.cjs");
 
 /** Glisse la souris sur un graphique et renvoie l'état du repère et des courbes. */
 async function scrub(page, chart) {
@@ -65,24 +65,31 @@ scenario("Graphiques et animations", async () => {
     const vo2 = await page.evaluate(() => { const b = document.querySelector(".vo2-scale > b"); return b && { want: b.style.left, got: getComputedStyle(b).left, w: b.parentElement.getBoundingClientRect().width, op: +getComputedStyle(b).opacity }; });
     check(vo2 && vo2.op > 0.99 && Math.abs(parseFloat(vo2.got) - (parseFloat(vo2.want) / 100) * vo2.w) < 2, "le curseur VO2max se pose sur la valeur", vo2);
 
-    for (const [label, sel] of [["VO2max", 'svg.chart[aria-label^="Évolution de ta VO2max"]'], ["forme", 'svg.chart[aria-label^="Évolution de la forme"]']]) {
-      const c = page.locator(sel);
-      if (!(await c.count())) { check(false, `graphique ${label} présent`); continue; }
+    // Courbes VO2max et forme : dans leurs fiches (la page garde les tuiles et les chiffres clés).
+    for (const [label, sel, id] of [["VO2max", 'svg.chart[aria-label^="Évolution de ta VO2max"]', "an-vo2"], ["forme", 'svg.chart[aria-label^="Évolution de la forme"]', "an-fitness"]]) {
+      check(await openFiche(page, id), `la fiche « ${label} » s'ouvre depuis la liste`);
+      const c = page.locator(`.panel ${sel}`);
+      if (!(await c.count())) { check(false, `graphique ${label} présent`); await closeFiche(page); continue; }
       const r = await scrub(page, c);
       check(r.mark, `glisser sur la courbe ${label} affiche le repère`);
       check(r.undrawn === 0, `les courbes ${label} restent tracées pendant le glisser`, r.undrawn);
+      await closeFiche(page);
     }
 
-    const bars = page.locator(".month-bars");
-    if (await bars.count()) {
-      await bars.scrollIntoViewIfNeeded();
-      await page.waitForTimeout(1500);
-      const color = () => bars.evaluate((e) => getComputedStyle(e.querySelector("i")).backgroundColor);
-      const c0 = await color();
-      await page.locator('.progress .seg button:has-text("D+")').click();
-      await page.waitForTimeout(1000);
-      check((await color()) !== c0, "chaque mesure de la progression a sa couleur");
-      check(await bars.evaluate((e) => [...e.querySelectorAll(".mb-v")].every((v) => +getComputedStyle(v).opacity > 0.95)), "les valeurs des barres sont visibles");
+    if (await page.locator("[data-fold=an-progress]").count()) {
+      await openFiche(page, "an-progress");
+      const bars = page.locator(".panel .month-bars");
+      if (await bars.count()) {
+        await bars.scrollIntoViewIfNeeded();
+        await page.waitForTimeout(1500);
+        const color = () => bars.evaluate((e) => getComputedStyle(e.querySelector("i")).backgroundColor);
+        const c0 = await color();
+        await page.locator('.panel .progress .seg button:has-text("D+")').click();
+        await page.waitForTimeout(1000);
+        check((await color()) !== c0, "chaque mesure de la progression a sa couleur");
+        check(await bars.evaluate((e) => [...e.querySelectorAll(".mb-v")].every((v) => +getComputedStyle(v).opacity > 0.95)), "les valeurs des barres sont visibles");
+      }
+      await closeFiche(page);
     }
 
     // Planning : tampons « fait », bulle du graphique des semaines.

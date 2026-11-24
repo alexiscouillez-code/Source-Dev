@@ -1,6 +1,7 @@
 "use client";
 
 import Fold from "./Fold";
+import { IconCloud } from "./icons";
 import { useCallback, useEffect, useState } from "react";
 import { api, dayLabel } from "./client";
 import { weatherAdjust, type WeatherAdjust } from "@/lib/engine/strategy";
@@ -49,7 +50,7 @@ export default function RaceWeather({ toast, onAdjust, daysTo }: { toast: (m: st
   const askPlace = d.status === "noplace" || edit;
 
   return (
-    <Fold fiche id="plan-wx" className="wx" style={{ marginTop: 14 }} title="Météo du jour J" defaultOpen={!!adj && adj.tone !== "normal"}
+    <Fold fiche icon={<IconCloud />} id="plan-wx" className="wx" style={{ marginTop: 14 }} title="Météo du jour J" defaultOpen={!!adj && adj.tone !== "normal"}
       aside={<span className={`chip ${adj && adj.tone !== "normal" ? "lite" : "dim"}`}>{d.status === "ok" ? `${d.weather.tMin}° / ${d.weather.tMax}° · ${d.weather.label}` : d.status === "later" ? "Prévision à J-15" : d.status === "noplace" ? "Lieu à indiquer" : "Indisponible"}</span>}>
       <div className="row between">
         <b>{d.place?.name ?? "Lieu de départ"}</b>

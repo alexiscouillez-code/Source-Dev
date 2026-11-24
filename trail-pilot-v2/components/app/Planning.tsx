@@ -12,7 +12,8 @@ import DaySheet from "./DaySheet";
 import { downloadWorkout } from "./workout";
 import type { Ctx } from "./AppShell";
 import { api, dayLabel, dayNum, fmtDur, fmtKm, fmtNum, localToday, PRESET_KEY, shortDay, type PlanSession, type Absence, type Review } from "./client";
-import { IconCheck, IconSkip, IconTerrain, IconUndo, IconWatch } from "./icons";
+import { IconChart, IconCheck, IconFlag, IconPause, IconSkip, IconSync, IconTarget, IconTerrain, IconUndo, IconWatch } from "./icons";
+import HeadActions from "./HeadActions";
 import Flap from "./Flap";
 import { StatusChip } from "./Today";
 import { SessionTarget } from "./Targets";
@@ -22,7 +23,7 @@ import RaceStrategy from "./RaceStrategy";
 import RaceWeather from "./RaceWeather";
 import SideRaces, { type SideRaceRow } from "./SideRaces";
 import PlanCalendar from "./PlanCalendar";
-import Fold, { useFold } from "./Fold";
+import Fold, { FoldRows } from "./Fold";
 import Debriefs from "./Debriefs";
 import GearList, { type GearItem } from "./GearList";
 import { calibLabel } from "@/lib/engine/calibration";
@@ -130,7 +131,7 @@ export default function Planning({ me, refresh, toast, go }: Ctx) {
             </PlanBoard>
           </section>
         )}
-        {!editing && <SideRaces races={v.races} today={v.today} mainDate={null} toast={toast} onChanged={async () => { await Promise.all([load(), refresh()]); }} />}
+        {!editing && <FoldRows className="plan-rows"><SideRaces races={v.races} today={v.today} mainDate={null} toast={toast} onChanged={async () => { await Promise.all([load(), refresh()]); }} /></FoldRows>}
       </>
     );
   }
@@ -139,11 +140,11 @@ export default function Planning({ me, refresh, toast, go }: Ctx) {
   return (
     <>
       <Head sub={`${p.weeks.length} semaines · recalculé chaque lundi`} action={
-        <div className="row">
-          <button className="btn ghost sm" onClick={() => setAway(true)}>Imprévu</button>
-          <button className="btn ghost sm" onClick={recalc} disabled={busy}>{busy ? "Calcul…" : "Recalculer avec ma forme"}</button>
-          <button className="btn ghost sm" aria-haspopup="dialog" onClick={(e) => raceF.open({ refine: false }, e.currentTarget)}>Changer de course</button>
-        </div>
+        <HeadActions label="Plus d’actions : Planning" actions={[
+          { id: "away", label: "Imprévu", Icon: IconPause, primary: true, run: () => setAway(true) },
+          { id: "recalc", label: busy ? "Calcul…" : "Recalculer avec ma forme", hint: "Le plan suit ta forme du moment", Icon: IconSync, disabled: busy, run: () => recalc() },
+          { id: "race", label: "Changer de course", hint: "Autre course ou autre date", Icon: IconFlag, dialog: true, run: (el) => raceF.open({ refine: false }, el) },
+        ]} />
       } />
       <AbsenceBanner a={isPending("absence") ? null : v.absence ?? null} today={v.today} onEdit={() => setAway(true)} onCancel={cancelAbsence} />
       <Debriefs today={v.today} rev={rev} toast={toast} onAll={() => go("races")} />
@@ -163,20 +164,21 @@ export default function Planning({ me, refresh, toast, go }: Ctx) {
           <WeekList sessions={v.sessions} weeks={p.weeks} today={v.today} doneByWeek={v.doneByWeek} onStatus={setStatus} targets={me.targets} onWhere={whereTo} onMove={move} actions={actions} onChanged={noted} />
         </PlanBoard>
       </section>
-      <RaceWeather key={v.goal.route?.uploadedAt ?? 0} toast={toast} onAdjust={setWx} daysTo={p.race.daysTo} />
-      <RaceStrategy gear={v.goal.gear ?? []} raceName={v.goal.name} raceDate={v.goal.date} route={v.goal.route ?? null} estimate={p.estimate} weather={wx} toast={toast} onChanged={async () => { await Promise.all([load(), refresh()]); }} />
-      <GearList key={(v.goal.gear ?? []).map((x) => x.label).join("|")} items={v.goal.gear ?? []} daysTo={p.race.daysTo} toast={toast} />
-      <SideRaces races={v.races} today={v.today} mainDate={v.goal.date} toast={toast} onChanged={async () => { await Promise.all([load(), refresh()]); }} />
-      <div className="grid g2 folds" style={{ marginTop: 14 }}>
+      {/* Rubriques de la course : une liste, chaque ligne ouvre sa fiche. */}
+      <FoldRows eyebrow="Jusqu’au jour J" title="Ta course en détail" className="plan-rows">
+        <RaceStrategy gear={v.goal.gear ?? []} raceName={v.goal.name} raceDate={v.goal.date} route={v.goal.route ?? null} estimate={p.estimate} weather={wx} toast={toast} onChanged={async () => { await Promise.all([load(), refresh()]); }} />
+        <RaceWeather key={v.goal.route?.uploadedAt ?? 0} toast={toast} onAdjust={setWx} daysTo={p.race.daysTo} />
+        <GearList key={(v.goal.gear ?? []).map((x) => x.label).join("|")} items={v.goal.gear ?? []} daysTo={p.race.daysTo} toast={toast} />
+        <SideRaces races={v.races} today={v.today} mainDate={v.goal.date} toast={toast} onChanged={async () => { await Promise.all([load(), refresh()]); }} />
         <Needs p={p} />
-        <Fold fiche id="plan-volume" title="Volume semaine par semaine" aside={<span className="chip">{p.weeks.length} semaines</span>}>
+        <Fold fiche icon={<IconChart />} id="plan-volume" title="Volume semaine par semaine" aside={<span className="chip">{p.weeks.length} semaines</span>}>
           <WeekChart weeks={p.weeks} done={v.doneByWeek} today={v.today} />
           <div className="legend">
             {["Fondation", "Développement", "Spécifique", "Affûtage"].filter((ph) => p.weeks.some((w) => w.phase === ph)).map((ph) => <span key={ph}><i style={{ background: PHASE_COLOR[ph], height: 8 }} />{ph}</span>)}
             <span><i style={{ background: "var(--snow)", height: 3 }} />Réalisé</span>
           </div>
         </Fold>
-      </div>
+      </FoldRows>
       <p className="muted small" style={{ marginTop: 12, maxWidth: "75ch" }}>
         Le plan part de ta charge réelle (séances des 4 dernières semaines, fatigue et forme de fond) et se recalcule chaque lundi.
         Chaque check-in du matin adapte la séance du jour. Une sortie enregistrée (Strava ou fichier) valide automatiquement la séance prévue ce jour-là. Progression de {me.profile.level === "debutant" ? "6" : me.profile.level === "confirme" ? "10" : "8"} % par semaine au plus, une semaine plus légère toutes les quatre.
@@ -298,7 +300,7 @@ function Needs({ p }: { p: RacePlan }) {
     { k: "Dénivelé par semaine", now: p.current.weeklyGain, reach: Math.max(...p.weeks.map((w) => w.gainM)), need: p.demands.weeklyGain, fmt: (n: number) => `${fmtNum(n)} m` },
   ];
   return (
-    <Fold fiche id="plan-needs" title="Ce qu’il faut pour finir" aside={<span className="chip dim">{rows.filter((r) => r.reach >= r.need * 0.95).length}/{rows.length} repères atteints</span>}>
+    <Fold fiche icon={<IconTarget />} id="plan-needs" title="Ce qu’il faut pour finir" aside={<span className="chip dim">{rows.filter((r) => r.reach >= r.need * 0.95).length}/{rows.length} repères atteints</span>}>
       {rows.map((r) => {
         const max = Math.max(r.need, r.reach, r.now) || 1;
         return (

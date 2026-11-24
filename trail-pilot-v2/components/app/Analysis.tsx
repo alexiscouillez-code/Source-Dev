@@ -1,7 +1,9 @@
 "use client";
 
 import { openPanel } from "./panel";
-import { IconCompare, IconRecap } from "./icons";
+import { IconChart, IconCompare, IconHeart, IconRadar, IconRecap, IconTrend } from "./icons";
+import Fold, { FoldRows } from "./Fold";
+import HeadActions from "./HeadActions";
 import { useEffect, useMemo, useState } from "react";
 import type { Ctx } from "./AppShell";
 import InfoTip, { EXPLAIN } from "./InfoTip";
@@ -36,28 +38,37 @@ export default function Analysis({ me, toast, go }: Ctx) {
       {d.intensity && d.recovery && <GraphCards d={d} />}
       {!!d.suspects?.length && <SuspectsCard list={d.suspects} toast={toast} onDone={() => setTick((t) => t + 1)} />}
       {!s.calibrated && <p className="note" style={{ marginBottom: 14 }}>Calibrage en cours : {s.historyDays} jours d’historique sur 28. Les indicateurs se fiabilisent au fil des séances.</p>}
-      <section className="card">
-        <div className="card-head"><h2 className="tip-label">Forme, fatigue et fraîcheur<InfoTip title="Forme, fatigue et fraîcheur"><span className="p"><em>Forme de fond</em> (trait épais) : ta charge moyenne sur 6 semaines, ton niveau d’entraînement. <em>Fatigue</em> : ta charge des 7 derniers jours. <em>Fraîcheur</em> : la différence entre les deux.</span></InfoTip></h2></div>
-        <FitnessChart points={d.points} />
-        <div className="legend">
-          <span><i style={{ background: "var(--snow)" }} />Forme de fond (6 sem.)</span>
-          <span><i style={{ background: "var(--ember)" }} />Fatigue (7 j)</span>
-          <span><i style={{ background: "var(--ok)" }} />Fraîcheur</span>
-          <span><i style={{ background: "var(--ink-4)", height: 8 }} />Charge du jour</span>
-        </div>
-        <p className="muted small" style={{ margin: 0 }}>
-          {s.monotony != null && s.monotony > 2 ? "Tes séances se ressemblent beaucoup cette semaine : alterne jours faciles et jours durs, c’est ce qui fait progresser. " : ""}
-          {sportTotal ? `Sur 4 semaines : ${Object.entries(d.sports).sort((x, y) => y[1] - x[1]).map(([k, v]) => `${SPORT_LABEL[k] ?? k} ${Math.round((v / sportTotal) * 100)} %`).join(", ")}.` : ""}
-        </p>
-      </section>
+      {/* Le détail de chaque question s'ouvre en fiche : la page garde les tuiles et les chiffres clés. */}
+      <FoldRows className="an-rows">
+        <Fold fiche icon={<IconTrend />} id="an-fitness" eyebrow="Suis-je en forme ?" title="Forme, fatigue et fraîcheur"
+          aside={<span className="chip dim">Forme de fond {Math.round(s.ctl)} · fatigue {Math.round(s.atl)} · fraîcheur {s.form > 0 ? "+" : ""}{Math.round(s.form)}</span>}>
+          <FitnessChart points={d.points} />
+          <div className="legend">
+            <span><i style={{ background: "var(--snow)" }} />Forme de fond (6 sem.)</span>
+            <span><i style={{ background: "var(--ember)" }} />Fatigue (7 j)</span>
+            <span><i style={{ background: "var(--ok)" }} />Fraîcheur</span>
+            <span><i style={{ background: "var(--ink-4)", height: 8 }} />Charge du jour</span>
+          </div>
+          <p className="soft small" style={{ margin: 0 }}><em>Forme de fond</em> (trait épais) : ta charge moyenne sur 6 semaines, ton niveau d’entraînement. <em>Fatigue</em> : ta charge des 7 derniers jours. <em>Fraîcheur</em> : la différence entre les deux.</p>
+          <p className="muted small" style={{ margin: 0 }}>
+            {s.monotony != null && s.monotony > 2 ? "Tes séances se ressemblent beaucoup cette semaine : alterne jours faciles et jours durs, c’est ce qui fait progresser. " : ""}
+            {sportTotal ? `Sur 4 semaines : ${Object.entries(d.sports).sort((x, y) => y[1] - x[1]).map(([k, v]) => `${SPORT_LABEL[k] ?? k} ${Math.round((v / sportTotal) * 100)} %`).join(", ")}.` : ""}
+          </p>
+        </Fold>
+      </FoldRows>
 
       <h2 className="q-head" id="q-progres"><span>2</span>Est-ce que je progresse ?</h2>
-      <Vo2Card key={`v${tick}`} go={go} targets={me.targets} />
-      <Progress key={`p${tick}`} />
+      <Vo2Card key={`v${tick}`} go={go} targets={me.targets}>
+        <Fold fiche icon={<IconChart />} id="an-progress" eyebrow="Est-ce que je progresse ?" title="Progression et records" aside={<span className="chip dim">Volume mois par mois, plus longues sorties, records</span>}>
+          <Progress key={`p${tick}`} />
+        </Fold>
+      </Vo2Card>
 
       <h2 className="q-head" id="q-pret"><span>3</span>Suis-je prêt pour ma course ?</h2>
       <Readiness key={`r${tick}`} go={go} />
-      <TrailProfile key={`t${tick}`} go={go} />
+      <FoldRows className="an-rows">
+        <TrailProfile key={`t${tick}`} go={go} icon={<IconRadar />} />
+      </FoldRows>
     </>
   );
 }
@@ -114,14 +125,16 @@ const fmtRace = (m: number) => (m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 
 const dec = (n: number) => n.toFixed(1).replace(".", ",");
 const monthLabel = (m: string, year = true) => new Date(`${m}-15T12:00:00Z`).toLocaleDateString("fr-FR", year ? { month: "short", year: "numeric" } : { month: "short" });
 
-function Vo2Card({ go, targets }: Pick<Ctx, "go"> & { targets: Ctx["me"]["targets"] }) {
+function Vo2Card({ go, targets, children }: Pick<Ctx, "go"> & { targets: Ctx["me"]["targets"]; children?: React.ReactNode }) {
   const [v, setV] = useState<Vo2 | null>(null);
   useEffect(() => { api<Vo2>("/api/vo2").then(setV).catch(() => setV(null)); }, []);
-  if (!v) return null;
   const pos = (x: number) => `${Math.min(100, Math.max(0, ((x - 30) / 45) * 100))}%`;
-  const delta = v.value != null && v.previous != null ? Math.round((v.value - v.previous) * 10) / 10 : null;
+  const delta = v && v.value != null && v.previous != null ? Math.round((v.value - v.previous) * 10) / 10 : null;
+  const vals = v?.months.map((m) => m.value) ?? [];
+  // Même structure chargée ou non (fragment : la carte, puis la liste) : la liste et ses fiches ne se remontent pas.
   return (
-    <section className="card vo2" style={{ marginTop: 14 }}>
+    <>
+    {v && <section className="card vo2" style={{ marginTop: 14 }}>
       <div className="card-head">
         <div><span className="eyebrow">Capacité aérobie</span><h2 className="tip-label" style={{ marginTop: 4 }}>VO2max estimée<InfoTip title="VO2max">{EXPLAIN.vo2}</InfoTip></h2></div>
         {v.method && <span className="chip">{v.method === "seances" ? `${v.used} sortie${v.used > 1 ? "s" : ""}${v.since ? ` · depuis ${monthLabel(v.since.slice(0, 7))}` : ""}` : "Fréquences cardiaques"}</span>}
@@ -147,12 +160,6 @@ function Vo2Card({ go, targets }: Pick<Ctx, "go"> & { targets: Ctx["me"]["target
               <b style={{ left: pos(v.value) }} />
               <div className="vo2-ticks"><span>30</span><span>45</span><span>60</span><span>75</span></div>
             </div>
-            {v.months.length >= 2 && <Vo2History months={v.months} />}
-            {v.sessions.length > 0 && (
-              <div className="small muted">
-                Meilleures sorties récentes : {v.sessions.map((s) => `${s.name ?? "sortie"} du ${dayLabel(s.date, { day: "numeric", month: "short" })} (${dec(s.speedKmh)} km/h à ${s.hrPct} % de FC max)`).join(" · ")}.
-              </div>
-            )}
           </div>
           <div>
             <h3 style={{ marginBottom: 8 }}>Équivalences sur route plate{v.watch != null ? " (VO2max de la montre)" : ""}</h3>
@@ -163,11 +170,31 @@ function Vo2Card({ go, targets }: Pick<Ctx, "go"> & { targets: Ctx["me"]["target
           </div>
         </div>
       )}
-      {v.value != null && <TargetsTable targets={targets} />}
-      {v.value != null && v.notes.length > 0 && <ul className="reasons small">{v.notes.map((n) => <li key={n}>{n}</li>)}</ul>}
-      <p className="muted" style={{ margin: 0, fontSize: 11.5 }}>Estimation de terrain, précise à environ 5 à 10 %. Quand une sortie a été analysée seconde par seconde (Strava ou fichier de montre), le calcul part de ses passages d’effort stable, pente par pente, comme le font les montres. Sinon il part des moyennes de la sortie : coût de la pente sur route (Minetti), km-effort sur sentier, coût de l’allure (Daniels), réserve cardiaque (Swain). Seul un test d’effort en laboratoire mesure vraiment la VO2max.</p>
-      {v.watch == null && v.value != null && <p className="muted small" style={{ margin: 0 }}>Ta montre affiche une autre valeur ? Renseigne-la dans <button className="link small" onClick={() => go("account")}>ton profil</button> : elle servira à calculer tes allures.</p>}
-    </section>
+    </section>}
+    <FoldRows className="an-rows">
+      {v?.value != null && (targets.paces.length > 0 || targets.zones.length > 0) && (
+        <Fold fiche icon={<IconHeart />} id="an-targets" eyebrow="D’après ta VO2max" title="Tes allures et zones cardio"
+          aside={<span className="chip dim">{[targets.paces.length && `${targets.paces.length} allures`, targets.zones.length && `${targets.zones.length} zones`].filter(Boolean).join(" · ")}, de l’endurance à la VMA</span>}>
+          <TargetsTable targets={targets} />
+        </Fold>
+      )}
+      {v?.value != null && (
+        <Fold fiche icon={<IconTrend />} id="an-vo2" eyebrow="Capacité aérobie" title="Ta VO2max dans le temps"
+          aside={<span className="chip dim">{v.months.length >= 2 ? `${v.months.length} mois · de ${dec(Math.min(...vals))} à ${dec(Math.max(...vals))}` : "Comment elle est calculée"}</span>}>
+          {v.months.length >= 2 && <Vo2History months={v.months} />}
+          {v.sessions.length > 0 && (
+            <div className="small muted">
+              Meilleures sorties récentes : {v.sessions.map((s) => `${s.name ?? "sortie"} du ${dayLabel(s.date, { day: "numeric", month: "short" })} (${dec(s.speedKmh)} km/h à ${s.hrPct} % de FC max)`).join(" · ")}.
+            </div>
+          )}
+          {v.notes.length > 0 && <ul className="reasons small">{v.notes.map((n) => <li key={n}>{n}</li>)}</ul>}
+          <p className="muted small" style={{ margin: 0 }}>Estimation de terrain, précise à environ 5 à 10 %. Quand une sortie a été analysée seconde par seconde (Strava ou fichier de montre), le calcul part de ses passages d’effort stable, pente par pente, comme le font les montres. Sinon il part des moyennes de la sortie : coût de la pente sur route (Minetti), km-effort sur sentier, coût de l’allure (Daniels), réserve cardiaque (Swain). Seul un test d’effort en laboratoire mesure vraiment la VO2max.</p>
+          {v.watch == null && <p className="muted small" style={{ margin: 0 }}>Ta montre affiche une autre valeur ? Renseigne-la dans <button className="link small" onClick={() => go("account")}>ton profil</button> : elle servira à calculer tes allures.</p>}
+        </Fold>
+      )}
+      {children}
+    </FoldRows>
+    </>
   );
 }
 
@@ -247,10 +274,10 @@ function capOf(values: number[], floor = 10) {
 const Head = () => (
   <header className="head">
     <div><span className="eyebrow">Moteur de charge</span><h1>Analyse</h1></div>
-    <div className="row">
-      <button type="button" className="btn ghost sm" onClick={(e) => openPanel({ kind: "recap" }, e.currentTarget)}><IconRecap />Bilan du mois</button>
-      <button type="button" className="btn ghost sm" onClick={(e) => openPanel({ kind: "pick" }, e.currentTarget)}><IconCompare />Comparer</button>
-    </div>
+    <HeadActions label="Plus d’actions : Analyse" actions={[
+      { id: "recap", label: "Bilan du mois", Icon: IconRecap, run: (el) => openPanel({ kind: "recap" }, el) },
+      { id: "cmp", label: "Comparer", hint: "Deux sorties côte à côte", Icon: IconCompare, run: (el) => openPanel({ kind: "pick" }, el) },
+    ]} />
   </header>
 );
 

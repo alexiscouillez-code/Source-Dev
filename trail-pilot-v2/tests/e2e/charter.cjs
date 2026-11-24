@@ -1,5 +1,5 @@
 // Parcours : charte pointillée du mode Verre sur toutes les pages, couleur de fond au choix et transition en trame de points.
-const { OUT, iso, check, newUser, openApp, tab, unfoldAll, scenario } = require("./lib.cjs");
+const { OUT, iso, check, newUser, openApp, tab, unfoldAll, scenario, openFiche, closeFiche } = require("./lib.cjs");
 
 /** Fait défiler l'élément jusqu'à l'écran, laisse jouer son animation d'apparition, puis le capture. */
 async function shot(page, sel, name) {
@@ -47,18 +47,26 @@ scenario("Charte pointillée, couleur de fond et transition du mode Verre", asyn
   const dash = await page.evaluate(() => [...document.querySelectorAll(".chart .ch-line, .gc-line")].map((e) => getComputedStyle(e).strokeDasharray));
   check(dash.length > 0 && dash.every((d) => /^0(px)?,? /.test(d)), "courbes en pointillés ronds", dash.slice(0, 3));
   await shot(page, ".gc-card, .gc-face", "analyse-volume");
-  await shot(page, "svg.chart", "analyse-vo2");
-  await shot(page, "svg.chart >> nth=1", "analyse-forme");
-  await shot(page, ".radar", "analyse-profil");
   await shot(page, ".vo2-races", "analyse-equivalences");
-  check((await masked(page, ".chart .ch-bar, .chart .ch-area, .radar .radar-you")) > 0, "aplats et barres des graphiques en trame");
+  // Le détail s'ouvre en fiches : courbes de forme et de VO2max, profil trail.
+  let masks = 0;
+  for (const [id, sel, name] of [["an-vo2", ".panel svg.chart", "analyse-vo2"], ["an-fitness", ".panel svg.chart", "analyse-forme"], ["an-profile", ".panel .radar", "analyse-profil"]]) {
+    if (!(await openFiche(page, id))) continue;
+    await shot(page, sel, name);
+    masks += await masked(page, ".panel .chart .ch-bar, .panel .chart .ch-area, .panel .radar .radar-you");
+    await closeFiche(page);
+  }
+  check(masks > 0, "aplats et barres des graphiques en trame");
   const tiles = await page.evaluate(() => getComputedStyle(document.querySelector(".vo2-races > div")).backgroundColor);
   check(/rgba\(255, 255, 255/.test(tiles), "tuiles intérieures en verre (plus de cases noires)", tiles);
 
   // ---------- Interaction : reflet sous le pointeur, éclat de points au toucher ----------
-  const card = page.locator(".card").first();
-  await card.scrollIntoViewIfNeeded();
+  // Une carte de contenu (pas une liste de rubriques) ; le premier mouvement après une fiche fermée sert d'amorce.
+  const card = page.locator(".card:not(.fold-rows)").first();
+  // Au centre de l'écran : une petite carte poussée en bas passerait sous la barre de navigation.
+  await card.evaluate((e) => e.scrollIntoView({ block: "center" })); await page.waitForTimeout(300);
   const cb = await card.boundingBox();
+  await page.mouse.move(cb.x + cb.width * 0.3 - 4, cb.y + 18);
   await page.mouse.move(cb.x + cb.width * 0.3, cb.y + 20);
   await page.waitForTimeout(200);
   check(await card.evaluate((e) => e.classList.contains("is-lit") && /px/.test(e.style.getPropertyValue("--mx"))), "la carte sous le pointeur capte la lumière");

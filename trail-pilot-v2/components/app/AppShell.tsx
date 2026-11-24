@@ -4,7 +4,7 @@ import WatchHelp from "./WatchHelp";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { api, localToday, type Me } from "./client";
-import { IconChart, IconCheck, IconCompare, IconFlag, IconPin, IconPlan, IconPlus, IconRecap, IconRuns, IconSearch, IconSync, IconTerrain, IconToday, IconUser, Logo } from "./icons";
+import { IconChart, IconCheck, IconCompare, IconFlag, IconPause, IconPin, IconPlan, IconPlus, IconRecap, IconRuns, IconSearch, IconSync, IconTerrain, IconToday, IconUpload, IconUser, Logo } from "./icons";
 import Races from "./Races";
 import Panels from "./Panels";
 import { ficheDepth } from "./Fiche";
@@ -32,12 +32,6 @@ import Tour from "./Tour";
 export type Tab = "today" | "plan" | "races" | "terrains" | "xray" | "runs" | "analysis" | "account";
 const IconXray = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 3.5c-.5 3 .2 5.5 1 8l-.6 5 1.1 4M16 3.5c.5 3-.2 5.5-1 8l.6 5-1.1 4" /><path d="M8.6 7.5h6.8M9.2 12h5.6" /></svg>
-);
-/** Pause : deux barres (absence). */
-const IconPause = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5" /><path d="M10 9v6M14 9v6" /></svg>;
-/** Importer : flèche qui monte vers un plateau. */
-const IconUpload = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5" /><path d="M4 14.5V18a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3.5" /></svg>
 );
 /** Sur téléphone, la barre du bas n’a que cinq onglets : X-Ray et Séances se rangent sous Analyse, Mes courses sous Planning (sélecteur en haut de page). */
 const GROUPED: Tab[] = ["analysis", "xray", "runs"];
@@ -362,12 +356,6 @@ export default function AppShell({ user }: { user: { name: string | null; email:
           <div className="grid g2"><div className="skeleton" /><div className="skeleton" /></div>
         ) : (
           <div className={`view${viaVT ? " no-in" : ""}`} key={tab}>
-            {tab === "today" && !ctx.me.goal && (
-              <div className="banner" style={{ marginBottom: 14 }}>
-                <div><b>Choisis ta course</b><div className="small muted">Un plan d’entraînement jusqu’au jour J, construit à partir de ta charge actuelle pour que tu finisses.</div></div>
-                <button className="btn sm" onClick={() => go("plan")}>Choisir ma course</button>
-              </div>
-            )}
             {tab === "today" && <Today {...ctx} />}
             {tab === "plan" && <Planning {...ctx} />}
             {tab === "races" && <Races {...ctx} />}

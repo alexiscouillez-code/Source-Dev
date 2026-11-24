@@ -1,7 +1,23 @@
 "use client";
 
-import { useCallback, useId, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useId, useRef, useState } from "react";
 import { Fiche, FicheHead, useFiche } from "./Fiche";
+
+/** Dans une liste de rubriques (`FoldRows`), chaque rubrique en fiche s'affiche comme une ligne. */
+const RowCtx = createContext(false);
+
+/**
+ * Liste de rubriques : une seule carte, une ligne par rubrique (icône, titre, état dessous, flèche) ; chaque
+ * ligne ouvre sa fiche. Remplace une pile de cartes qui ne contiendraient chacune qu'un titre.
+ */
+export function FoldRows({ eyebrow, title, className = "", children }: { eyebrow?: string; title?: string; className?: string; children: React.ReactNode }) {
+  return (
+    <section className={`card fold-rows ${className}`}>
+      {title && <div className="fr-head">{eyebrow && <span className="eyebrow">{eyebrow}</span>}<h2>{title}</h2></div>}
+      <div className="fr-list"><RowCtx.Provider value={true}>{children}</RowCtx.Provider></div>
+    </section>
+  );
+}
 
 /** État ouvert / replié d’une carte, retenu sur l’appareil. */
 export function useFold(id: string, defaultOpen = false) {
@@ -17,31 +33,46 @@ export function useFold(id: string, defaultOpen = false) {
  * Sert à alléger les écrans chargés : on voit l’essentiel d’un coup d’œil et on déplie ce dont on a besoin.
  * Le contenu replié n’est pas monté (une carte ou un graphique ne se charge qu’à l’ouverture).
  */
-export default function Fold({ fiche, ...p }: Parameters<typeof InlineFold>[0] & {
+export default function Fold({ fiche, icon, ...p }: Parameters<typeof InlineFold>[0] & {
   /** En fiche : l'en-tête reste dans la page, le contenu s'ouvre par-dessus (au lieu de se déplier en dessous). */
   fiche?: boolean;
+  /** Icône de la ligne, quand la rubrique est dans une liste (`FoldRows`). */
+  icon?: React.ReactNode;
 }) {
-  return fiche ? <FicheFold {...p} /> : <InlineFold {...p} />;
+  if (fiche) return <FicheFold icon={icon} {...p} />;
+  return <InlineFold {...p} />;
 }
 
 /** Rubrique dont le contenu s'ouvre en fiche : l'en-tête (titre, résumé) s'agrandit jusqu'à la fiche. */
-function FicheFold({ id, title, eyebrow, aside, className = "", style, sectionRef, children }: Parameters<typeof InlineFold>[0]) {
+function FicheFold({ id, title, eyebrow, aside, icon, className = "", style, sectionRef, children }: Parameters<typeof InlineFold>[0] & { icon?: React.ReactNode }) {
   const f = useFiche<true>();
+  const row = useContext(RowCtx);
   const box = useRef<HTMLElement | null>(null);
   const set = (el: HTMLElement | null) => {
     box.current = el;
     if (typeof sectionRef === "function") sectionRef(el); else if (sectionRef && typeof sectionRef === "object") (sectionRef as React.MutableRefObject<HTMLElement | null>).current = el;
   };
   const open = () => f.open(true, box.current);
+  const onHead = (e: React.MouseEvent) => { if (!(e.target as HTMLElement).closest("a, input, select, .tip, button:not(.fold-btn)")) open(); };
+  const btn = <button type="button" className="fold-btn" aria-haspopup="dialog" onClick={(e) => { e.stopPropagation(); open(); }}>{title}</button>;
   return (
-    <section ref={set} data-fold={id} className={`card fold is-fiche ${className}`} style={style}>
-      <div className="card-head fold-head" onClick={(e) => { if (!(e.target as HTMLElement).closest("a, input, select, .tip, button:not(.fold-btn)")) open(); }}>
-        <div style={{ minWidth: 0 }}>
-          {eyebrow && <span className="eyebrow">{eyebrow}</span>}
-          <h2 style={eyebrow ? { marginTop: 4 } : undefined}><button type="button" className="fold-btn" aria-haspopup="dialog" onClick={(e) => { e.stopPropagation(); open(); }}>{title}</button></h2>
+    <section ref={set} data-fold={id} className={`fold is-fiche ${row ? "fold-row" : "card"} ${className}`} style={row ? undefined : style}>
+      {row ? (
+        // Ligne de liste : icône, titre et état dessous, flèche. La fiche s'ouvre depuis toute la ligne.
+        <div className="fold-head fr-row" onClick={onHead}>
+          {icon && <span className="fr-ico" aria-hidden="true">{icon}</span>}
+          <div className="fr-txt"><h3>{btn}</h3>{aside && <span className="fr-sub">{aside}</span>}</div>
+          <i className="fold-chev" aria-hidden="true">›</i>
         </div>
-        <span className="fold-aside">{aside}<i className="fold-chev" aria-hidden="true">›</i></span>
-      </div>
+      ) : (
+        <div className="card-head fold-head" onClick={onHead}>
+          <div style={{ minWidth: 0 }}>
+            {eyebrow && <span className="eyebrow">{eyebrow}</span>}
+            <h2 style={eyebrow ? { marginTop: 4 } : undefined}>{btn}</h2>
+          </div>
+          <span className="fold-aside">{aside}<i className="fold-chev" aria-hidden="true">›</i></span>
+        </div>
+      )}
       <Fiche ctl={f} kind="fold">
         {f.value && (
           <>

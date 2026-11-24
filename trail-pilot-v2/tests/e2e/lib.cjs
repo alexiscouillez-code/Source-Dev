@@ -86,6 +86,13 @@ async function unfoldAll(page) {
   for (let k = 0; k < 20 && (await page.locator(".fold.is-closed .fold-btn").count()); k++) await page.locator(".fold.is-closed .fold-btn").first().click().catch(() => {});
 }
 
+/** Ouvre la fiche d'une rubrique (ligne de liste ou carte) et attend son contenu ; `closeFiche` la referme. */
+async function openFiche(page, id) {
+  await page.locator(`[data-fold="${id}"] .fold-btn`).first().click();
+  return page.waitForSelector(`.panel [data-fold-fiche="${id}"]`, { timeout: 6000 }).then(() => page.waitForTimeout(700)).then(() => true, () => false);
+}
+async function closeFiche(page) { await page.keyboard.press("Escape"); await page.waitForTimeout(650); }
+
 const overflow = (page) => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
 
 /** Fin du parcours : ferme le navigateur, affiche le bilan et renvoie le code de sortie. */
@@ -101,4 +108,4 @@ function scenario(name, fn) {
   fn().then(() => finish(name), (e) => { failures.push("exception : " + e.message); finish(name); });
 }
 
-module.exports = { BASE, OUT, iso, check, newUser, openApp, tab, unfoldAll, overflow, scenario, db, userId };
+module.exports = { BASE, OUT, iso, check, newUser, openApp, tab, unfoldAll, openFiche, closeFiche, overflow, scenario, db, userId };

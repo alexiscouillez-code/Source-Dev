@@ -94,8 +94,19 @@ scenario("Annuler, vibrations, mode automatique, fiches, comparaison, Mes course
   await page.goBack(); await page.waitForTimeout(800);
   check(await page.locator(".panel").count() === 0 && page.url().endsWith("#runs"), "le retour du téléphone ferme la fiche et reste sur Séances", page.url());
 
+  // ---------- En-tête de Séances : « Ajouter » reste, le reste passe dans le menu ⋯ ----------
+  const ha = await page.evaluate(() => ({ shown: [...document.querySelectorAll(".view .head-acts > .btn")].filter((b) => b.offsetParent).map((b) => b.textContent || b.getAttribute("aria-label")) }));
+  check(ha.shown.length === 2 && /Ajouter/.test(ha.shown[0]) && /Plus d/.test(ha.shown[1]), "téléphone : en-tête de Séances réduit à « Ajouter » et ⋯", ha);
+  await page.locator(".view .ha-more").click(); await page.waitForTimeout(400);
+  const hm = await page.evaluate(() => ({ items: [...document.querySelectorAll(".ha-menu .ha-item b")].map((b) => b.textContent), focus: document.activeElement?.classList.contains("ha-item"), r: document.querySelector(".ha-menu").getBoundingClientRect().toJSON(), vw: innerWidth }));
+  check(hm.items.includes("Importer un fichier") && hm.items.includes("Comparer") && hm.focus && hm.r.left >= 0 && hm.r.right <= hm.vw, "le menu ⋯ liste les autres actions, à l'écran, le focus sur la première", hm);
+  await page.screenshot({ path: `${OUT}/extras-menu-plus.png` });
+  await page.keyboard.press("Escape"); await page.waitForTimeout(250);
+  check(await page.locator(".ha-menu").count() === 0 && await page.evaluate(() => document.activeElement?.classList.contains("ha-more")), "Échap ferme le menu et rend le focus à ⋯");
+
   // ---------- Comparer deux sorties : sélecteur avec recherche ----------
-  await page.getByRole("button", { name: "Comparer" }).first().click();
+  await page.locator(".view .ha-more").click(); await page.waitForTimeout(300);
+  await page.locator(".ha-item", { hasText: "Comparer" }).click();
   await page.waitForSelector(".panel-pick .cp-row", { timeout: 6000 });
   const all0 = await page.locator(".panel-pick .cp-row").count();
   await page.locator(".cp-search input").fill("saleve");
@@ -211,17 +222,24 @@ scenario("Annuler, vibrations, mode automatique, fiches, comparaison, Mes course
   await page.keyboard.press("Escape"); await page.waitForTimeout(700);
   check(await page.locator(".panel").count() === 0, "Échap ferme la fiche séance");
   // Rubrique du planning en fiche (matériel obligatoire), puis « Changer de course ».
+  const rows = await page.evaluate(() => { const g = document.querySelector(".plan-rows"); return { cards: document.querySelectorAll(".view section.card[data-fold^=plan-]").length, rows: [...(g?.querySelectorAll(".fold-row") ?? [])].map((r) => ({ id: r.dataset.fold, h: Math.round(r.getBoundingClientRect().height), ico: !!r.querySelector(".fr-ico svg") })) }; });
+  check(rows.cards === 0 && rows.rows.length >= 5 && rows.rows.every((r) => r.ico && r.h <= 90), "Planning : les rubriques forment une seule liste, une ligne chacune (icône, titre, état)", rows);
+  await page.locator(".plan-rows").screenshot({ path: `${OUT}/extras-rubriques.png` });
   await page.locator("[data-fold=plan-gear] .fold-btn").click();
   await page.waitForSelector(".panel-fold [data-fold-fiche=plan-gear]", { timeout: 5000 });
   check(true, "les rubriques du Planning s'ouvrent en fiche");
   await page.keyboard.press("Escape"); await page.waitForTimeout(700);
-  await page.getByRole("button", { name: "Changer de course" }).click();
+  await page.locator(".view .ha-more").click(); await page.waitForTimeout(300);
+  await page.locator(".ha-item", { hasText: "Changer de course" }).click();
   await page.waitForSelector(".panel-raceform .race-form", { timeout: 5000 });
   check(await page.locator(".view .race-form").count() === 0, "« Changer de course » s'ouvre en fiche, le planning reste dessous");
   await page.keyboard.press("Escape"); await page.waitForTimeout(700);
   // Accueil : séance du jour, check-in et coach en fiches.
   await page.goto(BASE + "/espace#today"); await page.waitForTimeout(1500);
-  const tile = await page.waitForSelector(".session-tile, [aria-labelledby=next-title] .empty", { timeout: 6000 }).catch(async (e) => { await page.screenshot({ path: `${OUT}/extras-debug-today.png` }); console.log(await page.evaluate(() => ({ hash: location.hash, view: document.querySelector(".view")?.className, panels: document.querySelectorAll(".panel").length, h2: [...document.querySelectorAll("h2")].map((h) => h.textContent).slice(0, 8) }))); throw e; });
+  const dc = await page.evaluate(() => { const c = document.querySelector(".day-card"); return { steps: [...(c?.querySelectorAll(".dc-steps li") ?? [])].map((l) => l.className || "-"), cta: !!c?.querySelector(".dc-ask .btn"), quiet: !!c?.querySelector(".session-tile.is-quiet, .dc-next .empty"), btns: c ? [...c.querySelectorAll(".btn:not(.ghost)")].length : 0, top: Math.round(c?.querySelector(".dc-ask .btn")?.getBoundingClientRect().bottom ?? 9999) }; });
+  check(dc.steps.length === 3 && dc.steps[0] === "is-now" && dc.cta && dc.quiet && dc.btns === 1 && dc.top < 844, "accueil : « Ta journée » commence par le check-in (un seul bouton, visible sans défiler), la séance en aperçu", dc);
+  await page.screenshot({ path: `${OUT}/extras-journee.png` });
+  const tile = await page.waitForSelector(".session-tile, .dc-next .empty", { timeout: 6000 }).catch(async (e) => { await page.screenshot({ path: `${OUT}/extras-debug-today.png` }); console.log(await page.evaluate(() => ({ hash: location.hash, view: document.querySelector(".view")?.className, panels: document.querySelectorAll(".panel").length, h2: [...document.querySelectorAll("h2")].map((h) => h.textContent).slice(0, 8) }))); throw e; });
   if (await tile.evaluate((e) => e.classList.contains("session-tile"))) {
     await tile.click();
     await page.waitForSelector(".panel-day .day-sess", { timeout: 6000 });
@@ -236,6 +254,9 @@ scenario("Annuler, vibrations, mode automatique, fiches, comparaison, Mes course
   await page.waitForSelector(".verdict", { timeout: 15000 });
   await page.waitForTimeout(900);
   check(await page.locator(".panel").count() === 0 && /Jambes lourdes/.test(await page.locator(".verdict").textContent()), "check-in en fiche : la fiche se ferme sur la décision, avec le commentaire");
+  const dc2 = await page.evaluate(() => ({ steps: [...document.querySelectorAll(".day-card .dc-steps li")].map((l) => l.className || "-"), verdict: !!document.querySelector(".day-card.verdict .verdict-big"), next: !!document.querySelector(".day-card .dc-next:not(.is-quiet)") }));
+  check(dc2.verdict && dc2.steps[0] === "is-done" && dc2.steps[1] === "is-done" && dc2.next, "après le check-in, la même carte montre la décision puis la séance", dc2);
+  await page.screenshot({ path: `${OUT}/extras-journee-decision.png` });
   await page.getByRole("button", { name: "Poser une question au coach" }).click();
   await page.waitForSelector(".panel-coach", { timeout: 5000 });
   check(true, "le coach s'ouvre en fiche");

@@ -87,7 +87,7 @@ export function startCountUps(root: HTMLElement) {
  * entièrement sorti de l’écran, pour que l’animation rejoue au retour. Sans JavaScript ou avec « réduire les
  * animations », rien n’est masqué : la classe « mo » sur <html> conditionne tous les états de départ.
  */
-const REVEAL = "svg.chart, .radar, .month-bars, .week-bars, .gaps, .zbar, .ready-plot, .shoe-list, .gc-gauge, .gc-ring, .vo2-scale, .cal-grid, .night .glass, .dotprofile, .dotgrid, .radar-dots";
+export const REVEAL = "svg.chart, .radar, .month-bars, .week-bars, .gaps, .zbar, .ready-plot, .shoe-list, .gc-gauge, .gc-ring, .vo2-scale, .cal-grid, .night .glass, .dotprofile, .dotgrid, .radar-dots";
 export function startReveals(root: HTMLElement) {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || !("IntersectionObserver" in window)) return () => {};
   document.documentElement.classList.add("mo");

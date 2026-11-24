@@ -5,7 +5,8 @@ import dynamic from "next/dynamic";
 import Fold, { useFold } from "./Fold";
 import type { Ctx } from "./AppShell";
 import { api, dayLabel, dayNum, fmtDur, fmtKm, fmtNum, localToday, shortDay, SPORT_LABEL, type Activity, type Me } from "./client";
-import { IconPin, IconPlus, IconSync, IconTrash } from "./icons";
+import { IconPin, IconPlus, IconSync, IconTrash, IconUpload } from "./icons";
+import HeadActions from "./HeadActions";
 import { parseActivityFile } from "@/lib/activity-file";
 import { QUICK_EVENT, takeQuick } from "./quick";
 import { flushSync } from "react-dom";
@@ -155,13 +156,13 @@ export default function Sessions({ me, refresh, toast }: Ctx) {
     <>
       <header className="head">
         <div><span className="eyebrow">90 derniers jours</span><h1>Séances</h1></div>
-        <div className="row">
-          {me.strava.connected && <button className="btn ghost sm" onClick={sync} disabled={syncing}><IconSync />{syncing ? "Synchro…" : "Synchro Strava"}</button>}
-          <button className="btn ghost sm" onClick={() => fileRef.current?.click()} title="Fichier exporté de ta montre ou de ton appli : FIT, TCX ou GPX">Importer un fichier</button>
-          <input ref={fileRef} type="file" accept=".gpx,.fit,.tcx,application/gpx+xml" hidden onChange={(e) => onFile(e.target.files?.[0])} />
-          {(acts?.length ?? 0) >= 1 && <button type="button" className="btn ghost sm" onClick={(e) => openPanel({ kind: "pick" }, e.currentTarget)}><IconCompare />Comparer</button>}
-          <button className="btn sm" onClick={() => setSheet({ source: "manual" })}><IconPlus />Ajouter</button>
-        </div>
+        <input ref={fileRef} type="file" accept=".gpx,.fit,.tcx,application/gpx+xml" hidden onChange={(e) => onFile(e.target.files?.[0])} />
+        <HeadActions label="Plus d’actions : Séances" actions={[
+          ...(me.strava.connected ? [{ id: "sync", label: syncing ? "Synchro…" : "Synchro Strava", hint: "Importer tes dernières sorties", Icon: IconSync, disabled: syncing, run: () => { sync(); } }] : []),
+          { id: "file", label: "Importer un fichier", hint: "FIT, TCX ou GPX de ta montre", Icon: IconUpload, run: () => fileRef.current?.click() },
+          ...((acts?.length ?? 0) >= 1 ? [{ id: "cmp", label: "Comparer", hint: "Deux sorties côte à côte", Icon: IconCompare, run: (el: HTMLElement) => openPanel({ kind: "pick" }, el) }] : []),
+          { id: "add", label: "Ajouter", Icon: IconPlus, primary: true, filled: true, run: () => setSheet({ source: "manual" }) },
+        ]} />
       </header>
       {me.strava.connected && <Freshness s={me.strava} />}
       {pick.on && <p className="note small runs-pick" role="status">Touche deux sorties pour les comparer côte à côte.</p>}

@@ -1,5 +1,5 @@
 // Parcours : séances suspectes repérées, exclues, et le graphique de forme qui n'est plus écrasé. En thème clair.
-const { iso, check, newUser, openApp, tab, overflow, scenario } = require("./lib.cjs");
+const { iso, check, newUser, openApp, tab, overflow, scenario, openFiche, closeFiche } = require("./lib.cjs");
 
 scenario("Séances suspectes et échelle du graphique (thème clair)", async () => {
   for (const device of ["phone", "desktop"]) {
@@ -17,17 +17,24 @@ scenario("Séances suspectes et échelle du graphique (thème clair)", async () 
     const n = await page.locator(".sus-list li").count();
     check(n === 2, "les deux séances piégées sont repérées, et elles seules", n);
 
-    const chart = page.locator('svg.chart[aria-label^="Évolution de la forme"]');
+    // Courbe de forme : dans sa fiche.
+    const chart = page.locator('.panel svg.chart[aria-label^="Évolution de la forme"]');
+    await openFiche(page, "an-fitness");
     await chart.scrollIntoViewIfNeeded();
     await page.waitForTimeout(3500);
-    check((await page.locator(".ch-peak text").count()) > 0, "le pic hors norme est signalé hors échelle");
+    check((await page.locator(".panel .ch-peak text").count()) > 0, "le pic hors norme est signalé hors échelle");
+    await closeFiche(page);
 
     for (let k = 0; k < n; k++) { await page.locator(".sus-list li:not(.out)").first().locator("text=Exclure du calcul").click(); await page.waitForTimeout(1800); }
     check((await card.count()) === 0, "la carte disparaît une fois les séances exclues");
+    await openFiche(page, "an-fitness");
     await chart.scrollIntoViewIfNeeded();
     await page.waitForTimeout(3500);
-    check((await page.locator(".ch-peak text").count()) === 0, "le graphique retrouve une échelle normale");
-    const records = await page.locator(".records").innerText().catch(() => "");
+    check((await page.locator(".panel .ch-peak text").count()) === 0, "le graphique retrouve une échelle normale");
+    await closeFiche(page);
+    await openFiche(page, "an-progress");
+    const records = await page.locator(".panel .records").innerText().catch(() => "");
+    await closeFiche(page);
     check(!/28 h|33 km/.test(records), "les records ne contiennent plus les séances exclues");
 
     // Les séances exclues restent visibles dans la liste, barrées.

@@ -7,7 +7,7 @@ import { cancelLater, isPending, later, usePending } from "./undo";
 import { morphItems } from "./motion";
 import { haptic } from "@/components/haptics";
 import { api, dayLabel, fmtDur, fmtKm, fmtNum, localToday } from "./client";
-import { IconTrash } from "./icons";
+import { IconFlag, IconTrash } from "./icons";
 
 export interface SideRaceRow { id: number; name: string; date: string; distanceKm: number | null; gainM: number | null; priority: "B" | "C" }
 
@@ -46,7 +46,7 @@ export default function SideRaces({ races, today, mainDate, onChanged, toast }: 
   }
 
   return (
-    <Fold fiche id="plan-sides" style={{ marginTop: 14 }} title="Courses de préparation" aside={<span className={`chip ${alert ? "lite" : upcoming.length ? "" : "dim"}`}>{alert ? "Météo à anticiper" : upcoming.length ? `${upcoming.length} prévue${upcoming.length > 1 ? "s" : ""}` : "Aucune"}</span>}>
+    <Fold fiche icon={<IconFlag />} id="plan-sides" style={{ marginTop: 14 }} title="Courses de préparation" aside={<span className={`chip ${alert ? "lite" : upcoming.length ? "" : "dim"}`}>{alert ? "Météo à anticiper" : upcoming.length ? `${upcoming.length} prévue${upcoming.length > 1 ? "s" : ""}` : "Aucune"}</span>}>
       {!open && <div className="row"><button className="btn ghost sm" onClick={() => setOpen(true)}>Ajouter une course</button></div>}
       {!upcoming.length && !open && <p className="soft small" style={{ margin: 0 }}>Tu fais d’autres courses avant {mainDate ? "ta course principale" : "ton prochain objectif"} ? Ajoute-les : le planning allège les jours d’avant, remplace la sortie longue de la semaine et prévoit la récupération.</p>}
       {upcoming.length > 0 && (

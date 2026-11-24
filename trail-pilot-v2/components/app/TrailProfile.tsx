@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import type { Ctx } from "./AppShell";
 import { api } from "./client";
-import InfoTip from "./InfoTip";
+import Fold from "./Fold";
 
 type Axis = "endurance" | "volume" | "climb" | "descent" | "speed" | "consistency";
 interface AxisScore { key: Axis; label: string; score: number; value: string; target: number | null; targetText: string | null }
@@ -15,33 +15,29 @@ interface Data {
 }
 
 /** Profil trail : radar des qualités, points forts, points faibles et séances à travailler. */
-export default function TrailProfile({ go }: Pick<Ctx, "go">) {
+export default function TrailProfile({ go, icon }: Pick<Ctx, "go"> & { icon?: React.ReactNode }) {
   const [d, setD] = useState<Data | null>(null);
   useEffect(() => { api<Data>("/api/trail-profile").then(setD).catch(() => setD(null)); }, []);
-  if (!d) return <div className="skeleton" style={{ marginBottom: 14 }} />;
-  if (!d.enough) {
-    return (
-      <section className="card tprofile" style={{ marginBottom: 14 }}>
-        <div className="card-head"><h2>Ton profil trail</h2></div>
-        <p className="empty">Il faut au moins 4 sorties sur les 8 dernières semaines pour dresser ton profil. <button className="link" onClick={() => go("runs")}>Ajouter des séances</button></p>
-      </section>
-    );
-  }
+  // Une rubrique (ligne de liste) : le type de coureur et ce qui manque se lisent sans ouvrir la fiche.
+  const weak = d?.weaknesses.map((a) => a.label.toLowerCase()).join(", ");
   return (
-    <section className="card tprofile" style={{ marginBottom: 14 }}>
-      <div className="card-head">
-        <div><span className="eyebrow">{d.sessions} sorties sur {d.weeks} semaines</span>
-          <h2 className="tip-label" style={{ marginTop: 4 }}>Ton profil trail<InfoTip title="Comment c’est noté">
-            <span className="p">Six qualités notées de 0 à 100 sur tes 8 dernières semaines : <em>endurance</em> (plus longue sortie, 100 = 4 h), <em>volume</em> (100 = 8 h par semaine), <em>montée</em> (D+ par semaine et vitesse en côte), <em>descente</em> (D− par semaine), <em>vitesse</em> (VO2max) et <em>régularité</em> (semaines à 3 sorties ou plus).</span>
-            {d.race && <span className="p">La zone pointillée montre ce que demande <em>{d.race.name}</em> : tes points faibles sont choisis par rapport à elle.</span>}
-          </InfoTip></h2>
-        </div>
-        {d.type && <span className="chip ember"><span className="dot" />{d.type.name}</span>}
-      </div>
+    <Fold fiche icon={icon} id="an-profile" eyebrow={d?.enough ? `${d.sessions} sorties sur ${d.weeks} semaines` : "Suis-je prêt pour ma course ?"} title="Ton profil trail"
+      aside={!d ? <span className="chip dim">Calcul…</span> : !d.enough ? <span className="chip dim">Il faut 4 sorties sur 8 semaines</span>
+        : <>{d.type && <span className="chip ember">{d.type.name}</span>}{weak && <span className="chip dim">À travailler : {weak}</span>}</>}>
+      {!d ? <div className="skeleton" /> : !d.enough ? (
+        <p className="empty">Il faut au moins 4 sorties sur les 8 dernières semaines pour dresser ton profil. <button className="link" onClick={() => go("runs")}>Ajouter des séances</button></p>
+      ) : <ProfileBody d={d} />}
+    </Fold>
+  );
+}
+
+function ProfileBody({ d }: { d: Data }) {
+  return (
+    <div className="tprofile">
       <div className="tp-grid">
         <Radar axes={d.axes} />
         <div className="tp-side">
-          {d.type && <p className="soft" style={{ margin: 0 }}>{d.type.line}</p>}
+          {d.type && <div><span className="chip ember"><span className="dot" />{d.type.name}</span><p className="soft" style={{ margin: "8px 0 0" }}>{d.type.line}</p></div>}
           {d.strengths.length > 0 && (
             <div><h3>Où tu es bon</h3>
               <ul className="tp-list ok">{d.strengths.map((a) => <li key={a.key}><b>{a.label}</b><span className="mono">{a.score}</span><small>{a.value}</small></li>)}</ul>
@@ -69,7 +65,8 @@ export default function TrailProfile({ go }: Pick<Ctx, "go">) {
           <p className="muted small" style={{ margin: 0 }}>Ton plan intègre déjà ces séances au fil des phases. Pour en ajouter, garde au moins une journée facile entre deux séances dures.</p>
         </div>
       )}
-    </section>
+      <p className="muted small" style={{ margin: 0 }}>Six qualités notées de 0 à 100 sur tes 8 dernières semaines : endurance (plus longue sortie, 100 = 4 h), volume (100 = 8 h par semaine), montée (D+ par semaine et vitesse en côte), descente (D− par semaine), vitesse (VO2max) et régularité (semaines à 3 sorties ou plus).{d.race ? ` La zone pointillée montre ce que demande ${d.race.name} : tes points faibles sont choisis par rapport à elle.` : ""}</p>
+    </div>
   );
 }
 

@@ -42,7 +42,7 @@ export default function WeekCard({ today, toast }: { today: string; toast: (m: s
   }
 
   return (
-    <section className="card week-card" style={{ marginTop: 14 }} aria-labelledby="week-title">
+    <section className="card week-card" aria-labelledby="week-title">
       <div className="card-head">
         <div><span className="eyebrow">{w.isCurrent ? "Ta semaine" : "La semaine dernière"} · {range}</span><h2 id="week-title" style={{ marginTop: 4 }}>Bilan de la semaine</h2></div>
         <button className="link small" onClick={() => { try { localStorage.setItem("tp-week-hide", today); } catch { /* rien */ } setHidden(true); }}>Masquer</button>
