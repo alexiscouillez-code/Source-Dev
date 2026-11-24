@@ -44,7 +44,7 @@ export default function Races({ go, toast }: Ctx) {
         <div><span className="eyebrow">{list ? `${past.length} courue${past.length > 1 ? "s" : ""} · ${upcoming.length} à venir` : "Courses"}</span><h1>Mes courses</h1></div>
         <div className="row">
           {done.length >= 2 && <button type="button" className={`btn ghost sm${pick.on ? " on" : ""}`} aria-pressed={pick.on} onClick={() => setPick(pick.on ? { on: false, ids: [] } : { on: true, ids: [] })}><IconCompare />{pick.on ? "Annuler" : "Comparer"}</button>}
-          <button type="button" className="btn sm" onClick={() => { setQuick({ kind: "jump", sel: "[data-fold=plan-sides] .btn", text: "Ajouter une course", press: true }); go("plan"); }}><IconPlus />Ajouter</button>
+          <button type="button" className="btn sm" onClick={() => { setQuick({ kind: "jump", fold: "plan-sides", sel: "[data-fold-fiche=plan-sides] .btn", text: "Ajouter une course", press: true }); go("plan"); }}><IconPlus />Ajouter</button>
         </div>
       </header>
       {!list ? <div className="skeleton" style={{ height: 260 }} /> : (

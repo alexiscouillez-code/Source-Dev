@@ -138,7 +138,8 @@ scenario("Barre de navigation inférieure (BottomNav)", async () => {
   await plus.click(); await page.waitForTimeout(400);
   await page.locator(".bnav-act", { hasText: "Check-in du jour" }).click();
   await page.waitForTimeout(1600);
-  check((await page.evaluate(() => location.hash)) === "#today" && (await page.locator(".ci-card").count()) === 1, "« Check-in du jour » ouvre le check-in sur Aujourd'hui");
+  check((await page.evaluate(() => location.hash)) === "#today" && (await page.locator(".panel-checkin .ci-card").count()) === 1, "« Check-in du jour » ouvre la fiche du check-in sur Aujourd'hui");
+  await page.keyboard.press("Escape"); await page.waitForTimeout(700);
 
   // ---------- Gestes au doigt (événements tactiles réels via le protocole du navigateur) ----------
   const cdp = await page.context().newCDPSession(page);

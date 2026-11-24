@@ -19,7 +19,7 @@ const durFmt = (m: number) => fmtDur(Math.round(m));
  * superposés, allure de chaque kilomètre et écart cumulé kilomètre après kilomètre, zones cardiaques.
  * Les courbes se dessinent à l'ouverture et se lisent du doigt (repère et valeurs des deux sorties).
  */
-export default function Compare({ a, b, close }: PanelProps & { a: number; b: number }) {
+export default function Compare({ a, b, close, swap }: PanelProps & { a: number; b: number }) {
   const [d, setD] = useState<{ a: RunDetail; b: RunDetail } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => {
@@ -34,7 +34,7 @@ export default function Compare({ a, b, close }: PanelProps & { a: number; b: nu
         <span className="eyebrow">Comparaison</span>
         <button type="button" className="iconbtn panel-x" aria-label="Fermer la comparaison" onClick={close}><IconX /></button>
       </div>
-      <h2 id="panel-title" className="panel-title">{d ? "Face à face" : "Chargement…"}</h2>
+      <h2 className="panel-title">{d ? "Face à face" : "Chargement…"}</h2>
       {d && (
         <div className="cmp-who">
           {(["a", "b"] as Side[]).map((s) => (
@@ -42,6 +42,7 @@ export default function Compare({ a, b, close }: PanelProps & { a: number; b: nu
               <i aria-hidden="true" />
               <b>{d[s].activity.name ?? SPORT_LABEL[d[s].activity.sport]}</b>
               <small>{dayLabel(d[s].activity.date, { day: "numeric", month: "short", year: "numeric" })}</small>
+              <button type="button" className="link small cmp-change" aria-label={`Changer la sortie ${s.toUpperCase()}`} onClick={(e) => swap({ kind: "pick", keep: d[s === "a" ? "b" : "a"].activity.id }, e.currentTarget)}>Changer</button>
             </div>
           ))}
         </div>

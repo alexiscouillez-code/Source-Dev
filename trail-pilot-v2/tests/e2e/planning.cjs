@@ -26,7 +26,9 @@ scenario("Planning, check-in et validation automatique", async () => {
 
     // Check-in du matin avec commentaire.
     await page.goto(BASE + "/espace");
-    await page.waitForSelector("#ci-title");
+    // Le check-in s'ouvre en fiche, par-dessus l'accueil.
+    await page.getByRole("button", { name: "Faire mon check-in" }).click();
+    await page.waitForSelector(".panel-checkin .ci-card");
     for (const [i, n] of [[0, 1], [1, 1], [2, 2]]) await page.locator("fieldset.scale").nth(i).locator("label").nth(n).click();
     await page.fill(".ci-note textarea", "Nuit hachée, mollet droit raide au réveil.");
     await page.locator(".ci-card button[type=submit]").click();
@@ -41,6 +43,12 @@ scenario("Planning, check-in et validation automatique", async () => {
     await page.locator('.view-switch button:has-text("Liste")').click();
     check(await page.waitForSelector(".wk", { timeout: 5000 }).then(() => true, () => false), "la vue liste s'affiche");
     await page.locator('.view-switch button:has-text("Calendrier")').click();
+    // Toucher un jour ouvre sa fiche par-dessus le calendrier (rien ne s'ouvre en dessous).
+    const future = page.locator(".cal-day:not(.past):has(.ev)").nth(1);
+    await future.click();
+    await page.waitForSelector(".panel-day .day-sess", { timeout: 6000 });
+    check(await page.locator(".cal-detail").count() === 0 && await page.locator(".panel-day .cal-comment textarea").count() === 1, "un jour du calendrier s'ouvre en fiche, avec son commentaire du jour");
+    await page.locator(".panel-day .panel-x").click(); await page.waitForTimeout(700);
 
     // Une sortie enregistrée le jour d'une séance prévue valide cette séance (séance de demain-matin simulée hier, pour rester dans le passé).
     const uid = await userId(email);

@@ -1,6 +1,6 @@
 "use client";
 
-import { openPanel, setPick } from "./panel";
+import { openPanel } from "./panel";
 import { IconCompare, IconRecap } from "./icons";
 import { useEffect, useMemo, useState } from "react";
 import type { Ctx } from "./AppShell";
@@ -249,7 +249,7 @@ const Head = () => (
     <div><span className="eyebrow">Moteur de charge</span><h1>Analyse</h1></div>
     <div className="row">
       <button type="button" className="btn ghost sm" onClick={(e) => openPanel({ kind: "recap" }, e.currentTarget)}><IconRecap />Bilan du mois</button>
-      <button type="button" className="btn ghost sm" onClick={() => { setPick({ on: true, ids: [] }); window.dispatchEvent(new CustomEvent("tp-go", { detail: "runs" })); }}><IconCompare />Comparer</button>
+      <button type="button" className="btn ghost sm" onClick={(e) => openPanel({ kind: "pick" }, e.currentTarget)}><IconCompare />Comparer</button>
     </div>
   </header>
 );

@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { api, dayLabel, fmtDur, fmtKm, fmtNum, SPORT_LABEL, type Activity } from "./client";
 import { IconCompare, IconShare, IconX } from "./icons";
 import DotProfile from "@/components/night/DotProfile";
-import { Insight } from "./Sessions";
-import { setPick } from "./panel";
+import { Insight, Review } from "./Sessions";
 import { paceText, runStory } from "./story";
 import StoryPreview from "./StoryPreview";
 import type { PanelProps } from "./Panels";
@@ -14,7 +13,7 @@ import type { Best } from "@/lib/engine/streams";
 
 const TrackMap = dynamic(() => import("./TrackMap"), { ssr: false, loading: () => <div className="tmap" style={{ height: 220 }}><div className="tmap-loading">Chargement de la carte…</div></div> });
 
-export interface RunDetail { activity: Activity; profile: number[] | null; km: number[] | null; moving: number | null; best: Best | null; maxHr: number | null }
+export interface RunDetail { activity: Activity; profile: number[] | null; km: number[] | null; moving: number | null; best: Best | null; maxHr: number | null; ai?: boolean }
 const FOOT = new Set(["trail", "course", "rando"]);
 /** Allure moyenne en secondes par km (temps en mouvement si connu), null sans distance. */
 export const paceOf = (a: Pick<Activity, "distance_km" | "duration_min">, moving?: number | null) => (a.distance_km ? (moving ?? a.duration_min * 60) / a.distance_km : null);
@@ -26,11 +25,12 @@ export const splitsOf = (km: number[] | null) => (km?.length ? km.map((t, i) => 
  * chiffres clés, profil d'altitude en points (à parcourir du doigt), allure de chaque kilomètre, zones
  * cardiaques, tracé, partage en story et comparaison avec une autre sortie.
  */
-export default function RunFiche({ id, initial, toast, close, go }: PanelProps & { id: number; initial?: Partial<Activity> }) {
+export default function RunFiche({ id, initial, toast, close, swap }: PanelProps & { id: number; initial?: Partial<Activity> }) {
   const [d, setD] = useState<RunDetail | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [story, setStory] = useState(false);
-  useEffect(() => { api<RunDetail>(`/api/activities/${id}`).then(setD).catch((e) => setErr(e instanceof Error ? e.message : "Erreur")); }, [id]);
+  const fetchD = useCallback(() => api<RunDetail>(`/api/activities/${id}`).then(setD).catch((e) => setErr(e instanceof Error ? e.message : "Erreur")), [id]);
+  useEffect(() => { fetchD(); }, [fetchD]);
   const a = (d?.activity ?? initial ?? null) as Partial<Activity> | null;
   const splits = useMemo(() => splitsOf(d?.km ?? null), [d]);
   if (!a) return <div className="panel-body"><div className="skeleton" style={{ height: 300 }} /></div>;
@@ -55,7 +55,7 @@ export default function RunFiche({ id, initial, toast, close, go }: PanelProps &
           <span className="eyebrow">{a.date ? dayLabel(a.date, { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : ""}</span>
           <button type="button" className="iconbtn panel-x" aria-label="Fermer la fiche" onClick={close}><IconX /></button>
         </div>
-        <h2 id="panel-title" className="panel-title">{name}</h2>
+        <h2 className="panel-title">{name}</h2>
         <div className="row panel-chips">
           <span className="chip">{SPORT_LABEL[a.sport ?? ""] ?? "Sortie"}</span>
           {a.source === "strava" && <span className="chip dim">Strava</span>}
@@ -99,6 +99,12 @@ export default function RunFiche({ id, initial, toast, close, go }: PanelProps &
           </section>
         )}
         {a.insight && (a.insight.zones || a.insight.gap) && <section className="fiche-sec"><h3 className="fiche-h">Effort</h3><Insight a={{ insight: a.insight }} /></section>}
+        {d && (d.activity.review || (d.ai && d.activity.reviewable)) && (
+          <section className="fiche-sec">
+            <h3 className="fiche-h">Bilan du coach</h3>
+            <Review a={d.activity} ai={!!d.ai} toast={toast} onDone={fetchD} />
+          </section>
+        )}
         {d?.activity.track && (
           <section className="fiche-sec">
             <h3 className="fiche-h">Tracé</h3>
@@ -107,7 +113,7 @@ export default function RunFiche({ id, initial, toast, close, go }: PanelProps &
         )}
         <div className="fiche-actions">
           <button type="button" className="btn" onClick={() => setStory(true)}><IconShare />Partager en story</button>
-          <button type="button" className="btn ghost" onClick={() => { setPick({ on: true, ids: [id] }); close(); window.setTimeout(() => go("runs"), 380); }}><IconCompare />Comparer avec…</button>
+          <button type="button" className="btn ghost" onClick={(e) => swap({ kind: "pick", first: id }, e.currentTarget)}><IconCompare />Comparer avec…</button>
         </div>
       </div>
       {story && <StoryPreview make={story0} filename={`trail-pilot-${a.date}.png`} title={name} toast={toast} onClose={() => setStory(false)} />}

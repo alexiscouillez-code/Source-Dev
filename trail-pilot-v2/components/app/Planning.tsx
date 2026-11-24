@@ -6,6 +6,9 @@ import { flushSync } from "react-dom";
 import { buzz, withTransition } from "./motion";
 import { cancelLater, isPending, later, usePending } from "./undo";
 import { openPanel } from "./panel";
+import { movable, planActions } from "./planActions";
+import { Fiche, FicheHead, useFiche } from "./Fiche";
+import DaySheet from "./DaySheet";
 import { downloadWorkout } from "./workout";
 import type { Ctx } from "./AppShell";
 import { api, dayLabel, dayNum, fmtDur, fmtKm, fmtNum, localToday, PRESET_KEY, shortDay, type PlanSession, type Absence, type Review } from "./client";
@@ -78,57 +81,11 @@ export default function Planning({ me, refresh, toast, go }: Ctx) {
     catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }
     finally { setBusy(false); }
   }
-  async function setStatus(s: Session, status: string, undo = true) {
-    const prev = s.status;
-    try {
-      const flight = status === "done" ? flyCheck(s.id) : null;
-      if (status === "done") buzz(18);
-      await api(`/api/plan/${s.id}`, { method: "PATCH", body: { status } });
-      await flight;
-      await Promise.all([load(true), refresh()]);
-      // Faite ou sautée par erreur : « Annuler » remet la séance comme elle était.
-      if (undo && (status === "done" || status === "skipped") && (prev === "planned" || prev === "adapted")) {
-        toast(`${s.title} : ${status === "done" ? "faite" : "sautée"}.`, { action: { label: "Annuler", run: () => { setStatus({ ...s, status }, prev, false).then(() => toast("C’est annulé.")); } } });
-      }
-    }
-    catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }
-  }
-  // Déplacement annulable : les séances reprennent leurs jours d'avant.
-  const undoMove = (moved: { id: number; date: string }[]) => ({
-    label: "Annuler",
-    run: async () => {
-      try {
-        for (const m of moved) await api(`/api/plan/${m.id}`, { method: "PATCH", body: { date: m.date } });
-        await Promise.all([load(true), refresh()]);
-        toast("Déplacement annulé.");
-      } catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }
-    },
-  });
-  // Glisser-déposer : la séance prend le jour visé ; celle qui s’y trouvait (si elle est déplaçable) prend l’ancien jour.
-  async function move(a: Session, b: Session) {
-    try {
-      const swap = movable(b, v!.today);
-      await api(`/api/plan/${a.id}`, { method: "PATCH", body: { date: b.date } });
-      if (swap) await api(`/api/plan/${b.id}`, { method: "PATCH", body: { date: a.date } });
-      buzz([10, 40, 10]);
-      await Promise.all([load(true), refresh()]);
-      toast(`${a.title} déplacée au ${dayLabel(b.date, { weekday: "long", day: "numeric", month: "long" })}.`, { action: undoMove([{ id: a.id, date: a.date }, ...(swap ? [{ id: b.id, date: b.date }] : [])]) });
-    } catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }
-  }
-  // Calendrier : la séance va au jour touché ; si une séance déplaçable s’y trouve, elles échangent leurs jours.
-  async function moveTo(a: Session, date: string, swap: Session | null) {
-    try {
-      await api(`/api/plan/${a.id}`, { method: "PATCH", body: { date } });
-      if (swap) await api(`/api/plan/${swap.id}`, { method: "PATCH", body: { date: a.date } });
-      buzz([10, 40, 10]);
-      await Promise.all([load(), refresh()]);
-      toast(`${a.title} déplacée au ${dayLabel(date, { weekday: "long", day: "numeric", month: "long" })}.`, { action: undoMove([{ id: a.id, date: a.date }, ...(swap ? [{ id: swap.id, date: swap.date }] : [])]) });
-    } catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }
-  }
-  async function restore(s: Session) {
-    try { await api(`/api/plan/${s.id}`, { method: "PATCH", body: { restore: true } }); await Promise.all([load(), refresh()]); toast("Séance prévue rétablie."); }
-    catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }
-  }
+  // Faite, sautée, déplacée, rétablie : actions partagées avec le calendrier et les fiches (voir planActions).
+  const actions = useMemo(() => planActions({ toast, after: (morph) => Promise.all([load(morph), refresh()]), fly: flyCheck }), [toast, load, refresh]);
+  const setStatus = actions.setStatus, moveTo = actions.moveTo;
+  // Glisser-déposer dans la liste : la séance prend le jour visé ; celle qui s'y trouvait (si elle est déplaçable) prend l'ancien jour.
+  const move = (a: Session, b: Session) => moveTo(a, b.date, movable(b, v!.today) ? b : null);
   const noted = async () => { await Promise.all([load(), refresh()]); };
   // Imprévu annulé : le bandeau disparaît tout de suite, l'annulation part après 5 s sans « Annuler ».
   usePending();
@@ -147,6 +104,8 @@ export default function Planning({ me, refresh, toast, go }: Ctx) {
     } } } : undefined);
   };
   const [away, setAway] = useState(false);
+  // Changer de course, affiner le temps estimé : en fiche, par-dessus le planning.
+  const raceF = useFiche<{ refine: boolean }>();
   const saved = async (msg: string) => { setEditing(false); setRefine(false); await Promise.all([load(), refresh()]); toast(msg); };
 
   if (!v) return <><Head /><div className="skeleton" /></>;
@@ -166,8 +125,8 @@ export default function Planning({ me, refresh, toast, go }: Ctx) {
       <LearningCard l={v.learning} onToggle={async (off) => { try { await api("/api/plan", { method: "PATCH", body: { learningOff: off, today: v.today } }); await Promise.all([load(), refresh()]); toast(off ? "Plan d’origine rétabli, sans ajustement." : "Ajustements réactivés."); } catch (e) { toast(e instanceof Error ? e.message : "Erreur"); } }} />
       {away && <AbsenceSheet a={v.absence ?? null} today={v.today} onClose={() => setAway(false)} onSaved={absenceSaved} />}
             <p className="muted small" style={{ margin: 0 }}>Sans course choisie, Trail Pilot te propose 3 semaines pour garder ta forme, à partir de ce que tu fais en ce moment.</p>
-            <PlanBoard today={v.today} rev={rev} targets={me.targets} onStatus={setStatus} onWhere={whereTo} onMoveTo={moveTo} onRestore={restore} onChanged={noted}>
-              <WeekList sessions={v.sessions} weeks={[]} today={me.today} doneByWeek={v.doneByWeek} onStatus={setStatus} targets={me.targets} onWhere={whereTo} onMove={move} />
+            <PlanBoard today={v.today} rev={rev} targets={me.targets} actions={actions} onWhere={whereTo} onChanged={noted}>
+              <WeekList sessions={v.sessions} weeks={[]} today={me.today} doneByWeek={v.doneByWeek} onStatus={setStatus} targets={me.targets} onWhere={whereTo} onMove={move} actions={actions} onChanged={noted} />
             </PlanBoard>
           </section>
         )}
@@ -183,17 +142,25 @@ export default function Planning({ me, refresh, toast, go }: Ctx) {
         <div className="row">
           <button className="btn ghost sm" onClick={() => setAway(true)}>Imprévu</button>
           <button className="btn ghost sm" onClick={recalc} disabled={busy}>{busy ? "Calcul…" : "Recalculer avec ma forme"}</button>
-          <button className="btn ghost sm" onClick={() => setEditing(true)}>Changer de course</button>
+          <button className="btn ghost sm" aria-haspopup="dialog" onClick={(e) => raceF.open({ refine: false }, e.currentTarget)}>Changer de course</button>
         </div>
       } />
       <AbsenceBanner a={isPending("absence") ? null : v.absence ?? null} today={v.today} onEdit={() => setAway(true)} onCancel={cancelAbsence} />
       <Debriefs today={v.today} rev={rev} toast={toast} onAll={() => go("races")} />
       <LearningCard l={v.learning} onToggle={async (off) => { try { await api("/api/plan", { method: "PATCH", body: { learningOff: off, today: v.today } }); await Promise.all([load(), refresh()]); toast(off ? "Plan d’origine rétabli, sans ajustement." : "Ajustements réactivés."); } catch (e) { toast(e instanceof Error ? e.message : "Erreur"); } }} />
       {away && <AbsenceSheet a={v.absence ?? null} today={v.today} onClose={() => setAway(false)} onSaved={absenceSaved} />}
-      <RaceHeader p={p} onRefine={() => { setRefine(true); setEditing(true); }} />
+      <RaceHeader p={p} onRefine={(el) => raceF.open({ refine: true }, el)} />
+      <Fiche ctl={raceF} kind="raceform">
+        {raceF.value && (
+          <>
+            <FicheHead eyebrow="Ma course" title={raceF.value.refine ? "Affiner le temps estimé" : "Changer de course"} onClose={raceF.close} />
+            <div className="panel-body"><RaceForm goal={v.goal} today={v.today} refine={raceF.value.refine} onSaved={async (m) => { raceF.close(); await saved(m); }} onCancel={raceF.close} /></div>
+          </>
+        )}
+      </Fiche>
       <section className="card plan-board" style={{ marginTop: 14 }}>
-        <PlanBoard today={v.today} rev={rev} targets={me.targets} onStatus={setStatus} onWhere={whereTo} onMoveTo={moveTo} onRestore={restore} onChanged={noted}>
-          <WeekList sessions={v.sessions} weeks={p.weeks} today={v.today} doneByWeek={v.doneByWeek} onStatus={setStatus} targets={me.targets} onWhere={whereTo} onMove={move} />
+        <PlanBoard today={v.today} rev={rev} targets={me.targets} actions={actions} onWhere={whereTo} onChanged={noted}>
+          <WeekList sessions={v.sessions} weeks={p.weeks} today={v.today} doneByWeek={v.doneByWeek} onStatus={setStatus} targets={me.targets} onWhere={whereTo} onMove={move} actions={actions} onChanged={noted} />
         </PlanBoard>
       </section>
       <RaceWeather key={v.goal.route?.uploadedAt ?? 0} toast={toast} onAdjust={setWx} daysTo={p.race.daysTo} />
@@ -202,7 +169,7 @@ export default function Planning({ me, refresh, toast, go }: Ctx) {
       <SideRaces races={v.races} today={v.today} mainDate={v.goal.date} toast={toast} onChanged={async () => { await Promise.all([load(), refresh()]); }} />
       <div className="grid g2 folds" style={{ marginTop: 14 }}>
         <Needs p={p} />
-        <Fold id="plan-volume" title="Volume semaine par semaine" aside={<span className="chip">{p.weeks.length} semaines</span>}>
+        <Fold fiche id="plan-volume" title="Volume semaine par semaine" aside={<span className="chip">{p.weeks.length} semaines</span>}>
           <WeekChart weeks={p.weeks} done={v.doneByWeek} today={v.today} />
           <div className="legend">
             {["Fondation", "Développement", "Spécifique", "Affûtage"].filter((ph) => p.weeks.some((w) => w.phase === ph)).map((ph) => <span key={ph}><i style={{ background: PHASE_COLOR[ph], height: 8 }} />{ph}</span>)}
@@ -250,10 +217,10 @@ function courseLabel(c: NonNullable<RacePlan["estimateCourse"]>) {
   return c.from === "vainqueur" ? `parcours ${txt} (temps du vainqueur précédent)` : `terrain ${txt}`;
 }
 
-function RaceHeader({ p, onRefine }: { p: RacePlan; onRefine: () => void }) {
+function RaceHeader({ p, onRefine }: { p: RacePlan; onRefine: (el: HTMLElement) => void }) {
   const vd = VERDICT[p.verdict];
   const g = p.diagnosis?.gaps, opts = p.diagnosis?.options;
-  const [fixOpen, setFixOpen] = useFold("plan-risk-fix", false);
+  const fix = useFiche<true>();
   return (
     <section className="card race" style={{ ["--accent" as string]: vd.color }}>
       <div className="race-top">
@@ -273,7 +240,7 @@ function RaceHeader({ p, onRefine }: { p: RacePlan; onRefine: () => void }) {
           <span>{estimateSource(p)}</span>
           {p.estimateCourse?.from && <span>{courseLabel(p.estimateCourse)}</span>}
           {calibLabel(p.calib) && <span className="calib">{calibLabel(p.calib)}</span>}
-          <button type="button" className="link small race-refine" onClick={onRefine}>{p.estimateFrom === "reference" || p.estimateCourse?.from ? "Modifier les repères" : "Affiner ce temps"}</button>
+          <button type="button" className="link small race-refine" aria-haspopup="dialog" onClick={(e) => onRefine(e.currentTarget.closest<HTMLElement>(".race-time") ?? e.currentTarget)}>{p.estimateFrom === "reference" || p.estimateCourse?.from ? "Modifier les repères" : "Affiner ce temps"}</button>
         </div>
       </div>
       <div className="race-verdict">
@@ -296,13 +263,18 @@ function RaceHeader({ p, onRefine }: { p: RacePlan; onRefine: () => void }) {
         {p.notes.length > 0 && <ul className="race-notes">{p.notes.map((n) => <li key={n}>{n}</li>)}</ul>}
         {opts && opts.length > 0 && (
           <div className="risk-fix">
-            <button className="btn ghost sm" aria-expanded={fixOpen} onClick={() => setFixOpen(!fixOpen)}>{fixOpen ? "Masquer les pistes" : `Comment ${p.verdict === "risque" ? "réduire le risque" : "gagner de la marge"} · ${opts.length} piste${opts.length > 1 ? "s" : ""}`}</button>
-            {fixOpen && (
-              <>
-                <ol className="fix-list">{opts.map((o) => <li key={o.title}><b>{o.title}</b><span>{o.text}</span></li>)}</ol>
-                {p.diagnosis?.keep && <p className="fix-keep"><b>Si tu gardes cette course.</b> {p.diagnosis.keep}</p>}
-              </>
-            )}
+            <button className="btn ghost sm" aria-haspopup="dialog" onClick={(e) => fix.open(true, e.currentTarget)}>{`Comment ${p.verdict === "risque" ? "réduire le risque" : "gagner de la marge"} · ${opts.length} piste${opts.length > 1 ? "s" : ""}`}</button>
+            <Fiche ctl={fix} kind="tips">
+              {fix.value && (
+                <>
+                  <FicheHead eyebrow={vd.label} title={p.verdict === "risque" ? "Comment réduire le risque" : "Comment gagner de la marge"} onClose={fix.close} />
+                  <div className="panel-body">
+                    <ol className="fix-list">{opts.map((o) => <li key={o.title}><b>{o.title}</b><span>{o.text}</span></li>)}</ol>
+                    {p.diagnosis?.keep && <p className="fix-keep"><b>Si tu gardes cette course.</b> {p.diagnosis.keep}</p>}
+                  </div>
+                </>
+              )}
+            </Fiche>
           </div>
         )}
       </div>
@@ -326,7 +298,7 @@ function Needs({ p }: { p: RacePlan }) {
     { k: "Dénivelé par semaine", now: p.current.weeklyGain, reach: Math.max(...p.weeks.map((w) => w.gainM)), need: p.demands.weeklyGain, fmt: (n: number) => `${fmtNum(n)} m` },
   ];
   return (
-    <Fold id="plan-needs" title="Ce qu’il faut pour finir" aside={<span className="chip dim">{rows.filter((r) => r.reach >= r.need * 0.95).length}/{rows.length} repères atteints</span>}>
+    <Fold fiche id="plan-needs" title="Ce qu’il faut pour finir" aside={<span className="chip dim">{rows.filter((r) => r.reach >= r.need * 0.95).length}/{rows.length} repères atteints</span>}>
       {rows.map((r) => {
         const max = Math.max(r.need, r.reach, r.now) || 1;
         return (
@@ -390,7 +362,6 @@ function WeekChart({ weeks, done, today }: { weeks: PlanWeek[]; done: Record<str
 }
 
 // ---------- Liste des semaines ----------
-const movable = (s: Session, today: string) => s.template !== "race" && s.date >= today && (s.status === "planned" || s.status === "adapted");
 
 /** Maintenir une séance (ou la saisir à la souris) puis la lâcher sur un autre jour. */
 function useDragMove(sessions: Session[], today: string, onMove: (a: Session, b: Session) => void) {
@@ -432,9 +403,10 @@ function useDragMove(sessions: Session[], today: string, onMove: (a: Session, b:
   };
 }
 
-function WeekList({ sessions, weeks, today, doneByWeek, onStatus, targets, onWhere, onMove }: { sessions: Session[]; weeks: PlanWeek[]; today: string; doneByWeek: Record<string, number>; onStatus: (s: Session, st: string) => void; targets?: Targets; onWhere: (s: Session) => void; onMove: (a: Session, b: Session) => void }) {
+function WeekList({ sessions, weeks, today, doneByWeek, onStatus, targets, onWhere, onMove, actions, onChanged }: { sessions: Session[]; weeks: PlanWeek[]; today: string; doneByWeek: Record<string, number>; onStatus: (s: Session, st: string) => void; targets?: Targets; onWhere: (s: Session) => void; onMove: (a: Session, b: Session) => void; actions: ReturnType<typeof planActions>; onChanged: () => Promise<unknown> }) {
   const drag = useDragMove(sessions, today, onMove);
-  const fc = useForecast(today);
+  // Toucher une séance ouvre sa fiche (par-dessus la liste).
+  const sheet = useFiche<Session>();
   const cur = monday(today);
   const groups = useMemo(() => {
     const m = new Map<string, Session[]>();
@@ -442,9 +414,7 @@ function WeekList({ sessions, weeks, today, doneByWeek, onStatus, targets, onWhe
     return [...m.entries()];
   }, [sessions]);
   const [open, setOpen] = useState<Set<string>>(() => new Set([cur, groups.find(([k]) => k > cur)?.[0] ?? ""]));
-  const [detail, setDetail] = useState<number | null>(null);
   const toggle = (k: string) => setOpen((o) => { const n = new Set(o); if (n.has(k)) n.delete(k); else n.add(k); return n; });
-  const openDetail = (id: number) => withTransition(() => flushSync(() => setDetail(detail === id ? null : id)));
 
   return (
     <div>
@@ -480,8 +450,8 @@ function WeekList({ sessions, weeks, today, doneByWeek, onStatus, targets, onWhe
                 {list.map((s) => (
                   <li key={s.id} data-sid={s.id} data-date={s.date} style={{ viewTransitionName: `sess-${s.id}` }} className={`item ${s.date === today ? "today" : ""} is-${s.status} ${s.template === "race" ? "is-race" : ""} ${movable(s, today) ? "is-movable" : ""}`}>
                     <div className="date" onPointerDown={drag(s)} title={movable(s, today) ? "Maintiens pour déplacer la séance" : undefined}><small>{shortDay(s.date)}</small><b>{dayNum(s.date)}</b></div>
-                    <button onClick={(e) => { if (s.template === "race" && s.date <= today) openPanel({ kind: "race", date: s.date }, e.currentTarget.closest("li")); else openDetail(s.id); }} style={{ all: "unset", cursor: "pointer", minWidth: 0 }}
-                      aria-expanded={s.template === "race" && s.date <= today ? undefined : detail === s.id} aria-haspopup={s.template === "race" && s.date <= today ? "dialog" : undefined}>
+                    <button className="sess-open" onClick={(e) => { const li = e.currentTarget.closest("li"); if (s.template === "race" && s.date <= today) openPanel({ kind: "race", date: s.date }, li); else sheet.open(s, li); }} style={{ all: "unset", cursor: "pointer", minWidth: 0 }}
+                      aria-haspopup="dialog">
                       <div className="t">{s.template === "race" ? "⚑ " : ""}{s.title}{s.template === "race" && s.date <= today && <span className="chip ember race-db">Débrief</span>}</div>
                       <div className="s">
                         {fmtDur(s.duration_min)}{s.gain_m ? ` · ${fmtNum(s.gain_m)} m D+` : ""}{s.template !== "race" ? ` · effort ${s.rpe_target}/10` : ""}
@@ -501,7 +471,6 @@ function WeekList({ sessions, weeks, today, doneByWeek, onStatus, targets, onWhe
                         <button className="iconbtn" title="Rétablir" aria-label="Rétablir la séance" onClick={() => onStatus(s, "planned")}><IconUndo /></button>
                       )}
                     </div>
-                    {detail === s.id && <div className="details"><SessionTarget targets={targets} template={s.template} rpe={s.rpe_target} duration={s.duration_min} title={s.title} gain={s.gain_m} sport={s.sport} day={s.date >= today ? dayOf(fc, s.date) : null} /><p style={{ margin: 0 }}>{s.description}</p>{s.template !== "race" && s.date >= today && <div className="row" style={{ gap: 8 }}><button className="btn ghost sm where" onClick={() => onWhere(s)}><IconTerrain />Où la faire ?</button>{s.template !== "strength" && <button className="btn ghost sm where" onClick={() => downloadWorkout(s, targets)}><IconWatch />Sur ma montre</button>}{s.template !== "strength" && s.template !== "recovery" && <button className="iconbtn sm" aria-label="Comment mettre la séance sur ma montre" onClick={() => window.dispatchEvent(new CustomEvent("tp-watch-help", { detail: "" }))}>?</button>}<StrengthButton s={s} onDone={s.template === "strength" && movable(s, today) ? () => onStatus(s, "done") : undefined} /></div>}</div>}
                   </li>
                 ))}
               </ul>
@@ -509,6 +478,9 @@ function WeekList({ sessions, weeks, today, doneByWeek, onStatus, targets, onWhe
           </div>
         );
       })}
+      <Fiche ctl={sheet} kind="day">
+        {sheet.value && <DaySheet date={sheet.value.date} focus={sheet.value.id} today={today} targets={targets} actions={actions} onWhere={onWhere} onChanged={onChanged} close={sheet.close} />}
+      </Fiche>
     </div>
   );
 }

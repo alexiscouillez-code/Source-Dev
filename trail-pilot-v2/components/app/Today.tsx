@@ -15,22 +15,24 @@ import Coach from "./Coach";
 import WeekCard from "./WeekCard";
 import { api, dayLabel, fmtDur, fmtNum, localToday, SPORT_LABEL, VERDICT, type Me, type PlanSession } from "./client";
 import { QUICK_EVENT, takeQuick } from "./quick";
+import { Fiche, FicheHead, useFiche } from "./Fiche";
+import DaySheet from "./DaySheet";
+import { planActions } from "./planActions";
+import { useMemo } from "react";
 
 export default function Today({ me, refresh, go, toast }: Ctx) {
-  const [editing, setEditing] = useState(!me.checkin);
-  // Action rapide « Check-in du jour » (bouton + de la barre du bas) : ouvre le check-in et l'amène à l'écran.
+  // Check-in, séance du jour et coach : en fiches, par-dessus l'accueil.
+  const ci = useFiche<true>(), sheet = useFiche<PlanSession>(), coach = useFiche<true>();
+  const openCi = ci.open;
+  // Action rapide « Check-in du jour » (bouton + de la barre du bas, raccourci) : ouvre la fiche du check-in.
   useEffect(() => {
-    const on = () => {
-      if (!takeQuick("checkin")) return;
-      setEditing(true);
-      window.setTimeout(() => document.querySelector(".ci-card")?.scrollIntoView({ behavior: "smooth", block: "center" }), 450);
-    };
+    const on = () => { if (takeQuick("checkin")) window.setTimeout(() => openCi(true, document.querySelector<HTMLElement>(".ci-cta, .verdict")), 60); };
     on();
     window.addEventListener(QUICK_EVENT, on);
     return () => window.removeEventListener(QUICK_EVENT, on);
-  }, []);
+  }, [openCi]);
+  const actions = useMemo(() => planActions({ toast, after: () => refresh() }), [toast, refresh]);
   const [busy, setBusy] = useState(false);
-  const [ask, setAsk] = useState(false);
   const firstName = me.user.name?.split(" ")[0];
   const hour = new Date().getHours();
   const hello = hour < 5 ? "Bonsoir" : hour < 18 ? "Bonjour" : "Bonsoir";
@@ -70,11 +72,7 @@ export default function Today({ me, refresh, go, toast }: Ctx) {
         </div>
       )}
       <div className="grid g2">
-        {me.decision && !editing ? (
-          <DecisionCard me={me} onEdit={() => setEditing(true)} />
-        ) : (
-          <CheckinCard me={me} onDone={async (msg) => { await refresh(); setEditing(false); toast(msg); }} onCancel={me.checkin ? () => setEditing(false) : undefined} />
-        )}
+        {me.decision ? <DecisionCard me={me} onEdit={(el) => ci.open(true, el)} /> : <CheckinCta onOpen={(el) => ci.open(true, el)} />}
 
         <section className="card" aria-labelledby="next-title">
           <div className="card-head">
@@ -83,7 +81,7 @@ export default function Today({ me, refresh, go, toast }: Ctx) {
           </div>
           {(() => {
             const s = me.todayPlan && me.todayPlan.status !== "done" ? me.todayPlan : me.tomorrowPlan;
-            if (s) return <SessionBlock s={s} targets={me.targets} />;
+            if (s) return <SessionTile s={s} onOpen={(el) => sheet.open(s, el)} />;
             if (me.needsPlan) return (
               <div className="empty">
                 Aucun planning pour l’instant. Trail Pilot le construit à partir de ton historique, de tes disponibilités et de ton objectif.
@@ -102,10 +100,20 @@ export default function Today({ me, refresh, go, toast }: Ctx) {
         </div>
       )}
       <TodayRun today={me.today} onTerrains={() => go("terrains")} />
-      <FormCard me={me} go={go} onAsk={() => setAsk((x) => !x)} asking={ask} />
-      {ask && <Coach toast={toast} />}
+      <FormCard me={me} go={go} onAsk={(el) => coach.open(true, el)} />
       <WeekCard today={me.today} toast={toast} />
       {Number(me.today.slice(8, 10)) <= 5 && me.recent.length > 0 && <RecapTeaser today={me.today} />}
+      <Fiche ctl={ci} kind="checkin">
+        {ci.value && <CheckinCard me={me} close={ci.close} onDone={async (msg) => { ci.close(); await refresh(); toast(msg); }} />}
+      </Fiche>
+      <Fiche ctl={sheet} kind="day">
+        {sheet.value && <DaySheet date={sheet.value.date} focus={sheet.value.id} today={me.today} targets={me.targets} actions={actions}
+          onWhere={(x) => { try { sessionStorage.setItem("tp-terrain-preset", JSON.stringify({ title: x.title, date: x.date, template: x.template, durationMin: x.duration_min, gainM: x.gain_m })); } catch { /* stockage indisponible */ } go("terrains"); }}
+          onChanged={refresh} close={sheet.close} />}
+      </Fiche>
+      <Fiche ctl={coach} kind="coach">
+        {coach.value && <><FicheHead eyebrow="Coach" title="Pose ta question" onClose={coach.close} /><div className="panel-body"><Coach toast={toast} /></div></>}
+      </Fiche>
     </>
   );
 }
@@ -114,7 +122,7 @@ export default function Today({ me, refresh, go, toast }: Ctx) {
  * Troisième bloc : où en est ma forme, en une phrase, avec trois repères.
  * Le détail (courbes, zones, records) est dans Analyse.
  */
-function FormCard({ me, go, onAsk, asking }: { me: Me; go: Ctx["go"]; onAsk: () => void; asking: boolean }) {
+function FormCard({ me, go, onAsk }: { me: Me; go: Ctx["go"]; onAsk: (el: HTMLElement) => void }) {
   const l = me.load, f = l.form;
   const line = !l.calibrated ? `Calibrage en cours (${l.historyDays} jours sur 28) : les repères se fiabilisent au fil des séances.`
     : f <= -25 ? "Fatigue marquée : la charge récente dépasse nettement ce que tu as l’habitude d’encaisser."
@@ -134,7 +142,7 @@ function FormCard({ me, go, onAsk, asking }: { me: Me; go: Ctx["go"]; onAsk: () 
       </dl>
       <div className="row" style={{ gap: 8 }}>
         <button className="btn ghost sm" onClick={() => go("analysis")}>Voir l’analyse</button>
-        <button className="btn ghost sm" onClick={onAsk} aria-expanded={asking}>{asking ? "Fermer le coach" : "Poser une question au coach"}</button>
+        <button className="btn ghost sm" aria-haspopup="dialog" onClick={(e) => onAsk(e.currentTarget)}>Poser une question au coach</button>
       </div>
     </section>
   );
@@ -169,12 +177,42 @@ export function SessionBlock({ s, targets }: { s: PlanSession; targets?: Me["tar
   );
 }
 
-function DecisionCard({ me, onEdit }: { me: Me; onEdit: () => void }) {
+/** Séance du jour (ou de demain) en résumé ; la toucher ouvre sa fiche complète. */
+function SessionTile({ s, onOpen }: { s: PlanSession; onOpen: (el: HTMLElement) => void }) {
+  return (
+    <button type="button" className="session session-tile" aria-haspopup="dialog" onClick={(e) => onOpen(e.currentTarget)}>
+      <span className="row between"><span className="eyebrow">{dayLabel(s.date, { weekday: "long", day: "numeric", month: "short" })} · {s.phase}</span><StatusChip status={s.status} /></span>
+      <span className="session-title">{s.title}</span>
+      <span className="specs">
+        <span><b>{fmtDur(s.duration_min)}</b><small>Durée</small></span>
+        <span><b>{s.rpe_target}/10</b><small>Effort</small></span>
+        {s.gain_m ? <span><b>{s.gain_m} m</b><small>D+ visé</small></span> : null}
+        <span><b>{SPORT_LABEL[s.sport] ?? s.sport}</b><small>Activité</small></span>
+      </span>
+      <span className="tile-more">Allures, météo, description et actions<span aria-hidden="true">›</span></span>
+    </button>
+  );
+}
+
+/** Pas encore de check-in aujourd'hui : l'invitation, qui ouvre la fiche du check-in. */
+function CheckinCta({ onOpen }: { onOpen: (el: HTMLElement) => void }) {
+  return (
+    <section className="card ci-cta" aria-labelledby="cta-title">
+      <span className="eyebrow">10 secondes</span>
+      <h2 id="cta-title" style={{ margin: "4px 0 0" }}>Comment tu te sens ce matin ?</h2>
+      <p className="soft small" style={{ margin: 0 }}>Sommeil, jambes, motivation, douleur : ta séance du jour s’adapte à ta forme.</p>
+      <span className="cta-dots" aria-hidden="true">{[0, 1, 2, 3].map((i) => <i key={i} style={{ ["--i" as string]: i }} />)}</span>
+      <button type="button" className="btn" aria-haspopup="dialog" onClick={(e) => onOpen(e.currentTarget.closest<HTMLElement>(".ci-cta") ?? e.currentTarget)}>Faire mon check-in</button>
+    </section>
+  );
+}
+
+function DecisionCard({ me, onEdit }: { me: Me; onEdit: (el: HTMLElement) => void }) {
   const d = me.decision!;
   const v = VERDICT[d.verdict];
   return (
     <section className="card verdict" style={{ ["--accent" as string]: v.color }} aria-live="polite">
-      <div className="row between"><span className="eyebrow">Décision du jour</span><button className="link small" onClick={onEdit}>Modifier mon check-in</button></div>
+      <div className="row between"><span className="eyebrow">Décision du jour</span><button className="link small" aria-haspopup="dialog" onClick={(e) => onEdit(e.currentTarget.closest<HTMLElement>(".verdict") ?? e.currentTarget)}>Modifier mon check-in</button></div>
       <div className="verdict-row">
         <div className="verdict-big verdict-stamp" key={d.verdict}>{v.label}</div>
         <FormGauge score={d.score} />
@@ -207,7 +245,7 @@ const SCALES = [
   { key: "motivation", label: "Motivation", low: "À plat", high: "À bloc" },
 ] as const;
 
-function CheckinCard({ me, onDone, onCancel }: { me: Me; onDone: (msg: string) => Promise<void>; onCancel?: () => void }) {
+function CheckinCard({ me, onDone, close }: { me: Me; onDone: (msg: string) => Promise<void>; close: () => void }) {
   const [v, setV] = useState({ sleep: me.checkin?.sleep ?? 3, legs: me.checkin?.legs ?? 3, motivation: me.checkin?.motivation ?? 3, pain: me.checkin?.pain ?? 0 });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -233,9 +271,10 @@ function CheckinCard({ me, onDone, onCancel }: { me: Me; onDone: (msg: string) =
   }
 
   return (
-    <section className="card ci-card" aria-labelledby="ci-title" aria-busy={busy}>
+    <>
+    <FicheHead eyebrow="10 secondes" title="Check-in du matin" onClose={close} />
+    <section className="panel-body ci-card" aria-busy={busy}>
       {busy && <div className="analyzing" role="status"><span className="az-core"><span className="ring" /><i style={{ ["--a" as string]: "-90deg" }}>{v.sleep}</i><i style={{ ["--a" as string]: "30deg" }}>{v.legs}</i><i style={{ ["--a" as string]: "150deg" }}>{v.motivation}</i></span><b>Analyse de ta forme…</b><ul><li>Sommeil et jambes</li><li>Charge des 7 derniers jours</li><li>Séance du jour</li></ul></div>}
-      <div className="row between"><div><span className="eyebrow">10 secondes</span><h2 id="ci-title" style={{ marginTop: 4 }}>Check-in du matin</h2></div>{onCancel && <button className="link small" onClick={onCancel}>Annuler</button>}</div>
       <form className="form" onSubmit={submit}>
         {SCALES.map((s) => (
           <fieldset key={s.key} className="scale">
@@ -299,6 +338,7 @@ function CheckinCard({ me, onDone, onCancel }: { me: Me; onDone: (msg: string) =
         <button className="btn" type="submit" disabled={busy}>{busy ? "Analyse…" : "Voir ma décision"}</button>
       </form>
     </section>
+    </>
   );
 }
 

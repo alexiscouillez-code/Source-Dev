@@ -32,7 +32,7 @@ export default function GearList({ items: initial, daysTo, toast }: { items: Gea
   const ready = items.filter((x) => x.checked).length;
   const soon = daysTo <= 2;
   return (
-    <Fold id="plan-gear" style={{ marginTop: 14 }} title="Matériel obligatoire" defaultOpen={soon}
+    <Fold fiche id="plan-gear" style={{ marginTop: 14 }} title="Matériel obligatoire" defaultOpen={soon}
       aside={<span className={`chip ${items.length && ready === items.length ? "ok" : soon && items.length ? "lite" : "dim"}`}>{items.length ? `${ready}/${items.length} prêt${ready > 1 ? "s" : ""}` : "À compléter"}</span>}>
       <p className="soft small" style={{ margin: 0 }}>Recopie la liste du règlement de ta course : elle est souvent contrôlée au retrait du dossard ou en course. La veille, coche chaque objet en faisant ton sac. Elle figure aussi sur ta fiche de course.</p>
       {items.length > 0 && (

@@ -193,6 +193,36 @@ export async function syncUser(userId: number, opts: { auto?: boolean } = {}) {
   }
 }
 
+/**
+ * Historique complet : le premier import ne remonte qu'à 120 jours. Chaque appel importe jusqu'à `pages` × 100
+ * sorties plus anciennes que la plus ancienne déjà importée, jusqu'à la toute première (on le note alors).
+ * Pour le comparateur et Mes courses ; l'analyse fine (cardio, altitude) se fait à la demande.
+ */
+export async function importHistory(userId: number, pages = 3) {
+  const link = await one<Link>("SELECT * FROM strava_links WHERE user_id = ?", [userId]);
+  if (!link) throw new StravaError(404, "Aucun compte Strava relié.");
+  const token = await accessToken(link);
+  const oldest = await one<{ d: string | null }>("SELECT MIN(date) AS d FROM activities WHERE user_id = ? AND strava_id IS NOT NULL", [userId]);
+  let before = Math.floor((oldest?.d ? Date.parse(`${oldest.d}T00:00:00Z`) : Date.now()) / 1000);
+  let imported = 0, done = false;
+  for (let page = 0; page < pages; page++) {
+    const list = await api<StravaActivity[]>(token, `/athlete/activities?before=${before}&per_page=100&page=1`);
+    for (const a of list) { await upsertActivity(userId, a); imported++; }
+    if (list.length < 100) { done = true; break; }
+    // Page suivante : avant la plus ancienne de ce lot (les dates Strava sont en heure locale de départ).
+    const first = Math.min(...list.map((a) => Date.parse(a.start_date)));
+    before = Math.floor(first / 1000);
+  }
+  if (done) await run("INSERT OR REPLACE INTO app_kv(key, value, updated_at) VALUES (?, '1', ?)", [`history:${userId}`, Date.now()]);
+  const now = await one<{ d: string | null; n: number }>("SELECT MIN(date) AS d, COUNT(*) AS n FROM activities WHERE user_id = ? AND strava_id IS NOT NULL", [userId]);
+  return { imported, done, oldest: now?.d ?? null, total: now?.n ?? 0 };
+}
+
+/** L'historique Strava a-t-il été importé jusqu'à la première sortie ? */
+export async function historyDone(userId: number) {
+  return !!(await one("SELECT 1 FROM app_kv WHERE key = ?", [`history:${userId}`]));
+}
+
 // ---------- Webhook ----------
 export interface WebhookEvent { object_type: "activity" | "athlete"; object_id: number; aspect_type: "create" | "update" | "delete"; owner_id: number; updates?: Record<string, string> }
 

@@ -7,8 +7,9 @@ import { api, localToday, type Me } from "./client";
 import { IconChart, IconCheck, IconCompare, IconFlag, IconPin, IconPlan, IconPlus, IconRecap, IconRuns, IconSearch, IconSync, IconTerrain, IconToday, IconUser, Logo } from "./icons";
 import Races from "./Races";
 import Panels from "./Panels";
+import { ficheDepth } from "./Fiche";
 import Palette, { openPalette, type Command } from "./Palette";
-import { openPanel, setPick } from "./panel";
+import { openPanel } from "./panel";
 import { APPEARANCES, getAuto, setAppearance, setAuto } from "@/components/appearance";
 import BottomNav, { type Badge, type IslandMessage, type QuickAction } from "./BottomNav";
 import { QUICK_EVENT, setQuick, takeQuick } from "./quick";
@@ -155,7 +156,15 @@ export default function AppShell({ user }: { user: { name: string | null; email:
 
   // Changement d’onglet : la vue glisse dans le sens de la navigation (transition de vue native).
   const go = (t: Tab) => {
-    window.history.replaceState(null, "", `#${t}`);
+    // Fiches ouvertes : on les referme d'abord (leurs entrées d'historique sont dépilées), puis on change d'onglet.
+    const depth = ficheDepth();
+    if (depth > 0) {
+      const once = () => { window.removeEventListener("popstate", once); window.setTimeout(() => goRef.current(t), 40); };
+      window.addEventListener("popstate", once);
+      window.history.go(-depth);
+      return;
+    }
+    window.history.replaceState(window.history.state, "", `#${t}`);
     if (t === tab) { window.scrollTo({ top: 0, behavior: "smooth" }); return; }
     const dir = TABS.findIndex((x) => x.id === t) > TABS.findIndex((x) => x.id === tab) ? "fwd" : "back";
     // Avec une transition de page, la nouvelle vue n'a pas besoin de sa propre animation d'entrée (sinon elle se
@@ -233,18 +242,18 @@ export default function AppShell({ user }: { user: { name: string | null; email:
       run: () => (x.past ? openPanel({ kind: "race", key: x.key }) : goRef.current(x.main ? "plan" : "races")) }));
   }, []);
   // Mode « comparer » : on choisit deux sorties dans Séances.
-  const startCompare = () => { setPick({ on: true, ids: [] }); go("runs"); };
+  const startCompare = () => openPanel({ kind: "pick" });
 
   // ---------- Raccourcis (appui long sur une icône de la barre) ----------
   const jump = (t: Tab, sel: string, opts: { text?: string; press?: boolean } = {}) => () => { setQuick({ kind: "jump", sel, ...opts }); go(t); };
   const shortcuts: Record<string, QuickAction[]> = {
     today: [
       { id: "ci", label: "Check-in du jour", hint: "Sommeil, jambes, motivation", Icon: IconCheck, onSelect: () => { setQuick({ kind: "checkin" }); go("today"); } },
-      { id: "next", label: "Séance du jour", hint: "Ce qui est prévu", Icon: IconPlan, onSelect: jump("today", "#next-title") },
+      { id: "next", label: "Séance du jour", hint: "Ce qui est prévu", Icon: IconPlan, onSelect: jump("today", ".session-tile", { press: true }) },
       { id: "last", label: "Ma dernière sortie", hint: "Profil, allure, charge", Icon: IconRuns, onSelect: jump("today", ".night") },
     ],
     plan: [
-      { id: "today", label: "Séance du jour", hint: "Ouvrir son détail", Icon: IconPlan, onSelect: jump("plan", "li.item.today button[aria-expanded]", { press: true }) },
+      { id: "today", label: "Séance du jour", hint: "Ouvrir sa fiche", Icon: IconPlan, onSelect: jump("plan", "li.item.today .sess-open, .cal-day.today", { press: true }) },
       { id: "race", label: "Ma course", hint: "Temps estimé, stratégie", Icon: IconFlag, onSelect: jump("plan", ".race") },
       { id: "away", label: "Je ne peux pas courir", hint: "Malade, blessé, en déplacement", Icon: IconPause, onSelect: jump("plan", "button.btn", { text: "Imprévu", press: true }) },
       { id: "races", label: "Mes courses", hint: "Résultats, débriefs, comparaisons", Icon: IconFlag, onSelect: () => go("races") },
@@ -275,14 +284,17 @@ export default function AppShell({ user }: { user: { name: string | null; email:
       const q = takeQuick("jump");
       if (!q) return;
       const t0 = performance.now();
-      const find = () => [...document.querySelectorAll<HTMLElement>(`.view ${q.sel}`)].find((e) => !q.text || e.textContent?.includes(q.text));
+      // L'élément peut être dans la page ou dans une fiche ouverte (rubriques du Planning).
+      const find = () => [...document.querySelectorAll<HTMLElement>(`.view ${q.sel}, .panel ${q.sel}`)].find((e) => !q.text || e.textContent?.includes(q.text));
       let unfolded = false;
       const tick = () => {
         if (cancel) return;
         // Rubrique repliée qui contient l'élément : on la déplie d'abord (une fois).
-        if (q.fold && !unfolded) { const f = document.querySelector<HTMLElement>(`.view [data-fold="${q.fold}"]`); if (f) { unfolded = true; if (f.matches(".is-closed")) f.querySelector<HTMLElement>(".fold-btn")?.click(); } }
+        if (q.fold && !unfolded) { const f = document.querySelector<HTMLElement>(`.view [data-fold="${q.fold}"]`); if (f) { unfolded = true; if (f.matches(".is-closed, .is-fiche")) f.querySelector<HTMLElement>(".fold-btn")?.click(); } }
         const el = find();
         if (!el) { if (performance.now() - t0 < 4000) window.setTimeout(tick, 120); return; }
+        // Rubrique en fiche : l'ouvrir suffit.
+        if (el.matches(".fold.is-fiche")) { el.querySelector<HTMLElement>(".fold-btn")?.click(); return; }
         if (el.matches(".fold.is-closed")) el.querySelector<HTMLElement>(".fold-btn")?.click();
         if (q.press) el.click();
         const target = el.closest<HTMLElement>(".card, li, section") ?? el;

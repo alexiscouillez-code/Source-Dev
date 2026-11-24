@@ -24,8 +24,11 @@ scenario("Charte pointillée, couleur de fond et transition du mode Verre", asyn
 
   // ---------- Planning : barres de volume, jauges, temps estimé ----------
   await tab(page, "plan"); await unfoldAll(page);
-  check(await shot(page, "svg.chart", "planning-volume"), "graphique de volume présent");
+  // Rubriques du Planning : en fiches. Volume semaine par semaine, puis ce qu'il faut pour finir.
+  await page.locator("[data-fold=plan-volume] .fold-btn").click(); await page.waitForSelector(".panel svg.chart"); await page.waitForTimeout(1200);
+  check(await shot(page, ".panel svg.chart", "planning-volume"), "graphique de volume présent (dans sa fiche)");
   check((await masked(page, "svg.chart .ch-bar")) > 0, "barres du volume en trame de points");
+  await page.locator(".panel-x").click(); await page.waitForTimeout(700);
   check((await masked(page, ".gap-bar, .need-bar i")) > 0, "jauges du plan en ligne de points");
   await shot(page, ".race", "planning-course");
   const rt = await page.evaluate(() => { const b = document.querySelector(".race-time b"); const s = getComputedStyle(b); return { w: s.fontWeight, f: s.fontFamily, bg: getComputedStyle(b.parentElement).backgroundColor }; });

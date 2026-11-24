@@ -94,26 +94,44 @@ scenario("Annuler, vibrations, mode automatique, fiches, comparaison, Mes course
   await page.goBack(); await page.waitForTimeout(800);
   check(await page.locator(".panel").count() === 0 && page.url().endsWith("#runs"), "le retour du téléphone ferme la fiche et reste sur Séances", page.url());
 
-  // ---------- Comparer deux sorties ----------
+  // ---------- Comparer deux sorties : sélecteur avec recherche ----------
   await page.getByRole("button", { name: "Comparer" }).first().click();
-  check(await page.locator(".pick-bar").isVisible(), "mode comparer : la barre de sélection apparaît");
-  const runs = page.locator(".run-open", { hasText: "Trail du Salève" });
-  await runs.nth(0).click(); await page.waitForTimeout(200);
-  check((await page.locator(".pick-txt").textContent()).includes("deuxième"), "une première sortie choisie");
-  await runs.nth(1).click();
+  await page.waitForSelector(".panel-pick .cp-row", { timeout: 6000 });
+  const all0 = await page.locator(".panel-pick .cp-row").count();
+  await page.locator(".cp-search input").fill("saleve");
+  await page.waitForTimeout(250);
+  const hits = await page.locator(".panel-pick .cp-row").count();
+  check(all0 >= 2 && hits === 2, "sélecteur : toutes les sorties, recherche sans accents (« saleve » trouve « Salève »)", { all0, hits });
+  await page.locator(".cp-search input").fill("21 km 2026");
+  await page.waitForTimeout(250);
+  check(await page.locator(".panel-pick .cp-row").count() === 2, "recherche par distance et année");
+  await page.locator(".cp-search input").fill("saleve"); await page.waitForTimeout(200);
+  await page.locator(".panel-pick .cp-row").nth(0).click(); await page.waitForTimeout(250);
+  await page.locator(".cp-search input").fill(""); await page.waitForTimeout(250);
+  const sim = await page.locator(".cp-sec h3").first().textContent();
+  check(/Comparables/.test(sim ?? ""), "une sortie choisie : les sorties comparables en tête", sim);
+  check(await page.locator(".cp-go .btn").isDisabled(), "le bouton attend la deuxième sortie");
+  await page.locator(".cp-sec").first().locator(".cp-row").first().click(); await page.waitForTimeout(250);
+  await page.screenshot({ path: `${OUT}/extras-picker.png` });
+  await page.locator(".cp-go .btn").click();
   await page.waitForSelector(".panel-compare .duel-row", { timeout: 6000 });
   await page.waitForTimeout(2000);
   const cmp = await page.evaluate(() => ({
     rows: document.querySelectorAll(".duel-row").length, lines: document.querySelectorAll(".cmp-lines").length, gap: document.querySelectorAll(".cmp-gap span").length,
     facts: [...document.querySelectorAll(".cmp-facts li")].map((l) => l.textContent), tags: [...document.querySelectorAll(".cmp-tag b")].map((b) => b.textContent),
-    win: document.querySelectorAll(".duel-v.win").length, pick: !!document.querySelector(".pick-bar"),
+    win: document.querySelectorAll(".duel-v.win").length, change: document.querySelectorAll(".cmp-change").length,
   }));
   check(cmp.rows >= 6 && cmp.win >= 1, "comparaison : duel chiffre par chiffre, meilleur côté marqué", cmp);
   check(cmp.lines === 2 && cmp.gap === 21, "comparaison : profils superposés, allures et écart cumulé sur 21 km", cmp);
   check(cmp.facts.some((f) => /plus rapide de/.test(f)), "comparaison : résumé (parcours comparable, plus rapide)", cmp.facts);
-  check(!cmp.pick, "la barre de sélection disparaît une fois la comparaison ouverte");
+  check(cmp.change === 2, "chaque côté peut être changé");
   await page.screenshot({ path: `${OUT}/extras-compare.png` });
-  await page.locator(".panel-x").click(); await page.waitForTimeout(700);
+  // « Changer » : retour au sélecteur, l'autre sortie gardée.
+  await page.locator(".cmp-change").nth(1).click();
+  await page.waitForSelector(".panel-pick .cp-slot.is-full", { timeout: 5000 });
+  check(await page.locator(".panel-pick .cp-slot.is-full").count() === 1, "« Changer » rouvre le sélecteur en gardant l'autre sortie");
+  await page.goBack(); await page.waitForTimeout(800);
+  check(await page.locator(".panel").count() === 0, "le retour du téléphone ferme la fiche (une seule entrée d'historique)");
 
   // ---------- Mes courses et débrief ----------
   await page.goto(BASE + "/espace#races"); await page.waitForTimeout(1600);
@@ -162,6 +180,66 @@ scenario("Annuler, vibrations, mode automatique, fiches, comparaison, Mes course
   check((await page.locator(".bnav-msg-txt").textContent().catch(() => "")).includes("faite"), "séance marquée faite : message avec Annuler");
   await page.locator(".bnav-msg-act").click(); await page.waitForTimeout(1800);
   check(await page.locator(`li.item[data-sid="${sid}"] [aria-label='Marquer comme faite']`).count() === 1, "Annuler : la séance redevient à faire");
+
+  // ---------- Planning et accueil en fiches ----------
+  await page.goto(BASE + "/espace#plan"); await page.waitForTimeout(1500);
+  const lsw2 = page.locator(".view-switch button", { hasText: "Liste" }).first();
+  if (await lsw2.count()) await lsw2.click();
+  await page.waitForTimeout(500);
+  const sess = page.locator("li.item:not(.is-race) .sess-open").first();
+  await sess.click();
+  await page.waitForSelector(".panel-day .day-sess", { timeout: 6000 });
+  await page.waitForTimeout(800);
+  const ds = await page.evaluate(() => ({ title: document.querySelector(".panel-day .panel-title")?.textContent, kpis: document.querySelectorAll(".panel-day .fk").length, desc: !!document.querySelector(".panel-day .day-desc"),
+    acts: [...document.querySelectorAll(".panel-day .day-main-acts .btn")].map((b) => b.textContent), comment: !!document.querySelector(".panel-day .cal-comment textarea"), details: document.querySelectorAll(".view .details").length }));
+  check(ds.kpis === 3 && ds.desc && ds.comment && ds.details === 0, "séance : sa fiche s'ouvre par-dessus la liste (chiffres, description, commentaire du jour)", ds);
+  check(ds.acts.join() === "C’est fait,Sauter,Déplacer", "fiche séance : faite, sauter, déplacer", ds.acts);
+  const over = await page.evaluate(() => {
+    const p = document.querySelector(".panel-day"); const r = p.getBoundingClientRect();
+    const out = [...p.querySelectorAll("*")].filter((e) => e.getBoundingClientRect().right > r.right + 1 && e.getBoundingClientRect().width > 0).slice(0, 6).map((e) => `${e.tagName}.${[...e.classList].join(".")} ${Math.round(e.getBoundingClientRect().right)}/${Math.round(e.getBoundingClientRect().width)}`);
+    return { right: Math.round(r.right), width: Math.round(r.width), vw: innerWidth, sw: p.scrollWidth, cw: p.clientWidth, out };
+  });
+  check(over.right <= over.vw && over.out.length === 0, "fiche séance : rien ne dépasse à droite", over);
+  await page.screenshot({ path: `${OUT}/extras-seance.png` });
+  await page.locator(".panel-day .day-main-acts .btn", { hasText: "Déplacer" }).click();
+  await page.waitForSelector(".move-day:not([disabled])", { timeout: 5000 });
+  const target = page.locator(".move-day:not([disabled])").nth(3);
+  const tlabel = await target.getAttribute("aria-label");
+  await target.click(); await page.waitForTimeout(1800);
+  check(/déplacée au/.test(await page.locator(".bnav-msg-txt").textContent().catch(() => "")), "déplacer depuis la fiche : bande de jours, puis message avec Annuler", tlabel);
+  await page.locator(".bnav-msg-act").click().catch(() => {}); await page.waitForTimeout(1500);
+  await page.keyboard.press("Escape"); await page.waitForTimeout(700);
+  check(await page.locator(".panel").count() === 0, "Échap ferme la fiche séance");
+  // Rubrique du planning en fiche (matériel obligatoire), puis « Changer de course ».
+  await page.locator("[data-fold=plan-gear] .fold-btn").click();
+  await page.waitForSelector(".panel-fold [data-fold-fiche=plan-gear]", { timeout: 5000 });
+  check(true, "les rubriques du Planning s'ouvrent en fiche");
+  await page.keyboard.press("Escape"); await page.waitForTimeout(700);
+  await page.getByRole("button", { name: "Changer de course" }).click();
+  await page.waitForSelector(".panel-raceform .race-form", { timeout: 5000 });
+  check(await page.locator(".view .race-form").count() === 0, "« Changer de course » s'ouvre en fiche, le planning reste dessous");
+  await page.keyboard.press("Escape"); await page.waitForTimeout(700);
+  // Accueil : séance du jour, check-in et coach en fiches.
+  await page.goto(BASE + "/espace#today"); await page.waitForTimeout(1500);
+  const tile = await page.waitForSelector(".session-tile, [aria-labelledby=next-title] .empty", { timeout: 6000 }).catch(async (e) => { await page.screenshot({ path: `${OUT}/extras-debug-today.png` }); console.log(await page.evaluate(() => ({ hash: location.hash, view: document.querySelector(".view")?.className, panels: document.querySelectorAll(".panel").length, h2: [...document.querySelectorAll("h2")].map((h) => h.textContent).slice(0, 8) }))); throw e; });
+  if (await tile.evaluate((e) => e.classList.contains("session-tile"))) {
+    await tile.click();
+    await page.waitForSelector(".panel-day .day-sess", { timeout: 6000 });
+    check(true, "accueil : la séance du jour s'ouvre en fiche");
+    await page.keyboard.press("Escape"); await page.waitForTimeout(700);
+  }
+  await page.getByRole("button", { name: "Faire mon check-in" }).click();
+  await page.waitForSelector(".panel-checkin .ci-card", { timeout: 5000 });
+  await page.screenshot({ path: `${OUT}/extras-checkin.png` });
+  await page.locator(".panel-checkin .ci-note textarea").fill("Jambes lourdes après le week-end.");
+  await page.locator(".panel-checkin button[type=submit]").click();
+  await page.waitForSelector(".verdict", { timeout: 15000 });
+  await page.waitForTimeout(900);
+  check(await page.locator(".panel").count() === 0 && /Jambes lourdes/.test(await page.locator(".verdict").textContent()), "check-in en fiche : la fiche se ferme sur la décision, avec le commentaire");
+  await page.getByRole("button", { name: "Poser une question au coach" }).click();
+  await page.waitForSelector(".panel-coach", { timeout: 5000 });
+  check(true, "le coach s'ouvre en fiche");
+  await page.keyboard.press("Escape"); await page.waitForTimeout(700);
 
   // ---------- Vibrations ----------
   await page.waitForSelector(".bnav-msg", { state: "detached", timeout: 8000 }).catch(() => {});
@@ -238,6 +316,23 @@ scenario("Annuler, vibrations, mode automatique, fiches, comparaison, Mes course
       await page.screenshot({ path: `${OUT}/extras-${m[0]}-${name}-fond.png` });
       await hide.evaluate((e) => e.remove()); await css.evaluate((e) => e.remove());
       await page.locator(".panel-x").click(); await page.waitForTimeout(700);
+    }
+  }
+  await page.goto(BASE + "/espace#plan"); await page.waitForTimeout(1500);
+  for (const m of MODES) {
+    await setMode(page, m); await page.waitForTimeout(300);
+    for (const [name, open] of [
+      ["seance", async () => { await page.locator("li.item:not(.is-race) .sess-open").first().click(); await page.waitForSelector(".panel-day .day-sess", { timeout: 6000 }); }],
+      ["choix", async () => { await page.evaluate(() => window.dispatchEvent(new CustomEvent("tp-panel", { detail: { panel: { kind: "pick" } } }))); await page.waitForSelector(".panel-pick .cp-row", { timeout: 6000 }); await page.locator(".panel-pick .cp-row").first().click(); }],
+    ]) {
+      await open(); await page.waitForTimeout(1400);
+      const css = await still(page); await page.waitForTimeout(150);
+      all[`${m[0]}-${name}`] = await boxes(page, ".panel");
+      await page.screenshot({ path: `${OUT}/extras-${m[0]}-${name}.png` });
+      const hide = await page.addStyleTag({ content: ".panel * { color: transparent !important; -webkit-text-fill-color: transparent !important; }" });
+      await page.screenshot({ path: `${OUT}/extras-${m[0]}-${name}-fond.png` });
+      await hide.evaluate((e) => e.remove()); await css.evaluate((e) => e.remove());
+      await page.keyboard.press("Escape"); await page.waitForTimeout(700);
     }
   }
   await page.goto(BASE + "/espace#races"); await page.waitForTimeout(1500);

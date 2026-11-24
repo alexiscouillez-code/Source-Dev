@@ -4,6 +4,7 @@ import { loadProfile, ownActivity, physioOf, regeneratePlan, resolveToday, withL
 import { parseAnalysis } from "@/lib/engine/streams";
 import { readReview } from "@/lib/engine/ai-review";
 import { realProfile } from "@/lib/today-run";
+import { aiConfigured } from "@/lib/ai";
 import { parseActivity } from "@/lib/activity-input";
 
 /**
@@ -29,6 +30,7 @@ export const GET = withUser(async (user, _req, ctx) => {
     moving: an?.moving && an.moving > 60 ? Math.round(an.moving) : null,
     best: an?.best ?? null,
     maxHr: row.max_hr ?? null,
+    ai: aiConfigured(),
   });
 });
 

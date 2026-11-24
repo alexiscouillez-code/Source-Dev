@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { api, dayLabel, fmtDur, fmtKm, fmtNum, localToday } from "./client";
 import { IconCompare, IconRuns, IconX } from "./icons";
 import { DebriefBody, type Item } from "./Debriefs";
-import { setPick } from "./panel";
 import type { PanelProps } from "./Panels";
 
 const TONE = { mieux: "ok", prevu: "", moins: "lite", inconnu: "dim" } as const;
@@ -33,7 +32,7 @@ export default function RaceFiche({ raceKey, date, toast, close, swap, go }: Pan
         <span className="eyebrow">{d ? `${d.main ? "Course principale" : "Course de préparation"} · ${dayLabel(d.date, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}` : "Course"}</span>
         <button type="button" className="iconbtn panel-x" aria-label="Fermer la fiche" onClick={close}><IconX /></button>
       </div>
-      <h2 id="panel-title" className="panel-title">{d ? `⚑ ${d.name}` : "Chargement…"}</h2>
+      <h2 className="panel-title">{d ? `⚑ ${d.name}` : "Chargement…"}</h2>
       {d && (d.distanceKm || d.gainM) && <div className="row panel-chips">{d.distanceKm ? <span className="chip">{fmtKm(d.distanceKm)} km</span> : null}{d.gainM ? <span className="chip">{fmtNum(d.gainM)} m D+</span> : null}</div>}
     </header>
   );
@@ -68,7 +67,7 @@ export default function RaceFiche({ raceKey, date, toast, close, swap, go }: Pan
         <DebriefBody d={d} tags={tags} today={today} one toast={toast} onSaved={(r) => { if (r.debrief) setD(r.debrief); toast("Débrief enregistré."); }} />
         <div className="fiche-actions">
           <button type="button" className="btn ghost" onClick={(e) => swap({ kind: "run", id: d.activity.id, initial: { id: d.activity.id, name: d.activity.name, date: d.date, duration_min: d.activity.durationMin, distance_km: d.activity.distanceKm, gain_m: d.activity.gainM } }, e.currentTarget)}><IconRuns />Voir la sortie</button>
-          <button type="button" className="btn ghost" onClick={() => { setPick({ on: true, ids: [d.activity.id] }); close(); window.setTimeout(() => go("runs"), 380); }}><IconCompare />Comparer avec…</button>
+          <button type="button" className="btn ghost" onClick={(e) => swap({ kind: "pick", first: d.activity.id }, e.currentTarget)}><IconCompare />Comparer avec…</button>
         </div>
       </div>
     </>

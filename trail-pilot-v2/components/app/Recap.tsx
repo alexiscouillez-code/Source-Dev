@@ -92,7 +92,7 @@ export default function Recap({ month: m0, toast, close, swap }: PanelProps & { 
           </div>
           <button type="button" className="iconbtn panel-x" aria-label="Fermer le bilan" onClick={close}><IconX /></button>
         </div>
-        <h2 id="panel-title" className="sr-only">Bilan du mois</h2>
+        <h2 className="panel-title sr-only">Bilan du mois</h2>
       </header>
       {err && <div className="panel-body"><p className="note err">{err}</p></div>}
       {!r && !err && <div className="panel-body"><div className="skeleton" style={{ height: 360 }} /></div>}

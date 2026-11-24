@@ -95,18 +95,21 @@ export default function RaceStrategy({ route, estimate, onChanged, toast, weathe
   const input = <input ref={fileRef} type="file" accept=".gpx,.tcx,application/gpx+xml" hidden onChange={(e) => onFile(e.target.files?.[0])} />;
 
   if (!route || !strat) {
+    // Même structure que la version complète (fragment, puis la rubrique) : la fiche reste ouverte une fois le tracé importé.
     return (
-      <Fold id="plan-strat" className="strat" style={{ marginTop: 14 }} title="Stratégie de course" defaultOpen={soon} aside={<span className="chip dim">Tracé à importer</span>}>
+      <>
+      <Fold fiche id="plan-strat" className="strat" style={{ marginTop: 14 }} title="Stratégie de course" defaultOpen={soon} aside={<span className="chip dim">Tracé à importer</span>}>
         <p className="soft" style={{ margin: 0 }}>Importe le GPX du parcours (fourni par l’organisation) : Trail Pilot affiche le profil, découpe la course aux ravitaillements et calcule pour chaque section ton temps de passage et ce qu’il faut boire et manger.</p>
         <div className="row">{input}<button className="btn" disabled={busy} onClick={() => fileRef.current?.click()}>{busy ? "Lecture…" : "Importer le tracé de la course"}</button></div>
       </Fold>
+      </>
     );
   }
 
   const aidKms = route.aid.map((a) => a.km);
   return (
     <>
-    <Fold id="plan-strat" className="strat" style={{ marginTop: 14 }} title="Stratégie de course" defaultOpen={soon}
+    <Fold fiche id="plan-strat" className="strat" style={{ marginTop: 14 }} title="Stratégie de course" defaultOpen={soon}
       aside={<span className="chip">{fmtDur(strat.total.low)} – {fmtDur(strat.total.high)}</span>}>
       <div className="row strat-actions" style={{ gap: 6 }}>
         <button className="btn sm" onClick={() => setRaceDay(true)}>Mode jour de course</button>

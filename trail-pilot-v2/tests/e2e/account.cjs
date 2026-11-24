@@ -47,11 +47,16 @@ scenario("État des connexions et bilan IA des sorties", async () => {
     if (await page.locator("[data-tab=runs] >> visible=true").count()) await tab(page, "runs");
     else await page.locator('button:has-text("Séances") >> visible=true').first().click();
     await page.waitForTimeout(1500);
-    const box = page.locator(".ai-review").first();
-    check(await box.isVisible().catch(() => false), "le bilan IA s'affiche dans la liste des séances");
+    // Dans la liste : le titre du bilan ; le bilan complet est dans la fiche de la sortie.
+    const chip = page.locator(".ai-chip").first();
+    check((await chip.textContent().catch(() => "")).includes(review.titre), "la liste signale le bilan IA de la sortie");
+    await chip.locator("xpath=ancestor::li[1]").locator(".run-open").click();
+    await page.waitForSelector(".panel-run .ai-review", { timeout: 6000 }).catch(() => {});
+    const box = page.locator(".panel .ai-review").first();
     const txt = (await box.innerText().catch(() => "")).replace(/\n+/g, " ");
-    check(txt.includes(review.titre) && txt.includes("gel"), "le bilan affiche titre, points et conseil", txt.slice(0, 120));
-    await box.locator("xpath=ancestor::li[1]").screenshot({ path: `${OUT}/${device}-bilan-ia.png` }).catch(() => {});
+    check(txt.includes(review.titre) && txt.includes("gel"), "la fiche de la sortie affiche le bilan : titre, points et conseil", txt.slice(0, 120));
+    await page.screenshot({ path: `${OUT}/${device}-bilan-ia.png` }).catch(() => {});
+    await page.locator(".panel-x").click(); await page.waitForTimeout(700);
     check((await page.locator(".review-ask").count()) === 0, "pas de bouton de bilan quand l'IA n'est pas activée");
 
     check((await overflow(page)) <= 0, "pas de débordement horizontal");

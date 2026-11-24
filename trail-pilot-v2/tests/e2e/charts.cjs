@@ -95,8 +95,10 @@ scenario("Graphiques et animations", async () => {
 
     await page.locator('.view-switch button:has-text("Liste")').click().catch(() => {});
     await page.waitForTimeout(600);
-    await unfoldAll(page);
-    const weeks = page.locator('svg.chart[aria-label^="Volume prévu"]');
+    // Volume semaine par semaine : rubrique en fiche.
+    await page.locator("[data-fold=plan-volume] .fold-btn").click().catch(() => {});
+    await page.waitForTimeout(900);
+    const weeks = page.locator('.panel svg.chart[aria-label^="Volume prévu"]');
     if (await weeks.count()) {
       await weeks.scrollIntoViewIfNeeded();
       await page.waitForTimeout(3000);
@@ -106,10 +108,13 @@ scenario("Graphiques et animations", async () => {
       const tip = await weeks.evaluate((e) => { const t = e.querySelector(".wk-tip"); if (!t) return null; const r = t.querySelector("rect"); return { text: t.textContent, fill: getComputedStyle(r).fill, h: r.getBoundingClientRect().height }; });
       check(tip && /prévues/.test(tip.text) && tip.h > 10 && tip.fill !== "none", "la bulle du graphique des semaines s'affiche avec son fond", tip);
       await page.mouse.move(2, 2);
+      await page.keyboard.press("Escape"); await page.waitForTimeout(600);
     } else check(false, "graphique des semaines présent");
 
-    // Stratégie de course : profil et coureur sur la carte après import du parcours.
-    const file = page.locator(".strat input[type=file]");
+    // Stratégie de course (en fiche) : profil et coureur sur la carte après import du parcours.
+    await page.locator("[data-fold=plan-strat] .fold-btn").click().catch(() => {});
+    await page.waitForSelector(".panel [data-fold-fiche=plan-strat]", { timeout: 5000 }).catch(() => {});
+    const file = page.locator(".panel .strat input[type=file]");
     if (await file.count()) {
       const runner = page.waitForSelector(".strat .tmap path.tm-tracer", { timeout: 15000, state: "attached" }).then(() => true, () => false);
       await file.setInputFiles(path.join(__dirname, "fixtures/course.gpx"));

@@ -11,6 +11,8 @@ export type Panel =
   | { kind: "run"; id: number; initial?: Partial<Activity> }
   | { kind: "race"; key?: string; date?: string }
   | { kind: "compare"; a: number; b: number }
+  /** Choix des sorties à comparer (recherche dans tout l'historique) ; `first` : déjà choisie ; `keep` : côté gardé quand on change l'autre. */
+  | { kind: "pick"; first?: number; keep?: number }
   | { kind: "recap"; month?: string };
 
 export const PANEL_EVENT = "tp-panel";

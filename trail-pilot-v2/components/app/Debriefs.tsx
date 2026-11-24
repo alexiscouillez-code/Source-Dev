@@ -1,5 +1,6 @@
 "use client";
 
+import { openPanel } from "./panel";
 import { useCallback, useEffect, useState } from "react";
 import { api, dayLabel, fmtDur, fmtKm, fmtNum } from "./client";
 import Fold from "./Fold";
@@ -35,14 +36,24 @@ export default function Debriefs({ today, rev, toast, onAll }: { today: string; 
             <div><b>{d.name} : ton débrief t’attend</b><p style={{ margin: "4px 0 0" }} className="soft small">Synchronise Strava ou importe le fichier de ta montre (rubrique Séances) : l’appli comparera ta course à ce qui était prévu.</p></div>
           </div>
         )
-      ) : (
-        <Fold key={d.key} id={`debrief-${d.key}`} style={{ marginBottom: 14 }} className="debrief" defaultOpen={d.daysAgo <= 14 && !d.feedback.done}
-          eyebrow={`Débrief · ${dayLabel(d.date, { weekday: "long", day: "numeric", month: "long" })}`} title={d.name}
-          aside={<span className={`chip ${TONE[d.result.tone]}`}>{fmtDur(d.actual)}</span>}>
-          <DebriefBody d={d} tags={tags} today={today} onSaved={(r) => { if (r.debriefs) setItems(r.debriefs); toast("Débrief enregistré."); }} toast={toast} />
-        </Fold>
-      ))}
-      {onAll && <p className="db-all"><button type="button" className="link small" onClick={onAll}>Toutes mes courses et leurs débriefs →</button></p>}
+      ) : null)}
+      {/* Courses passées : une ligne chacune ; la toucher ouvre sa fiche avec le débrief complet. */}
+      {items.some((d) => d.status === "pret") && (
+        <section className="card debriefs" style={{ marginBottom: 14 }} aria-labelledby="db-list-t">
+          <div className="card-head"><h2 id="db-list-t">Débriefs de course</h2>{onAll && <button type="button" className="link small" onClick={onAll}>Toutes mes courses</button>}</div>
+          <ul className="races-list">
+            {items.filter((d): d is Ready => d.status === "pret").map((d, i) => (
+              <li key={d.key} style={{ ["--i" as string]: i }}>
+                <button type="button" className="race-row" aria-haspopup="dialog" onClick={(e) => openPanel({ kind: "race", key: d.key }, e.currentTarget)}>
+                  <span className="rr-date" aria-hidden="true"><b>{Number(d.date.slice(8, 10))}</b><small>{dayLabel(d.date, { month: "short" }).replace(".", "")}</small></span>
+                  <span className="rr-main"><span className="rr-name">{d.name}</span><span className="rr-meta">{d.result.label}</span></span>
+                  <span className="rr-side"><b className="mono">{fmtDur(d.actual)}</b>{!d.feedback.done ? <span className="chip ember">Débrief à faire</span> : <span className={`chip ${TONE[d.result.tone]}`}>Fait</span>}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </>
   );
 }

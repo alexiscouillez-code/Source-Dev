@@ -46,7 +46,7 @@ export function Insight({ a }: { a: Pick<Activity, "insight"> }) {
  * Bilan de la sortie par l’IA : seulement pour une sortie importée par fichier de montre ou saisie à la main.
  * Les sorties venues de Strava n’y ont pas droit (règle de Strava sur l’IA).
  */
-function Review({ a, ai, toast, onDone }: { a: Activity; ai: boolean; toast: Ctx["toast"]; onDone: () => Promise<void> }) {
+export function Review({ a, ai, toast, onDone }: { a: Pick<Activity, "id" | "review" | "reviewable" | "duration_min" | "check_state">; ai: boolean; toast: Ctx["toast"]; onDone: () => Promise<unknown> }) {
   const [busy, setBusy] = useState(false);
   const r = a.review;
   const ask = async () => {
@@ -159,7 +159,7 @@ export default function Sessions({ me, refresh, toast }: Ctx) {
           {me.strava.connected && <button className="btn ghost sm" onClick={sync} disabled={syncing}><IconSync />{syncing ? "Synchro…" : "Synchro Strava"}</button>}
           <button className="btn ghost sm" onClick={() => fileRef.current?.click()} title="Fichier exporté de ta montre ou de ton appli : FIT, TCX ou GPX">Importer un fichier</button>
           <input ref={fileRef} type="file" accept=".gpx,.fit,.tcx,application/gpx+xml" hidden onChange={(e) => onFile(e.target.files?.[0])} />
-          {(acts?.length ?? 0) >= 2 && <button type="button" className={`btn ghost sm${pick.on ? " on" : ""}`} aria-pressed={pick.on} onClick={() => setPick(pick.on ? { on: false, ids: [] } : { on: true, ids: [] })}><IconCompare />{pick.on ? "Annuler" : "Comparer"}</button>}
+          {(acts?.length ?? 0) >= 1 && <button type="button" className="btn ghost sm" onClick={(e) => openPanel({ kind: "pick" }, e.currentTarget)}><IconCompare />Comparer</button>}
           <button className="btn sm" onClick={() => setSheet({ source: "manual" })}><IconPlus />Ajouter</button>
         </div>
       </header>
@@ -201,7 +201,7 @@ export default function Sessions({ me, refresh, toast }: Ctx) {
                   <div className="s" title={`Effort ${a.effort}/10 d’après ${EFFORT_SOURCE[a.effortSource]}`}>Charge <b className="mono" style={{ color: "var(--snow)" }}>{a.load}</b> · effort {String(a.effort).replace(".", ",")}/10 ({a.effortSource}){a.source === "strava" ? " · Strava" : a.source === "gpx" ? " · GPX" : a.source === "fichier" ? " · fichier montre" : ""}</div>
                   {a.check_state === 1 && <div className="s excl-note">Exclue des calculs de charge et du plan. <button className="link small" onClick={() => include(a)}>Réintégrer</button></div>}
                   <Insight a={a} />
-                  <Review a={a} ai={ai} toast={toast} onDone={load} />
+                  {a.review ? <span className="chip dim ai-chip">✦ Bilan IA : {a.review.titre}</span> : <Review a={a} ai={ai} toast={toast} onDone={load} />}
                 </div>
                 <div className="item-actions">
                   {a.track && <button className="iconbtn" aria-label="Voir sur la carte" title="Voir sur la carte" onClick={() => showOnMap(a.id)}><IconPin /></button>}
