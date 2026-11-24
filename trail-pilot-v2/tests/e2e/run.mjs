@@ -19,7 +19,7 @@ const root = join(here, "../..");
 const tmp = join(here, ".tmp");
 const args = process.argv.slice(2);
 const only = args.filter((a) => !a.startsWith("--"));
-const SCENARIOS = ["engines", "planning", "suspects", "account", "charts", "night", "tour", "appearance", "charter", "bottomnav", "extras", "grass"].filter((s) => !only.length || only.includes(s));
+const SCENARIOS = ["engines", "planning", "suspects", "account", "charts", "night", "tour", "appearance", "charter", "bottomnav", "extras", "logo"].filter((s) => !only.length || only.includes(s));
 const PORT = 3100, MOCK = 3200;
 
 const env = {

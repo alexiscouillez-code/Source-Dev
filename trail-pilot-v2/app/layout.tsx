@@ -5,11 +5,9 @@ import "@fontsource/jetbrains-mono/400.css";
 import "@fontsource/jetbrains-mono/600.css";
 import "./liquid.css";
 import "./cap.css";
-import "./grass.css";
 import { SITE_URL, SITE_NAME, SITE_DESC } from "@/lib/site";
 import DotDefs from "@/components/DotDefs";
 import GlassTouch from "@/components/GlassTouch";
-import GrassField from "@/components/GrassField";
 import AutoAppearance from "@/components/AutoAppearance";
 import { SUN_INLINE } from "@/lib/engine/sun";
 
@@ -47,7 +45,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: AUTO_BOOT + "try{const t=localStorage.getItem('trail-pilot-theme'),h=document.documentElement,f={topo:'light',frontale:'dark'}[t];h.dataset.theme=f||(t==='dark'||t==='light'||t==='glass'?t:(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'));if(f)h.dataset.ap=t}catch{}try{const g=JSON.parse(localStorage.getItem('trail-pilot-glass')||'null');if(g&&g.p)for(const k in g.p)if(/^--g-[a-z0-9-]+$/.test(k)&&/^#[0-9a-f]{6}$/i.test(g.p[k]))document.documentElement.style.setProperty(k,g.p[k])}catch{}" }} />
       </head>
       <body>
-        <GrassField />
         <DotDefs />
         <GlassTouch />
         <AutoAppearance />
