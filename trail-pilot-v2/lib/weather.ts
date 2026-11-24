@@ -89,3 +89,35 @@ export async function trainingForecast(lat: number, lon: number, today: string):
     return cached ? JSON.parse(cached.value) : null;
   }
 }
+
+/**
+ * Conditions du moment (Open-Meteo, « current ») : vent, rafales et direction, pluie, neige, nuages, température.
+ * Alimente le fond d'herbes ; mis en cache 20 minutes par lieu.
+ */
+export interface NowWeather { temp: number; wind: number; gust: number; dir: number; rain: number; snow: number; code: number; cloud: number; isDay: boolean; at: number }
+export async function nowWeather(lat: number, lon: number): Promise<NowWeather | null> {
+  const key = `wxn:${lat.toFixed(2)},${lon.toFixed(2)}`;
+  const cached = await one<{ value: string; updated_at: number }>("SELECT value, updated_at FROM app_kv WHERE key = ?", [key]);
+  if (cached && Date.now() - cached.updated_at < 20 * 60000) return JSON.parse(cached.value);
+  try {
+    const q = new URLSearchParams({
+      latitude: lat.toFixed(4), longitude: lon.toFixed(4), timezone: "auto",
+      current: "temperature_2m,precipitation,rain,snowfall,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,wind_gusts_10m,is_day",
+    });
+    const res = await fetch(`https://api.open-meteo.com/v1/forecast?${q}`, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) throw new Error(`Open-Meteo ${res.status}`);
+    const c = ((await res.json()) as { current?: Record<string, number | null> }).current;
+    if (!c || c.wind_speed_10m == null) throw new Error("Conditions vides");
+    const w: NowWeather = {
+      temp: Math.round(c.temperature_2m ?? 10), wind: Math.round(c.wind_speed_10m), gust: Math.round(c.wind_gusts_10m ?? c.wind_speed_10m), dir: Math.round(c.wind_direction_10m ?? 270),
+      rain: Math.max(c.rain ?? 0, (c.precipitation ?? 0) - (c.snowfall ?? 0) / 7), snow: c.snowfall ?? 0, code: c.weather_code ?? 0, cloud: c.cloud_cover ?? 0, isDay: c.is_day === 1, at: Date.now(),
+    };
+    await run("INSERT OR REPLACE INTO app_kv(key, value, updated_at) VALUES (?, ?, ?)", [key, JSON.stringify(w), Date.now()]);
+    await recordOk("meteo");
+    return w;
+  } catch (e) {
+    await recordFail("meteo", e);
+    return cached ? JSON.parse(cached.value) : null;
+  }
+}
+export const weatherLabel = labelOf;

@@ -57,7 +57,7 @@ export const VERDICT = {
   rest: { label: "Récup", color: "var(--rest)", line: "Le repos fait partie de l’entraînement." },
 } as const;
 
-export interface PlanSession { id: number; date: string; template: string; title: string; sport: string; duration_min: number; gain_m: number | null; rpe_target: number; description: string; phase: string; status: string; activity_id: number | null; locked: number; original: string | null; a_duration?: number | null; a_distance?: number | null; a_gain?: number | null; a_name?: string | null; review?: Review | null }
+export interface PlanSession { id: number; date: string; template: string; title: string; sport: string; duration_min: number; gain_m: number | null; rpe_target: number; description: string; phase: string; status: string; activity_id: number | null; locked: number; original: string | null; a_duration?: number | null; a_distance?: number | null; a_gain?: number | null; a_name?: string | null; a_rpe?: number | null; review?: Review | null }
 export interface Review { dur: number; gain: number | null; inZone: number | null; above: number | null; below: number | null; verdict: "tenue" | "courte" | "longue" | "intense" | "facile"; label: string }
 export interface Absence { kind: "malade" | "blesse" | "deplacement"; start: string; end: string }
 export interface AiReview { titre: string; forts: string[]; surveiller: string[]; conseil: string; at: number }

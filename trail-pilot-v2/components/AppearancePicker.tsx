@@ -5,6 +5,7 @@ import { APPEARANCE_EVENT, APPEARANCES, autoNext, currentAppearance, currentTint
 import { nextSunChange, sunAltitude } from "@/lib/engine/sun";
 import { hapticsOn, setHaptics, haptic } from "./haptics";
 import { glassPalette, TINTS, type GlassTint } from "./glassPalette";
+import { grassMode, setGrassMode, windFrom, type GrassEnv, type GrassMode } from "./grassMode";
 
 /** Dégradé du curseur de teinte : la couleur de fond obtenue pour chaque teinte, à pleine intensité. */
 const HUE_TRACK = `linear-gradient(90deg, ${Array.from({ length: 13 }, (_, i) => glassPalette({ h: i * 30, k: 1 })["--g-3"]).join(", ")})`;
@@ -230,6 +231,47 @@ export function HapticsPicker() {
         <button type="button" role="switch" aria-checked={on} aria-label="Vibrations" className="tp-switch"
           onClick={() => { const v = !on; setHaptics(v); setOn(v); if (v) haptic("success"); }}><i /></button>
       </div>
+    </div>
+  );
+}
+
+const GRASS_OPTS: { id: GrassMode; label: string; hint: string }[] = [
+  { id: "vivant", label: "Vivant", hint: "Le vent souffle en continu, les herbes s’écartent sous la souris ou le doigt." },
+  { id: "calme", label: "Calme", hint: "Moins d’herbes, vent léger, moins d’images par seconde : plus doux pour la batterie." },
+  { id: "fixe", label: "Fixe", hint: "Une image immobile, aucune animation." },
+];
+
+/** Phrase qui dit ce que le fond suit en ce moment (lieu et conditions). */
+function envLine(e: GrassEnv | null): string | null {
+  if (!e) return null;
+  if (e.status === "noplace") return "Choisis ton lieu d’entraînement (plus haut) : le fond suivra la météo de chez toi, vent, pluie, neige et lumière du jour.";
+  if (e.status !== "ok" || !e.now || !e.place) return null;
+  const n = e.now, where = e.raceDay ? "au départ de ta course" : `à ${e.place.name.split(",")[0]}`;
+  const gust = n.gust >= n.wind + 12 ? `, rafales à ${n.gust}` : "";
+  return `Il suit la météo ${where} : ${n.label.toLowerCase()}, vent ${n.wind} km/h ${windFrom(n.dir)}${gust}, ${n.temp} °C.`;
+}
+
+/** Fond animé (champ d'herbes) : vivant, calme ou fixe, et ce qu'il suit dehors. */
+export function GrassPicker() {
+  const [m, setM] = useState<GrassMode | null>(null);
+  const [env, setEnv] = useState<GrassEnv | null>(null);
+  useEffect(() => {
+    setM(grassMode());
+    fetch("/api/weather/now", { credentials: "same-origin" }).then((r) => (r.ok ? r.json() : null)).then(setEnv).catch(() => setEnv(null));
+  }, []);
+  if (!m) return null;
+  const line = envLine(env);
+  return (
+    <div className="auto-pick grass-pick">
+      <div className="auto-head"><div><b>Fond animé</b><small>Le champ d’herbes derrière les pages.</small></div></div>
+      <div className="seg grass-seg" role="radiogroup" aria-label="Fond animé">
+        {GRASS_OPTS.map((o) => (
+          <button key={o.id} type="button" role="radio" aria-checked={m === o.id} className={m === o.id ? "on" : ""}
+            onClick={() => { setGrassMode(o.id); setM(o.id); haptic("tap"); }}>{o.label}</button>
+        ))}
+      </div>
+      <p className="small soft" style={{ margin: 0 }}>{GRASS_OPTS.find((o) => o.id === m)!.hint}</p>
+      {line && <p className="small soft grass-env" style={{ margin: 0 }}>{line}</p>}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import Fold from "./Fold";
-import AppearancePicker, { TintPicker, AutoPicker, HapticsPicker } from "@/components/AppearancePicker";
+import AppearancePicker, { TintPicker, AutoPicker, HapticsPicker, GrassPicker } from "@/components/AppearancePicker";
 import Feedback from "./Feedback";
 import { useEffect, useState } from "react";
 import type { Ctx } from "./AppShell";
@@ -28,6 +28,7 @@ export default function Account({ me, refresh, toast, go }: Ctx) {
           <AppearancePicker />
           <AutoPicker />
           <TintPicker />
+          <GrassPicker />
           <HapticsPicker />
         </Fold>
         <EmailCard me={me} toast={toast} />

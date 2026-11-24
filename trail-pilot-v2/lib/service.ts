@@ -298,7 +298,11 @@ export async function dashboard(userId: number, today: string) {
     loadState(userId, today),
     loadGoal(userId),
     one<CheckinRow>("SELECT date, sleep, legs, motivation, pain, note, pain_zones, sleep_h, rhr, hrv FROM checkins WHERE user_id = ? AND date = ?", [userId, today]),
-    all<PlanRow>("SELECT * FROM plan_sessions WHERE user_id = ? AND date >= ? AND date <= ? ORDER BY date", [userId, today, addDays(today, 7)]),
+    // Avec la sortie qui a validé chaque séance : « Ta journée » montre le prévu / réalisé et demande le ressenti.
+    all<PlanRow & { a_duration: number | null; a_distance: number | null; a_gain: number | null; a_name: string | null; a_rpe: number | null; a_analysis: string | null }>(
+      `SELECT p.*, a.duration_min AS a_duration, a.distance_km AS a_distance, a.gain_m AS a_gain, a.name AS a_name, a.rpe AS a_rpe, a.analysis AS a_analysis
+       FROM plan_sessions p LEFT JOIN activities a ON a.id = p.activity_id
+       WHERE p.user_id = ? AND p.date >= ? AND p.date <= ? ORDER BY p.date`, [userId, today, addDays(today, 7)]),
     one<{ n: number }>("SELECT COUNT(*) AS n FROM plan_sessions WHERE user_id = ? AND date > ?", [userId, today]),
   ]);
   const dayNote = await loadNote(userId, today);
@@ -314,9 +318,15 @@ export async function dashboard(userId: number, today: string) {
     checkin, decision,
     // Commentaire du jour (écrit au check-in ou dans le calendrier) et ce que l’IA y a lu.
     dayNote: dayNote ? { note: dayNote.note, resume: dayNote.signals?.resume ?? null } : null,
-    todayPlan: upcoming.find((p) => p.date === today) ?? null,
-    tomorrowPlan: upcoming.find((p) => p.date === addDays(today, 1)) ?? null,
-    upcoming,
+    todayPlan: (() => {
+      const p = upcoming.find((x) => x.date === today);
+      if (!p) return null;
+      const { a_analysis, ...rest } = p;
+      const physio = physioOf(profile);
+      return { ...rest, review: p.status === "done" && p.a_duration != null ? reviewSession(p, { duration_min: p.a_duration, gain_m: p.a_gain }, parseAnalysis(a_analysis), trainingTargets(null, physio.hrMax, physio.hrRest), physio) : null };
+    })(),
+    tomorrowPlan: (() => { const p = upcoming.find((x) => x.date === addDays(today, 1)); if (!p) return null; const { a_analysis: _a, ...rest } = p; return rest; })(),
+    upcoming: upcoming.map(({ a_analysis: _a, ...p }) => p),
     needsPlan: (planCount?.n ?? 0) === 0,
     recent: acts.slice(0, 6).map((a) => withLoad(a, physio)),
   };

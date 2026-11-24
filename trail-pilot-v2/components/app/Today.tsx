@@ -13,7 +13,7 @@ import { ZONES } from "@/lib/engine/legs";
 import Onboarding from "./Onboarding";
 import Coach from "./Coach";
 import WeekCard from "./WeekCard";
-import { api, dayLabel, fmtDur, fmtNum, localToday, SPORT_LABEL, VERDICT, type Me, type PlanSession } from "./client";
+import { api, dayLabel, fmtDur, fmtKm, fmtNum, localToday, SPORT_LABEL, VERDICT, type Me, type PlanSession } from "./client";
 import { QUICK_EVENT, takeQuick } from "./quick";
 import { Fiche, FicheHead, useFiche } from "./Fiche";
 import DaySheet from "./DaySheet";
@@ -80,7 +80,7 @@ export default function Today({ me, refresh, go, toast }: Ctx) {
       )}
       {/* Téléphone : une colonne. Grand écran : « Ta journée » à gauche, la course, la forme et la semaine à droite. */}
       <div className="today-grid">
-        <DayCard me={me} go={go} busy={busy} generate={generate} onCheckin={(el) => ci.open(true, el)} onSession={(x, el) => sheet.open(x, el)} />
+        <DayCard me={me} go={go} busy={busy} generate={generate} refresh={refresh} toast={toast} onCheckin={(el) => ci.open(true, el)} onSession={(x, el) => sheet.open(x, el)} />
         {!me.goal && (
           <div className="banner today-goal">
             <div><b>Choisis ta course</b><div className="small muted">Un plan jusqu’au jour J, construit à partir de ta charge actuelle pour que tu finisses.</div></div>
@@ -171,7 +171,7 @@ export function SessionBlock({ s, targets }: { s: PlanSession; targets?: Me["tar
  * fois. Avant le check-in, la séance n'est qu'un aperçu discret ; après, la décision colore la carte et la séance
  * devient l'action. Trois étapes en haut montrent où on en est.
  */
-function DayCard({ me, go, busy, generate, onCheckin, onSession }: { me: Me; go: Ctx["go"]; busy: boolean; generate: () => void; onCheckin: (el: HTMLElement) => void; onSession: (s: PlanSession, el: HTMLElement) => void }) {
+function DayCard({ me, go, busy, generate, refresh, toast, onCheckin, onSession }: { me: Me; go: Ctx["go"]; busy: boolean; generate: () => void; refresh: Ctx["refresh"]; toast: Ctx["toast"]; onCheckin: (el: HTMLElement) => void; onSession: (s: PlanSession, el: HTMLElement) => void }) {
   const d = me.decision, v = d ? VERDICT[d.verdict] : null;
   const doneToday = me.todayPlan?.status === "done";
   const s = me.todayPlan && !doneToday ? me.todayPlan : me.tomorrowPlan;
@@ -205,6 +205,7 @@ function DayCard({ me, go, busy, generate, onCheckin, onSession }: { me: Me; go:
           <button className="link small dc-edit" aria-haspopup="dialog" onClick={(e) => onCheckin(card(e))}>Modifier mon check-in</button>
         </div>
       )}
+      {doneToday && me.todayPlan && <DoneBlock p={me.todayPlan} go={go} refresh={refresh} toast={toast} />}
       <div className={`dc-next${d ? "" : " is-quiet"}`}>
         <div className="row between">
           <span className="eyebrow" id="next-title">{s ? (s === me.todayPlan ? "Séance du jour" : "Demain") : "Au programme"}</span>
@@ -219,6 +220,52 @@ function DayCard({ me, go, busy, generate, onCheckin, onSession }: { me: Me; go:
           ) : <p className="empty">Repos prévu. Profite-en pour bien dormir.</p>}
       </div>
     </section>
+  );
+}
+
+const FEELS = [{ v: 3, label: "Facile" }, { v: 5, label: "Correct" }, { v: 7, label: "Dur" }, { v: 9, label: "Très dur" }];
+const nearestFeel = (rpe: number | null | undefined) => (rpe == null ? null : FEELS.reduce((a, b) => (Math.abs(b.v - rpe) < Math.abs(a.v - rpe) ? b : a)).v);
+
+/**
+ * Séance faite : prévu / réalisé en une ligne, le verdict (tenue, courte, trop intense…) et le ressenti en une touche.
+ * Le ressenti remplace l'effort estimé de la sortie dans le calcul de la charge : la décision de demain en tient compte.
+ */
+function DoneBlock({ p, go, refresh, toast }: { p: PlanSession; go: Ctx["go"]; refresh: Ctx["refresh"]; toast: Ctx["toast"] }) {
+  const [rpe, setRpe] = useState<number | null>(nearestFeel(p.a_rpe));
+  const [busy, setBusy] = useState(false);
+  const save = async (v: number) => {
+    if (!p.activity_id || busy) return;
+    const was = rpe;
+    setRpe(v); setBusy(true); haptic("tap");
+    try {
+      await api(`/api/activities/${p.activity_id}`, { method: "PATCH", body: { rpe: v } });
+      toast("Ressenti noté : la décision de demain en tient compte.");
+      await refresh();
+    } catch (e) { setRpe(was); toast((e as Error).message || "Ressenti non enregistré."); } finally { setBusy(false); }
+  };
+  return (
+    <div className="dc-done">
+      <div className="dc-done-head">
+        <span className="dc-check" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.2 4.2L19 7" /></svg></span>
+        <div><span className="eyebrow">Séance faite</span><b>{p.title}</b></div>
+      </div>
+      {p.a_duration != null ? (
+        <p className="dc-cmp">
+          <span><small>Prévu</small>{fmtDur(p.duration_min)}{p.gain_m ? ` · ${p.gain_m} m D+` : ""}</span>
+          <i aria-hidden="true">→</i>
+          <span><small>Fait</small>{fmtDur(p.a_duration)}{p.a_distance ? ` · ${fmtKm(p.a_distance)} km` : ""}{p.a_gain ? ` · ${p.a_gain} m D+` : ""}</span>
+        </p>
+      ) : <p className="small soft" style={{ margin: 0 }}>Marquée faite à la main. <button className="link small" onClick={() => go("runs")}>Ajoute ta sortie</button> pour comparer au prévu.</p>}
+      {p.review && <p className={`dc-review is-${p.review.verdict}`}>{p.review.label}</p>}
+      {p.activity_id != null && (
+        <div className="dc-feel">
+          <span className="small" id={`feel-${p.id}`}>{rpe ? "Ton ressenti" : "Comment c’était ?"}</span>
+          <div className="dc-feel-btns" role="group" aria-labelledby={`feel-${p.id}`}>
+            {FEELS.map((f) => <button key={f.v} type="button" aria-pressed={rpe === f.v} disabled={busy} onClick={() => save(f.v)}>{f.label}</button>)}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

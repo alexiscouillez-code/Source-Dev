@@ -1,5 +1,5 @@
 // Parcours : accueil avec objectif, check-in du matin, calendrier, validation automatique des séances.
-const { BASE, iso, check, newUser, tab, overflow, scenario, db, userId } = require("./lib.cjs");
+const { BASE, OUT, iso, check, newUser, tab, overflow, scenario, db, userId } = require("./lib.cjs");
 
 scenario("Planning, check-in et validation automatique", async () => {
   for (const device of ["phone", "desktop"]) {
@@ -57,6 +57,23 @@ scenario("Planning, check-in et validation automatique", async () => {
     const month = await api.get(`/api/plan/month?today=${iso(0)}&month=${iso(-1).slice(0, 7)}`);
     const done = month.sessions.find((s) => s.date === iso(-1) && s.title === "Footing test");
     check(done?.status === "done" && done?.activity_id, "une sortie le jour d'une séance la valide automatiquement", done?.status);
+
+    // « Ta journée » : la séance du jour faite, prévu / réalisé et ressenti en une touche, pris en compte pour demain.
+    await db().execute({ sql: "DELETE FROM plan_sessions WHERE user_id = ? AND date = ?", args: [uid, iso(0)] });
+    await db().execute({ sql: "INSERT INTO plan_sessions(user_id, date, template, title, sport, duration_min, gain_m, rpe_target, description, phase, status, created_at, updated_at) VALUES (?, ?, 'easy', 'Footing du jour', 'course', 45, NULL, 4, 'Séance test.', 'Fondation', 'planned', 0, 0)", args: [uid, iso(0)] });
+    await api.activity({ date: iso(0), sport: "course", durationMin: 47, distanceKm: 8.4 });
+    const before7 = (await api.get(`/api/me?today=${iso(0)}`)).load.atl;
+    await page.reload(); await page.waitForTimeout(1500);
+    await tab(page, "today");
+    await page.waitForSelector(".day-card .dc-done", { timeout: 8000 });
+    const dd = await page.evaluate(() => ({ cmp: document.querySelector(".dc-done .dc-cmp")?.textContent, title: document.querySelector(".dc-done b")?.textContent, steps: [...document.querySelectorAll(".dc-steps li")].map((l) => l.className), btns: document.querySelectorAll(".dc-feel-btns button").length }));
+    check(dd.title === "Footing du jour" && /Prévu45 min/.test(dd.cmp) && /Fait47 min · 8,4 km/.test(dd.cmp) && dd.steps.every((c) => c === "is-done") && dd.btns === 4, "séance du jour faite : prévu / réalisé dans « Ta journée », trois étapes cochées", dd);
+    await page.locator(".dc-feel-btns").getByRole("button", { name: "Dur", exact: true }).click();
+    await page.waitForFunction(() => document.querySelector(".dc-feel-btns button[aria-pressed=true]")?.textContent === "Dur", null, { timeout: 8000 }).catch(() => {});
+    const after7 = await api.get(`/api/me?today=${iso(0)}`);
+    check(after7.todayPlan?.a_rpe === 7, "le ressenti « Dur » est enregistré sur la sortie", after7.todayPlan?.a_rpe);
+    check(after7.load.atl > before7, "le ressenti change la fatigue prise en compte pour demain", [before7, after7.load.atl]);
+    await page.locator(".day-card").screenshot({ path: `${OUT}/journee-faite.png` }).catch(() => {});
 
     // Temps de course au plus près du réel : un vrai résultat, puis le temps du vainqueur précédent.
     await tab(page, "plan");

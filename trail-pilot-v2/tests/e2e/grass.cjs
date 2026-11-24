@@ -10,7 +10,14 @@ scenario("Fond d'herbes hautes et logo animé", async () => {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => { if (m.type() === "error" && !/insights|Failed to load resource/.test(m.text())) errors.push(m.text().slice(0, 200)); });
-  await page.addInitScript(() => { try { localStorage.setItem("trail-pilot-theme", "dark"); } catch {} });
+  // Ici le rendu est logiciel (pas de carte graphique) : par défaut, le champ ne se lance pas et l'appareil est retenu.
+  const soft = await ctx.newPage();
+  await soft.goto(BASE + "/connexion");
+  await soft.waitForFunction(() => localStorage.getItem("trail-pilot-gl") === "soft", null, { timeout: 30000 }).catch(() => {});
+  check(await soft.evaluate(() => localStorage.getItem("trail-pilot-gl") === "soft" && !document.querySelector(".grass canvas")), "sans carte graphique : pas de champ, la page reste légère");
+  await soft.close();
+  // Puis on force le champ (réglage « trail-pilot-gl » = on) pour le juger comme sur un téléphone équipé.
+  await page.addInitScript(() => { try { localStorage.setItem("trail-pilot-theme", "dark"); localStorage.setItem("trail-pilot-gl", "on"); } catch {} });
   await page.goto(BASE + "/connexion");
   await page.waitForSelector(".grass canvas.is-on", { timeout: 45000 });
   check(await page.evaluate(() => !navigator.webdriver), "visite comme un vrai navigateur");

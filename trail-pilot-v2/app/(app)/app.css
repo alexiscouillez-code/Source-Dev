@@ -3,7 +3,7 @@
   --snow: #f4efe6; --soft: #c9d0d6; --mute: #8d99a5;
   --ember: #ff6a2b; --ember-2: #ff9a5c;
   --ok: #5fd39a; --lite: #f5c451; --rest: #7fb6ff; --danger: #ff7a6b;
-  --display: "Bricolage Grotesque Variable", ui-sans-serif, system-ui, sans-serif;
+  --display: var(--font-display), "Bricolage Grotesque Variable", ui-sans-serif, system-ui, sans-serif;
   --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   --ease: cubic-bezier(.2, .7, .1, 1);
   color-scheme: dark;

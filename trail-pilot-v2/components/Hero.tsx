@@ -26,34 +26,43 @@ export default function Hero() {
     const len = p.getTotalLength();
     p.style.strokeDasharray = `${len}`;
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    let scrollP = 0, intro = reduce ? 0.18 : 0, raf = 0;
+    let scrollP = 0, intro = reduce ? 0.18 : 0, raf = 0, lastD = -1, lastP = -1;
     const t0 = performance.now();
 
-    const onScroll = () => {
-      const r = sec.getBoundingClientRect();
-      scrollP = Math.min(1, Math.max(0, -r.top / Math.max(1, sec.offsetHeight - window.innerHeight)));
-    };
     const set = (k: string, v: string) => { const el = out.current[k]; if (el && el.textContent !== v) el.textContent = v; };
 
+    // Image calculée seulement quand quelque chose bouge : pendant l'introduction, puis au défilement.
+    // Rien ne tourne en continu (avant, une image par trame même page immobile, ce qui pesait sur téléphone).
     const frame = (t: number) => {
-      if (!reduce) intro = Math.min(0.18, ((t - t0 - 600) / 1600) * 0.18);
+      raf = 0;
+      if (!reduce) intro = Math.min(0.18, Math.max(0, ((t - t0 - 600) / 1600) * 0.18));
       const d = Math.max(0, Math.max(intro, Math.min(1, 0.18 + scrollP * 0.82)));
-      p.style.strokeDashoffset = `${len * (1 - d)}`;
-      clip.current?.setAttribute("width", String(320 * d));
-      const pt = p.getPointAtLength(len * d);
-      marker.current?.setAttribute("transform", `translate(${pt.x} ${pt.y})`);
-      stage.style.setProperty("--p", scrollP.toFixed(4));
-      set("dist", (d * 21.4).toFixed(1).replace(".", ","));
-      set("dplus", Math.round(d * 1932).toLocaleString("fr-FR"));
-      set("alt", Math.round(1342 + (96 - pt.y) * 17.4).toLocaleString("fr-FR"));
-      const secs = Math.round(d * 3 * 3600 + d * 24 * 60);
-      set("time", `${Math.floor(secs / 3600)}:${String(Math.floor((secs % 3600) / 60)).padStart(2, "0")}`);
-      raf = requestAnimationFrame(frame);
+      if (d !== lastD) {
+        lastD = d;
+        p.style.strokeDashoffset = `${len * (1 - d)}`;
+        clip.current?.setAttribute("width", String(320 * d));
+        const pt = p.getPointAtLength(len * d);
+        marker.current?.setAttribute("transform", `translate(${pt.x} ${pt.y})`);
+        set("dist", (d * 21.4).toFixed(1).replace(".", ","));
+        set("dplus", Math.round(d * 1932).toLocaleString("fr-FR"));
+        set("alt", Math.round(1342 + (96 - pt.y) * 17.4).toLocaleString("fr-FR"));
+        const secs = Math.round(d * 3 * 3600 + d * 24 * 60);
+        set("time", `${Math.floor(secs / 3600)}:${String(Math.floor((secs % 3600) / 60)).padStart(2, "0")}`);
+      }
+      if (scrollP !== lastP) { lastP = scrollP; stage.style.setProperty("--p", scrollP.toFixed(4)); }
+      if (!reduce && intro < 0.18) raf = requestAnimationFrame(frame);
+    };
+    const kick = () => { if (!raf) raf = requestAnimationFrame(frame); };
+    const onScroll = () => {
+      const r = sec.getBoundingClientRect();
+      const next = Math.min(1, Math.max(0, -r.top / Math.max(1, sec.offsetHeight - window.innerHeight)));
+      if (next !== scrollP) { scrollP = next; kick(); }
     };
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
-    raf = requestAnimationFrame(frame);
-    return () => { cancelAnimationFrame(raf); window.removeEventListener("scroll", onScroll); };
+    window.addEventListener("resize", onScroll, { passive: true });
+    kick();
+    return () => { cancelAnimationFrame(raf); window.removeEventListener("scroll", onScroll); window.removeEventListener("resize", onScroll); };
   }, []);
 
   const words = ["Je", "sais", "quoi", "faire"];

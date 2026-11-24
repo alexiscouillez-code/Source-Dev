@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { nextSunChange, SUN_INLINE, sunAltitude, sunUp } from "../../lib/engine/sun";
+import { nextSunChange, SUN_INLINE, sunAltitude, sunPosition, sunUp } from "../../lib/engine/sun";
 
 // Repères publiés (heure légale de Paris = UTC+1 en hiver, UTC+2 en été).
 const at = (iso: string) => Date.parse(iso);
@@ -51,4 +51,13 @@ test("la version compacte du script de démarrage donne la même hauteur", () =>
     Date.now = () => at(iso);
     try { assert.ok(Math.abs(f(45.9, 6.87) - sunAltitude(at(iso), 45.9, 6.87)) < 1e-9, iso); } finally { Date.now = real; }
   }
+});
+
+test("azimut du soleil : est le matin, sud à midi, ouest le soir (Paris, équinoxe)", () => {
+  const utc = (h: number, m = 0) => Date.UTC(2026, 2, 20, h, m);
+  const morning = sunPosition(utc(7, 30), 48.85, 2.35), noon = sunPosition(utc(11, 50), 48.85, 2.35), evening = sunPosition(utc(16, 30), 48.85, 2.35);
+  assert.ok(morning.az > 70 && morning.az < 120, `matin ${morning.az}`);
+  assert.ok(Math.abs(noon.az - 180) < 8, `midi ${noon.az}`);
+  assert.ok(evening.az > 225 && evening.az < 270, `soir ${evening.az}`);
+  assert.ok(Math.abs(noon.alt - sunAltitude(utc(11, 50), 48.85, 2.35)) < 1e-9, "même hauteur que sunAltitude");
 });

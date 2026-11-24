@@ -644,3 +644,32 @@ kbd { font-family: var(--mono); font-size: 10.5px; padding: 2px 6px; border-radi
 /* ---------- Étiquettes : police du texte, plus de petites capitales espacées (gardées pour les sur-titres et les chiffres) ---------- */
 .chip { font-family: inherit; font-size: 12px; font-weight: 600; letter-spacing: 0; text-transform: none; padding: 4px 10px; }
 :root[data-theme="glass"] .day-card .link { color: color-mix(in srgb, var(--ember-t) 55%, #fff); }
+
+/* Réglage du fond animé */
+.grass-seg { justify-self: start; }
+.grass-env { padding: 10px 12px; border-radius: 12px; background: var(--ink-3); }
+:root[data-theme="light"]:not([data-ap]) .grass-pick .soft { color: #4a535c; }
+
+/* « Ta journée » : séance faite, prévu / réalisé, ressenti */
+.dc-done { display: grid; gap: 10px; padding: 14px; border-radius: 18px; background: color-mix(in srgb, var(--ok) 9%, var(--ink-3)); border: 1px solid color-mix(in srgb, var(--ok) 30%, transparent); }
+.dc-done-head { display: flex; align-items: center; gap: 12px; }
+.dc-done-head b { display: block; font-size: 16.5px; font-weight: 700; }
+.dc-check { width: 34px; height: 34px; flex: none; display: grid; place-items: center; border-radius: 50%; background: var(--ok); color: #06140c; }
+.dc-check svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.dc-cmp { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px 12px; margin: 0; font-family: var(--mono); font-size: 14px; }
+.dc-cmp small { display: block; font-family: var(--display); font-size: 12px; color: var(--mute); }
+.dc-cmp i { font-style: normal; color: var(--mute); padding-bottom: 1px; }
+.dc-review { margin: 0; font-size: 13.5px; font-weight: 600; color: var(--ok); }
+.dc-review:is(.is-courte, .is-facile) { color: var(--lite); }
+.dc-review:is(.is-longue, .is-intense) { color: var(--danger); }
+.dc-feel { display: grid; gap: 8px; }
+.dc-feel-btns { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.dc-feel-btns button { min-height: 44px; padding: 8px 6px; border-radius: 12px; border: 1px solid var(--line); background: var(--ink-2); color: var(--snow); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; transition: background .2s, border-color .2s, transform .25s cubic-bezier(.3, 1.6, .5, 1); }
+.dc-feel-btns button:hover { border-color: var(--mute); }
+.dc-feel-btns button[aria-pressed="true"] { background: var(--snow); color: var(--ink); border-color: var(--snow); }
+.dc-feel-btns button:active { transform: scale(.95); }
+:root[data-theme="light"]:not([data-ap]) .dc-review { color: #1f7a4c; }
+:root[data-theme="light"]:not([data-ap]) .dc-review:is(.is-courte, .is-facile) { color: #8a5a00; }
+:root[data-theme="light"]:not([data-ap]) .dc-review:is(.is-longue, .is-intense) { color: #b3261e; }
+:root[data-theme="glass"] .dc-done { background: rgba(95, 211, 154, .12); border-color: rgba(95, 211, 154, .35); }
+:root[data-theme="glass"] .dc-feel-btns button { background: rgba(255, 255, 255, .08); border-color: rgba(255, 255, 255, .22); }
