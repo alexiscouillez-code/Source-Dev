@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import { usePull } from "./gestures";
+import { haptic } from "@/components/haptics";
 
 const THRESHOLD = 72;
 
@@ -13,13 +14,20 @@ const THRESHOLD = 72;
 export default function PullRefresh({ onRefresh }: { onRefresh: () => Promise<void> }) {
   const [px, setPx] = useState(0);
   const [busy, setBusy] = useState(false);
-  const busyRef = useRef(false);
-  const change = useCallback((v: number) => { if (!busyRef.current) setPx(v); }, []);
+  const busyRef = useRef(false), readyRef = useRef(false);
+  const change = useCallback((v: number) => {
+    if (busyRef.current) return;
+    setPx(v);
+    // Petit tic quand on passe le seuil (et quand on revient en deçà, rien).
+    if (v >= THRESHOLD && !readyRef.current) { readyRef.current = true; haptic("tap"); }
+    else if (v < THRESHOLD) readyRef.current = false;
+  }, []);
   const release = useCallback((v: number) => {
     if (busyRef.current) return;
     if (v < THRESHOLD) { setPx(0); return; }
     busyRef.current = true; setBusy(true); setPx(56);
-    try { navigator.vibrate?.(12); } catch { /* non pris en charge */ }
+    readyRef.current = false;
+    haptic("select");
     onRefresh().finally(() => { busyRef.current = false; setBusy(false); setPx(0); });
   }, [onRefresh]);
   usePull(change, release);

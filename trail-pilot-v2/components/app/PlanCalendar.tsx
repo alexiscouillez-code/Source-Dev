@@ -1,5 +1,6 @@
 "use client";
 
+import { openPanel } from "./panel";
 import StrengthButton from "./StrengthButton";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, dayLabel, fmtDur, fmtKm, fmtNum, SPORT_LABEL, type Absence, type PlanSession, type Targets } from "./client";
@@ -84,7 +85,9 @@ export default function PlanCalendar({ today, rev, targets, onStatus, onWhere, o
   }, [data]);
   const inAbsence = (d: string) => !!data?.absence && d >= data.absence.start && d <= data.absence.end;
 
-  function pick(d: string) {
+  function pick(d: string, el?: HTMLElement) {
+    // Jour d'une course passée (ou du jour) : sa fiche s'ouvre avec le débrief.
+    if (!moving && byDay.get(d)?.race && d <= today) { setSel(d); openPanel({ kind: "race", date: d }, el); return; }
     if (moving) {
       if (d < today || d === moving.date) { setMoving(null); return; }
       const there = byDay.get(d)?.sessions.find((x) => movable(x, today)) ?? null;
@@ -122,7 +125,7 @@ export default function PlanCalendar({ today, rev, targets, onStatus, onWhere, o
                   const out = d.slice(0, 7) !== month;
                   const label = [dayLabel(d), x?.race ? `course ${x.race.name}` : "", ...(x?.sessions ?? []).map((s) => `${s.title}, ${fmtDur(s.duration_min)}, ${STATUS[s.status] ?? s.status}`), ...(x?.extras ?? []).map((a) => `sortie hors plan ${fmtDur(a.duration_min)}`), x?.note ? "commentaire" : "", x?.check ? "check-in fait" : "", inAbsence(d) ? "imprévu" : ""].filter(Boolean).join(" · ");
                   return (
-                    <button key={d} role="gridcell" aria-selected={sel === d} aria-label={label} onClick={() => pick(d)}
+                    <button key={d} role="gridcell" aria-selected={sel === d} aria-label={label} onClick={(e) => pick(d, e.currentTarget)}
                       className={`cal-day ${out ? "out" : ""} ${d === today ? "today" : ""} ${sel === d ? "sel" : ""} ${d < today ? "past" : ""} ${inAbsence(d) ? "abs" : ""} ${moving && d >= today && d !== moving.date ? "drop" : ""}`}>
                       <span className="cal-num">{Number(d.slice(8))}{x?.race && <i className="cal-flag" aria-hidden="true">⚑</i>}{x?.note && <i className="cal-note" aria-hidden="true" />}</span>
                       <span className="cal-evs" aria-hidden="true">
@@ -148,7 +151,7 @@ export default function PlanCalendar({ today, rev, targets, onStatus, onWhere, o
       {data && (
         <div className="cal-detail" ref={detailRef} aria-live="polite">
           <div className="row between cal-detail-head" key={sel}><h3>{dayLabel(sel)}{sel === today ? " · aujourd’hui" : ""}</h3>{day?.check && <span className="chip dim" title="Ressenti déclaré au check-in (sommeil, jambes, motivation, douleur)">Ressenti {day.check.score}/100</span>}</div>
-          {day?.race && <p className="cal-race">⚑ {day.race.main ? "Jour J" : "Course de préparation"} : <b>{day.race.name}</b></p>}
+          {day?.race && <p className="cal-race">⚑ {day.race.main ? "Jour J" : "Course de préparation"} : <b>{day.race.name}</b>{sel <= today && <button type="button" className="btn ghost sm" onClick={(e) => openPanel({ kind: "race", date: sel }, e.currentTarget)}>Voir le débrief</button>}</p>}
           {absent && data.absence && <p className="muted small" style={{ margin: 0 }}>{ABSENCE_LABEL[data.absence.kind] ?? "Imprévu"} : séances suspendues ou allégées sur cette période.</p>}
           {day?.sessions.filter((s) => s.template !== "race").map((s) => (
             <article key={s.id} className={`cal-sess ev-${kindOf(s.template)}-b`}>

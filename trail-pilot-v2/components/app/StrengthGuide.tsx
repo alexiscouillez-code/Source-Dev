@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { haptic } from "@/components/haptics";
 import { dose, strengthProgram, type Exercise } from "@/lib/engine/strength";
 
 /**
@@ -126,4 +127,4 @@ function tone(freq: number, ms: number) {
 }
 const tick = () => tone(660, 80);
 const beep = () => { tone(990, 220); buzz(); };
-const buzz = () => { try { navigator.vibrate?.([120, 60, 120]); } catch { /* vibration indisponible */ } };
+const buzz = () => haptic([120, 60, 120]);

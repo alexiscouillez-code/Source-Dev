@@ -128,7 +128,9 @@ scenario("Bloc « Ma sortie du jour »", async () => {
       check((await page.locator(".week-card .g-sub").innerText()).includes("de la semaine prévue"), "grille : la durée correspondante s'affiche");
       await page.mouse.move(gb.x + gb.width * 0.55, gb.y + gb.height * 0.35); await page.waitForTimeout(400);
       await page.locator(".night .g-pair-out").screenshot({ path: `${OUT}/night-interaction-grille-${width}.png` });
-      await page.mouse.click(gb.x + gb.width * 0.5, gb.y + gb.height * 0.5);
+      // La capture d'élément peut faire défiler la page : on reprend la position de la grille avant de toucher.
+      const gb2 = await grid.boundingBox();
+      await page.mouse.click(gb2.x + gb2.width * 0.5, gb2.y + gb2.height * 0.5);
       check((await page.locator(".night .dg-wave circle").count()) === 100, "grille : un toucher fait partir une onde de points");
       await page.mouse.move(0, 0);
       const tiles = page.locator(".night .run-card .tap");

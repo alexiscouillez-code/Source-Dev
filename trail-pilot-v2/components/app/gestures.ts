@@ -2,12 +2,13 @@
 
 import { useEffect, type RefObject } from "react";
 import { SWIPE_EVENT } from "./BottomNav";
+import { haptic } from "@/components/haptics";
 
 const motionOk = () => !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const phone = () => window.matchMedia("(max-width: 900px)").matches;
 
 /** Zones où un geste horizontal ou vertical appartient déjà à l'élément (cartes, graphiques, curseurs, fenêtres…). */
-const OWN_GESTURE = "input, textarea, select, [contenteditable], .maplibregl-map, .leaflet-container, .tmap, .gc-plot, svg.chart, .dotprofile, .dotgrid, .radar-card, .sheet-back, .bnav, [data-noswipe]";
+const OWN_GESTURE = "input, textarea, select, [contenteditable], .maplibregl-map, .leaflet-container, .tmap, .gc-plot, svg.chart, .dotprofile, .dotgrid, .radar-card, .sheet-back, .panel-back, .pal-back, .bnav, .pick-bar, [data-noswipe]";
 function ownsGesture(t: EventTarget | null, axis: "x" | "y") {
   if (!(t instanceof Element)) return true;
   if (t.closest(OWN_GESTURE)) return true;
@@ -71,7 +72,7 @@ export function useSwipeTabs(main: RefObject<HTMLElement | null>, order: string[
       if (next >= 0 && next < order.length && (Math.abs(g.dx) > 70 || (v > 0.45 && Math.abs(g.dx) > 30))) {
         swipe(null); g = null;
         go(order[next]);
-        try { navigator.vibrate?.(8); } catch { /* non pris en charge */ }
+        haptic("tap");
       } else reset(true);
     };
     const cancel = (e: PointerEvent) => { if (g && e.pointerId === g.id) reset(true); };
@@ -98,7 +99,8 @@ export function useSheetDrag() {
     let g: { id: number; y: number; t: number; dy: number; sheet: HTMLElement; back: HTMLElement; grab: HTMLElement } | null = null;
     const down = (e: PointerEvent) => {
       const grab = e.target instanceof Element ? e.target.closest<HTMLElement>(".sheet-grab") : null;
-      const sheet = grab?.closest<HTMLElement>(".sheet"), back = sheet?.closest<HTMLElement>(".sheet-back");
+      // Fenêtres du bas (.sheet) et fiches plein écran (.panel) : même geste.
+      const sheet = grab?.closest<HTMLElement>(".sheet, .panel"), back = sheet?.closest<HTMLElement>(".sheet-back, .panel-back");
       if (!grab || !sheet || !back) return;
       grab.setPointerCapture?.(e.pointerId);
       sheet.style.transition = "none";
@@ -119,6 +121,7 @@ export function useSheetDrag() {
       if (dy > 110 || (v > 0.6 && dy > 30)) {
         sheet.style.transition = motionOk() ? "transform .24s cubic-bezier(.4, 0, 1, 1)" : "none";
         sheet.style.transform = "translateY(105%)";
+        haptic("tap");
         window.setTimeout(() => back.dispatchEvent(new MouseEvent("click", { bubbles: true })), motionOk() ? 200 : 0);
       } else {
         sheet.style.transition = motionOk() ? "transform .35s cubic-bezier(.3, 1.4, .5, 1)" : "none";
@@ -144,7 +147,7 @@ export function usePull(onChange: (px: number) => void, onRelease: (px: number) 
   useEffect(() => {
     let g: { y: number; x: number; px: number; on: boolean } | null = null;
     const start = (e: TouchEvent) => {
-      if (e.touches.length !== 1 || window.scrollY > 0 || !phone() || ownsGesture(e.target, "y") || document.querySelector(".sheet-back")) return;
+      if (e.touches.length !== 1 || window.scrollY > 0 || !phone() || ownsGesture(e.target, "y") || document.querySelector(".sheet-back, .panel-back, .pal-back")) return;
       g = { y: e.touches[0].clientY, x: e.touches[0].clientX, px: 0, on: false };
     };
     const move = (e: TouchEvent) => {

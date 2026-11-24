@@ -26,6 +26,9 @@ const textBoxes = (page) => page.evaluate(() => {
     if (e.closest("button:disabled, [aria-disabled=true]")) continue;
     const hit = document.elementFromPoint(Math.min(innerWidth - 1, Math.max(0, r.left + r.width / 2)), Math.min(innerHeight - 1, Math.max(0, r.top + r.height / 2)));
     if (hit && !e.contains(hit) && !hit.contains(e)) continue;
+    // Texte qui passe en partie sous la barre du bas (fixe) : son fond mesuré serait celui de la barre.
+    const bar = document.querySelector(".bnav"), pill = bar && getComputedStyle(bar).display !== "none" && !bar.classList.contains("is-hidden") ? bar.querySelector(".bnav-pill").getBoundingClientRect() : null;
+    if (pill && !e.closest(".bnav") && r.bottom > pill.top - 8) continue;
     out.push({ sel: e.className && typeof e.className === "string" ? e.className : e.tagName.toLowerCase(), text: t.textContent.trim().slice(0, 30), x: r.left, y: r.top, w: r.width, h: r.height, color: st.color, size: parseFloat(st.fontSize), weight: Number(st.fontWeight) });
   }
   return out;

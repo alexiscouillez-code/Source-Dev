@@ -1,4 +1,5 @@
 "use client";
+import { haptic } from "@/components/haptics";
 
 /**
  * Fait défiler les chiffres jusqu’à leur valeur (KPI, J-xx, pourcentages…) dès qu’ils apparaissent.
@@ -138,5 +139,26 @@ export function withTransition(update: () => void, kind?: string) {
   t.finished.catch(() => {}).finally(() => { if (document.documentElement.dataset.vt === kind) delete document.documentElement.dataset.vt; });
 }
 
-/** Petite vibration de retour (téléphones compatibles). */
-export const buzz = (ms: number | number[] = 12) => { try { if (motionOk()) navigator.vibrate?.(ms); } catch { /* non pris en charge */ } };
+/**
+ * Retrait ou retour d'éléments d'une liste en transition de vue : l'élément retiré se replie et s'efface, les
+ * autres glissent à leur nouvelle place ; un élément qui revient (Annuler) se redéploie. Les noms de transition
+ * (`data-vt-id`) ne sont posés que le temps de l'animation, pour ne pas gêner les changements d'onglet.
+ * `update` doit modifier le DOM de façon synchrone (flushSync).
+ */
+export function morphItems(sel: string, update: () => void) {
+  const d = document as VTDoc;
+  if (!d.startViewTransition || !motionOk()) { update(); return; }
+  const tag = (on: boolean) => document.querySelectorAll<HTMLElement>(sel).forEach((el) => {
+    if (el.dataset.vtId) el.style.viewTransitionName = on ? `mi-${el.dataset.vtId.replace(/[^a-zA-Z0-9_-]/g, "-")}` : "";
+  });
+  const html = document.documentElement;
+  tag(true);
+  html.dataset.vt = "items";
+  const t = d.startViewTransition(() => { update(); tag(true); });
+  t.ready?.catch(() => {});
+  t.updateCallbackDone?.catch(() => {});
+  t.finished.catch(() => {}).finally(() => { tag(false); if (html.dataset.vt === "items") delete html.dataset.vt; });
+}
+
+/** Petite vibration de retour (voir components/haptics.ts : réglage dans Compte, tic sur iPhone). */
+export const buzz = (ms: number | number[] = 12) => haptic(ms);

@@ -1,7 +1,8 @@
 import { body, HttpError, isoDate, json, num, withUser } from "@/lib/api";
 import { one, run } from "@/db/client";
 
-const STATUSES = ["planned", "done", "skipped"];
+// « adapted » : seulement pour annuler un « faite » ou « sautée » sur une séance adaptée (bouton Annuler).
+const STATUSES = ["planned", "adapted", "done", "skipped"];
 
 export const PATCH = withUser(async (user, req, ctx) => {
   const id = Number((await ctx.params).id);

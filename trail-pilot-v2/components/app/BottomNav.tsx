@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent as RPointerEvent } from "react";
+import { haptic } from "@/components/haptics";
 
 export interface NavItem { id: string; label: string; Icon: () => React.JSX.Element }
 export interface QuickAction {
@@ -15,8 +16,11 @@ export interface QuickAction {
 }
 /** Pastille sur une icône : un point, ou un nombre ; `label` est lu par les lecteurs d'écran. */
 export interface Badge { label: string; count?: number }
-/** Message affiché dans la barre (île dynamique). `k` change à chaque nouveau message. */
-export interface IslandMessage { text: string; k: number }
+/**
+ * Message affiché dans la barre (île dynamique). `k` change à chaque nouveau message. `action` : un bouton dans
+ * l'île (« Annuler ») ; `ms` : sa durée, montrée par un trait qui se vide.
+ */
+export interface IslandMessage { text: string; k: number; action?: { label: string; run: () => void }; ms?: number }
 
 /** Événement de balayage entre onglets : `p` de −1 (vers la section précédente) à 1 (suivante), null au relâché. */
 export const SWIPE_EVENT = "tp-swipe";
@@ -161,7 +165,7 @@ export default function BottomNav({ items, active, onSelect, actions = [], badge
     const b = el.closest(".bnav-pill")!.getBoundingClientRect(), r = el.getBoundingClientRect();
     setOpen(false);
     setCtx({ id, x: r.left + r.width / 2 - b.left });
-    try { navigator.vibrate?.(10); } catch { /* non pris en charge */ }
+    haptic("select");
     return true;
   };
   const down = (id: string) => (e: RPointerEvent<HTMLButtonElement>) => {
@@ -219,11 +223,21 @@ export default function BottomNav({ items, active, onSelect, actions = [], badge
           </>
         )}
         {message && (
-          // Île dynamique : la barre s'efface derrière le message ; un toucher le ferme.
-          <button type="button" className="bnav-msg" key={message.k} onClick={onDismiss} aria-label={`${message.text} Toucher pour fermer.`}>
-            <span className="bnav-msg-dot" aria-hidden="true" />
-            <span className="bnav-msg-txt" role="status">{message.text}</span>
-          </button>
+          // Île dynamique : la barre s'efface derrière le message ; un toucher le ferme. Avec une action (« Annuler »),
+          // un bouton dans l'île et un trait qui se vide pendant le temps laissé pour annuler.
+          <div className={`bnav-msg${message.action ? " has-act" : ""}`} key={message.k} style={message.action ? { ["--msg-ms" as string]: `${message.ms ?? 5000}ms` } : undefined}>
+            <button type="button" className="bnav-msg-main" onClick={onDismiss} aria-label={`${message.text} Toucher pour fermer.`}>
+              <span className="bnav-msg-dot" aria-hidden="true" />
+              <span className="bnav-msg-txt" role="status">{message.text}</span>
+            </button>
+            {message.action && (
+              <button type="button" className="bnav-msg-act" onClick={() => { haptic("select"); message.action!.run(); onDismiss?.(); }}>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></svg>
+                {message.action.label}
+              </button>
+            )}
+            {message.action && <span className="bnav-msg-time" aria-hidden="true" />}
+          </div>
         )}
         {actions.length > 0 && (
           <div className="bnav-menu" id={menuId} role="menu" aria-label={plusLabel} ref={menu} hidden={!open} onKeyDown={menuKeys}>

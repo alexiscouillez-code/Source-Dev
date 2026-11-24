@@ -1,5 +1,7 @@
 "use client";
 
+import { openPanel, setPick } from "./panel";
+import { IconCompare, IconRecap } from "./icons";
 import { useEffect, useMemo, useState } from "react";
 import type { Ctx } from "./AppShell";
 import InfoTip, { EXPLAIN } from "./InfoTip";
@@ -242,7 +244,15 @@ function capOf(values: number[], floor = 10) {
   return max > cap * 1.15 ? { top: cap, capped: true } : { top: Math.max(floor, max), capped: false };
 }
 
-const Head = () => <header className="head"><div><span className="eyebrow">Moteur de charge</span><h1>Analyse</h1></div></header>;
+const Head = () => (
+  <header className="head">
+    <div><span className="eyebrow">Moteur de charge</span><h1>Analyse</h1></div>
+    <div className="row">
+      <button type="button" className="btn ghost sm" onClick={(e) => openPanel({ kind: "recap" }, e.currentTarget)}><IconRecap />Bilan du mois</button>
+      <button type="button" className="btn ghost sm" onClick={() => { setPick({ on: true, ids: [] }); window.dispatchEvent(new CustomEvent("tp-go", { detail: "runs" })); }}><IconCompare />Comparer</button>
+    </div>
+  </header>
+);
 
 
 function FitnessChart({ points }: { points: Data["points"] }) {

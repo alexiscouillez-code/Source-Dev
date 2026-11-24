@@ -11,7 +11,15 @@ import { dotHeights, fmtKm1, resample } from "@/lib/engine/today-run";
  * s'allume et grossit, les autres s'estompent, et une étiquette donne le kilomètre et l'altitude.
  * Seulement en mode Verre (`interactive`) ; en Jour et en Nuit, le profil reste une image fixe, comme à l'origine.
  */
-export default function DotProfile({ profile, km, cols = 40, rows = 12, label, interactive = false }: { profile: number[]; km: number; cols?: number; rows?: number; label?: string; interactive?: boolean }) {
+export default function DotProfile({ profile, km, cols = 40, rows = 12, label, interactive = false, tip, axis, mark = true }: {
+  profile: number[]; km: number; cols?: number; rows?: number; label?: string; interactive?: boolean;
+  /** Étiquette de la colonne visée : [valeur en gros, précision] (par défaut altitude et kilomètre). */
+  tip?: (value: number, col: number) => [string, string];
+  /** Légende sous le profil, à gauche et à droite (par défaut 0 KM et la distance). */
+  axis?: [string, string];
+  /** Point d'arrivée mis en avant. */
+  mark?: boolean;
+}) {
   const values = resample(profile, cols);
   const heights = dotHeights(values, rows);
   const [hi, setHi] = useState<number | null>(null);
@@ -27,7 +35,8 @@ export default function DotProfile({ profile, km, cols = 40, rows = 12, label, i
     e.preventDefault();
     setHi((h) => Math.max(0, Math.min(cols - 1, (h ?? (step > 0 ? -1 : cols)) + step)));
   };
-  const text = hi != null ? `${fmtKm1(kmAt(hi))} km, ${Math.round(values[hi])} mètres` : desc;
+  const tipOf = (c: number): [string, string] => tip ? tip(values[c], c) : [`${Math.round(values[c])} m`, `${fmtKm1(kmAt(c))} km`];
+  const text = hi != null ? (tip ? `${tipOf(hi)[1]}, ${tipOf(hi)[0]}` : `${fmtKm1(kmAt(hi))} km, ${Math.round(values[hi])} mètres`) : desc;
   return (
     <figure className={`dotprofile${interactive ? " is-live" : ""}${hi != null && interactive ? " is-scrub" : ""}`}>
       <div className="dp-plot">
@@ -47,8 +56,8 @@ export default function DotProfile({ profile, km, cols = 40, rows = 12, label, i
             // --c / --r : colonne et rangée, pour faire monter le profil colonne par colonne (voir night.css).
             return <circle key={`${c}-${r}`} className="dp-dot" style={{ ["--c" as string]: c, ["--r" as string]: r }} cx={c * G + G / 2} cy={H - (r * G + G / 2)} r={R} fill="currentColor" opacity={op.toFixed(2)} />;
           }))}
-          <circle className="dp-glow" cx={lastC * G + G / 2} cy={H - (lastR * G + G / 2)} r={6} fill="currentColor" opacity="0.25" />
-          <circle className="dp-last" cx={lastC * G + G / 2} cy={H - (lastR * G + G / 2)} r={3.2} fill="currentColor" />
+          {mark && <circle className="dp-glow" cx={lastC * G + G / 2} cy={H - (lastR * G + G / 2)} r={6} fill="currentColor" opacity="0.25" />}
+          {mark && <circle className="dp-last" cx={lastC * G + G / 2} cy={H - (lastR * G + G / 2)} r={3.2} fill="currentColor" />}
         </g>
         {interactive && hi != null && (
           // Colonne visée : ses points s'allument (rangée par rangée), un repère pointillé monte jusqu'en haut.
@@ -61,11 +70,11 @@ export default function DotProfile({ profile, km, cols = 40, rows = 12, label, i
       </svg>
       {interactive && hi != null && (
         <span className="dp-tip" aria-hidden="true" style={{ left: `${((hi + 0.5) / cols) * 100}%`, bottom: `${(heights[hi] / rows) * 100}%` }}>
-          <b>{Math.round(values[hi])} m</b>{fmtKm1(kmAt(hi))} km
+          <b>{tipOf(hi)[0]}</b>{tipOf(hi)[1]}
         </span>
       )}
       </div>
-      <figcaption className="dp-axis" aria-hidden="true"><span>0 KM</span><span>{fmtKm1(km)} KM</span></figcaption>
+      <figcaption className="dp-axis" aria-hidden="true"><span>{axis?.[0] ?? "0 KM"}</span><span>{axis?.[1] ?? `${fmtKm1(km)} KM`}</span></figcaption>
     </figure>
   );
 }

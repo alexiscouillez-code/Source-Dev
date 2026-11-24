@@ -63,36 +63,57 @@ button.theme-toggle.ap-toggle { display: inline-grid; place-items: center; posit
 }
 
 /* ---------- Passage vers ou depuis le mode Verre : trame de points ----------
-   La nouvelle apparence apparaît à travers une trame de points qui part du bouton : devant, des points
-   isolés qui grossissent ; derrière, la nouvelle apparence pleine. Trois calques de masque :
-   disque plein (arrière de la vague) ∪ (trame ∩ disque avant). */
+   La nouvelle apparence arrive en demi-teinte, comme une trame d'imprimerie qui part du bouton :
+   au front de la vague, de petits points ; un peu derrière, de gros points qui se touchent ; au cœur, l'aplat.
+   Cinq calques de masque (du haut vers le bas) : cœur plein ∪ [ front ∩ ( petits points ∪ ( gros points ∩ bande ) ) ].
+   Devant la vague, une rangée de points couleur d'accent court sur l'écran (.vt-dots-ring, calque à part). */
 @property --vt-r1 { syntax: "<length>"; inherits: false; initial-value: 0px; }
 @property --vt-r2 { syntax: "<length>"; inherits: false; initial-value: 0px; }
 @property --vt-dot { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --vt-ring { syntax: "<length>"; inherits: false; initial-value: 0px; }
 html.vt-dots::view-transition-old(root), html.vt-dots::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+html.vt-dots::view-transition-old(root) { animation: dots-dim 1.25s ease both; }
+@keyframes dots-dim { 60% { filter: none; } to { filter: brightness(.85) saturate(.9); } }
 html.vt-dots::view-transition-new(root) {
   --c: var(--vt-x, 50%) var(--vt-y, 50%);
   -webkit-mask-image:
-    radial-gradient(circle at var(--c), #000 var(--vt-r1), transparent calc(var(--vt-r1) + 1px)),
+    radial-gradient(circle at var(--c), #000 calc(var(--vt-r2) - 30vmax), transparent calc(var(--vt-r2) - 30vmax + 1px)),
+    radial-gradient(circle at var(--c), #000 var(--vt-r2), transparent calc(var(--vt-r2) + 1px)),
     radial-gradient(circle, #000 var(--vt-dot), transparent calc(var(--vt-dot) + .75px)),
-    radial-gradient(circle at var(--c), #000 var(--vt-r2), transparent calc(var(--vt-r2) + 1px));
+    radial-gradient(circle, #000 calc(var(--vt-dot) * 1.6 + 1.8px), transparent calc(var(--vt-dot) * 1.6 + 2.55px)),
+    radial-gradient(circle at var(--c), #000 calc(var(--vt-r2) - 13vmax), transparent calc(var(--vt-r2) - 13vmax + 1px));
   mask-image:
-    radial-gradient(circle at var(--c), #000 var(--vt-r1), transparent calc(var(--vt-r1) + 1px)),
+    radial-gradient(circle at var(--c), #000 calc(var(--vt-r2) - 30vmax), transparent calc(var(--vt-r2) - 30vmax + 1px)),
+    radial-gradient(circle at var(--c), #000 var(--vt-r2), transparent calc(var(--vt-r2) + 1px)),
     radial-gradient(circle, #000 var(--vt-dot), transparent calc(var(--vt-dot) + .75px)),
-    radial-gradient(circle at var(--c), #000 var(--vt-r2), transparent calc(var(--vt-r2) + 1px));
-  -webkit-mask-size: 100% 100%, 14px 14px, 100% 100%;
-  mask-size: 100% 100%, 14px 14px, 100% 100%;
-  -webkit-mask-repeat: no-repeat, repeat, no-repeat;
-  mask-repeat: no-repeat, repeat, no-repeat;
-  -webkit-mask-composite: source-over, source-in;
-  mask-composite: add, intersect;
-  animation: vt-dots 1.15s cubic-bezier(.45, .05, .25, 1) both;
+    radial-gradient(circle, #000 calc(var(--vt-dot) * 1.6 + 1.8px), transparent calc(var(--vt-dot) * 1.6 + 2.55px)),
+    radial-gradient(circle at var(--c), #000 calc(var(--vt-r2) - 13vmax), transparent calc(var(--vt-r2) - 13vmax + 1px));
+  -webkit-mask-size: 100% 100%, 100% 100%, 14px 14px, 14px 14px, 100% 100%;
+  mask-size: 100% 100%, 100% 100%, 14px 14px, 14px 14px, 100% 100%;
+  -webkit-mask-repeat: no-repeat, no-repeat, repeat, repeat, no-repeat;
+  mask-repeat: no-repeat, no-repeat, repeat, repeat, no-repeat;
+  -webkit-mask-composite: source-over, source-in, source-over, source-in, source-over;
+  mask-composite: add, intersect, add, intersect, add;
+  animation: vt-dots 1.25s cubic-bezier(.45, .05, .25, 1) both;
 }
 @keyframes vt-dots {
-  0% { --vt-r1: -45vmax; --vt-r2: 0px; --vt-dot: .6px; }
-  55% { --vt-dot: 4.2px; }
-  100% { --vt-r1: 165vmax; --vt-r2: 190vmax; --vt-dot: 6.5px; }
+  0% { --vt-r2: 0px; --vt-dot: .5px; }
+  45% { --vt-dot: 2.1px; }
+  100% { --vt-r2: 215vmax; --vt-dot: 3px; }
 }
+.vt-dots-ring {
+  position: fixed; inset: 0; z-index: 2147483000; pointer-events: none; view-transition-name: tp-dots-ring;
+  --c: var(--vt-x, 50%) var(--vt-y, 50%);
+  background: radial-gradient(circle, var(--g-glow, #b48cff) 1.7px, transparent 2.4px) 0 0 / 14px 14px;
+  -webkit-mask-image: radial-gradient(circle at var(--c), transparent calc(var(--vt-ring) - 10vmax), #000 calc(var(--vt-ring) - 3vmax), #000 var(--vt-ring), transparent calc(var(--vt-ring) + 1.2vmax));
+  mask-image: radial-gradient(circle at var(--c), transparent calc(var(--vt-ring) - 10vmax), #000 calc(var(--vt-ring) - 3vmax), #000 var(--vt-ring), transparent calc(var(--vt-ring) + 1.2vmax));
+  animation: vt-ring 1.25s cubic-bezier(.45, .05, .25, 1) both, vt-ring-fade 1.25s linear both;
+}
+@keyframes vt-ring { from { --vt-ring: 0px; } to { --vt-ring: 215vmax; } }
+@keyframes vt-ring-fade { 0% { opacity: 0; } 10% { opacity: .95; } 65% { opacity: .75; } 100% { opacity: 0; } }
+html.vt-dots::view-transition-group(tp-dots-ring), html.vt-dots::view-transition-new(tp-dots-ring) { animation: none; }
+html.vt-dots::view-transition-new(tp-dots-ring) { animation: dots-hold 1.25s linear both; }
+@keyframes dots-hold { from, to { opacity: 1; } }
 /* Arrivée en mode Verre : le flou du verre se pose en fondu sur les cartes (elles se givrent derrière la trame).
    Une transition et non une animation : les animations d'apparition des cartes ne sont pas rejouées. */
 @media (prefers-reduced-motion: no-preference) {
@@ -156,4 +177,45 @@ html.vt-dots::view-transition-new(root) {
   .tint-sw:hover .tint-dot { transform: translateY(-2px) scale(1.04); }
   .tint-sw.on .tint-dot { animation: tint-on .55s cubic-bezier(.3, 1.5, .5, 1); }
   @keyframes tint-on { 0% { transform: scale(.82); } 100% { transform: scale(1); } }
+}
+
+/* ---------- Mode automatique et vibrations (Compte > Apparence) ---------- */
+.auto-pick { display: grid; gap: 12px; margin-top: 4px; padding-top: 14px; border-top: 1px dashed var(--line); }
+.auto-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.auto-head b { display: block; font-size: 14.5px; }
+.auto-head small { display: block; color: var(--mute); font-size: 12.5px; line-height: 1.35; margin-top: 2px; }
+.auto-body { display: grid; gap: 12px; }
+.auto-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.auto-geo { display: grid; gap: 8px; justify-items: start; }
+.auto-next { margin: 0; color: var(--soft, var(--mute)); }
+.tp-switch {
+  flex: none; position: relative; width: 52px; height: 30px; padding: 0; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--ink-3, var(--ink-2)); transition: background .25s, border-color .25s, box-shadow .25s;
+}
+.tp-switch i { position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 999px; background: var(--snow); box-shadow: 0 2px 6px rgba(0, 0, 0, .28); transition: transform .38s cubic-bezier(.3, 1.45, .5, 1), width .18s ease; }
+.tp-switch[aria-checked="true"] { background: var(--ember, #e4561c); border-color: transparent; box-shadow: 0 6px 18px -8px var(--ember, #e4561c); }
+.tp-switch[aria-checked="true"] i { transform: translateX(22px); background: #fff; }
+.tp-switch:active i { width: 27px; }
+.tp-switch[aria-checked="true"]:active i { transform: translateX(17px); }
+.tp-switch:focus-visible { outline: 2px solid var(--snow); outline-offset: 3px; }
+:root[data-theme="glass"] .tp-switch[aria-checked="true"] { background: linear-gradient(160deg, var(--g-acc), var(--g-acc-2)); box-shadow: 0 6px 18px -8px var(--g-acc); }
+.sun-arc { display: grid; gap: 4px; }
+.sun-arc svg { width: 100%; max-width: 340px; height: auto; display: block; margin: 0 auto; overflow: visible; }
+.sun-path { fill: none; stroke: var(--mute); stroke-width: 2.6; stroke-linecap: round; stroke-dasharray: 0 .021; }
+.sun-horizon { stroke: var(--line); stroke-width: 1.2; stroke-dasharray: 2 5; }
+.sun-body { transition: transform 1.1s cubic-bezier(.3, 1.2, .4, 1); }
+.sun-core { fill: #ffb547; }
+.sun-glow { fill: rgba(255, 181, 71, .22); }
+.sun-moon { fill: var(--snow); opacity: .9; }
+.sun-times { display: flex; justify-content: space-between; max-width: 340px; width: 100%; margin: 0 auto; font-size: 12px; color: var(--mute); }
+.sun-times b { color: var(--snow); font-weight: 600; }
+@media (prefers-reduced-motion: no-preference) {
+  .auto-body { animation: auto-in .45s cubic-bezier(.2, .8, .2, 1) both; }
+  @keyframes auto-in { from { opacity: 0; transform: translateY(-6px); } }
+  .sun-path { animation: arc-reveal 1.1s cubic-bezier(.3, .7, .2, 1) both; }
+  @keyframes arc-reveal { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+  .sun-body { animation: sun-pop .7s cubic-bezier(.3, 1.6, .5, 1) .5s both; }
+  @keyframes sun-pop { from { opacity: 0; scale: .2; } }
+  .sun-glow { animation: sun-breathe 3.2s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+  @keyframes sun-breathe { 50% { transform: scale(1.25); opacity: .6; } }
 }

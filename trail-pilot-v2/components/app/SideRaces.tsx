@@ -1,7 +1,11 @@
 "use client";
 
 import Fold from "./Fold";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { flushSync } from "react-dom";
+import { cancelLater, isPending, later, usePending } from "./undo";
+import { morphItems } from "./motion";
+import { haptic } from "@/components/haptics";
 import { api, dayLabel, fmtDur, fmtKm, fmtNum, localToday } from "./client";
 import { IconTrash } from "./icons";
 
@@ -9,13 +13,14 @@ export interface SideRaceRow { id: number; name: string; date: string; distanceK
 
 /** Courses de préparation : objectifs secondaires (B) ou courses d’entraînement (C), intégrées au planning. */
 export default function SideRaces({ races, today, mainDate, onChanged, toast }: {
-  races: SideRaceRow[]; today: string; mainDate: string | null; onChanged: () => Promise<void>; toast: (m: string) => void;
+  races: SideRaceRow[]; today: string; mainDate: string | null; onChanged: () => Promise<void>; toast: (m: string, o?: { action?: { label: string; run: () => void } }) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [f, setF] = useState({ name: "", date: "", distanceKm: "", gainM: "", priority: "B" as "B" | "C" });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const upcoming = races.filter((r) => r.date > today);
+  const pend = usePending();
+  const upcoming = useMemo(() => races.filter((r) => r.date > today && !isPending(`race:${r.id}`)), [races, today, pend]);
   // Météo, temps visé et consignes de chaque course (rechargés quand la liste change).
   const [guides, setGuides] = useState<Record<number, Guide>>({});
   const sig = upcoming.map((r) => `${r.id}:${r.date}`).join(",");
@@ -32,9 +37,12 @@ export default function SideRaces({ races, today, mainDate, onChanged, toast }: 
     catch (e2) { setErr(e2 instanceof Error ? e2.message : "Erreur"); }
     finally { setBusy(false); }
   }
-  async function remove(r: SideRaceRow) {
-    if (!confirm(`Retirer ${r.name} ?`)) return;
-    try { await api(`/api/races?id=${r.id}`, { method: "DELETE" }); await onChanged(); } catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }
+  // Retrait annulable : la course quitte la liste, le retrait (et le recalcul du planning) part après 5 s sans « Annuler ».
+  function remove(r: SideRaceRow) {
+    const key = `race:${r.id}`, items = ".view ul.races > li";
+    haptic("warn");
+    morphItems(items, () => flushSync(() => later(key, { url: `/api/races?id=${r.id}` }, onChanged)));
+    toast(`${r.name} retirée.`, { action: { label: "Annuler", run: () => { morphItems(items, () => flushSync(() => { cancelLater(key); })); toast("Course rétablie."); } } });
   }
 
   return (
@@ -44,7 +52,7 @@ export default function SideRaces({ races, today, mainDate, onChanged, toast }: 
       {upcoming.length > 0 && (
         <ul className="list races">
           {upcoming.map((r) => (
-            <li key={r.id} className="item" style={{ gridTemplateColumns: "1fr auto" }}>
+            <li key={r.id} data-vt-id={`race-${r.id}`} className="item" style={{ gridTemplateColumns: "1fr auto" }}>
               <div style={{ minWidth: 0 }}>
                 <div className="t">⚑ {r.name}</div>
                 <div className="s">{dayLabel(r.date, { weekday: "long", day: "numeric", month: "long" })}{r.distanceKm ? ` · ${fmtKm(r.distanceKm)} km` : ""}{r.gainM ? ` · ${fmtNum(r.gainM)} m D+` : ""} · {r.priority === "B" ? "objectif secondaire" : "course d’entraînement"}</div>

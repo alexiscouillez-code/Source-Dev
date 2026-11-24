@@ -8,6 +8,12 @@ import { api, dayLabel, dayNum, fmtDur, fmtKm, fmtNum, localToday, shortDay, SPO
 import { IconPin, IconPlus, IconSync, IconTrash } from "./icons";
 import { parseActivityFile } from "@/lib/activity-file";
 import { QUICK_EVENT, takeQuick } from "./quick";
+import { flushSync } from "react-dom";
+import { cancelLater, isPending, later, usePending } from "./undo";
+import { morphItems } from "./motion";
+import { haptic } from "@/components/haptics";
+import { getPick, openPanel, PICK_EVENT, setPick, togglePick, type PickState } from "./panel";
+import { IconCompare } from "./icons";
 
 const TrackMap = dynamic(() => import("./TrackMap"), { ssr: false, loading: () => <div className="tmap" style={{ height: 300 }}><div className="tmap-loading">Chargement de la carte…</div></div> });
 
@@ -16,7 +22,7 @@ const ZONE_NAMES = ["Z1 récupération", "Z2 endurance", "Z3 tempo", "Z4 seuil",
 const paceOf = (mPerMin: number) => { const p = 1000 / mPerMin; return `${Math.floor(p)}:${String(Math.round((p % 1) * 60) % 60).padStart(2, "0")}`; };
 
 /** Analyse de la sortie : barre des zones cardiaques, allure ajustée à la pente, découplage, VO2max de la séance. */
-function Insight({ a }: { a: Activity }) {
+export function Insight({ a }: { a: Pick<Activity, "insight"> }) {
   const i = a.insight;
   if (!i || (!i.zones && !i.gap)) return null;
   const total = i.zones?.reduce((t, v) => t + v, 0) ?? 0;
@@ -65,7 +71,10 @@ function Review({ a, ai, toast, onDone }: { a: Activity; ai: boolean; toast: Ctx
 }
 
 export default function Sessions({ me, refresh, toast }: Ctx) {
-  const [acts, setActs] = useState<Activity[] | null>(null);
+  const [all, setActs] = useState<Activity[] | null>(null);
+  // Séances supprimées depuis moins de 5 s (annulables) : déjà retirées de l'écran.
+  const pend = usePending();
+  const acts = useMemo(() => all?.filter((a) => !isPending(`act:${a.id}`)) ?? null, [all, pend]);
   const [shoes, setShoes] = useState<MiniShoe[]>([]);
   const [sheet, setSheet] = useState<Partial<Draft> | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -76,6 +85,18 @@ export default function Sessions({ me, refresh, toast }: Ctx) {
   const [mapOpen, setMapOpen] = useFold("runs-map", false);
   // « Voir sur la carte » déplie la carte si besoin, puis l’amène à l’écran.
   const showOnMap = (id: number) => { setFocus(id); setMapOpen(true); requestAnimationFrame(() => mapRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })); };
+
+  // Mode « comparer » : toucher deux sorties ouvre leur comparaison ; sinon, toucher une sortie ouvre sa fiche.
+  const [pick, setP] = useState<PickState>(getPick());
+  useEffect(() => { const on = (e: Event) => setP((e as CustomEvent<PickState>).detail); window.addEventListener(PICK_EVENT, on); return () => window.removeEventListener(PICK_EVENT, on); }, []);
+  const tapRun = (a: Activity, e: React.MouseEvent<HTMLElement>) => {
+    const t = e.target as HTMLElement;
+    // Les commandes de la ligne (carte, ressenti, chaussures, suppression, bilan IA) gardent leur rôle.
+    if (t.closest("select, a, input, .item-actions, .review-ask, .ai-review button, .excl-note button") && !t.closest(".run-open")) return;
+    const li = e.currentTarget;
+    if (pick.on) { haptic("tap"); togglePick(a.id, li); return; }
+    openPanel({ kind: "run", id: a.id, initial: a }, li);
+  };
 
   const [ai, setAi] = useState(false);
   const load = useCallback(async () => { const r = await api<{ activities: Activity[]; shoes?: MiniShoe[]; ai?: boolean }>("/api/activities"); setActs(r.activities); setShoes(r.shoes ?? []); setAi(!!r.ai); }, []);
@@ -111,10 +132,12 @@ export default function Sessions({ me, refresh, toast }: Ctx) {
     try { await api(`/api/activities/${a.id}`, { method: "PATCH", body: { checkState: 2 } }); await Promise.all([load(), refresh()]); toast("Séance réintégrée dans les calculs."); }
     catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }
   }
-  async function remove(a: Activity) {
-    if (!confirm("Supprimer cette séance ?")) return;
-    try { await api(`/api/activities/${a.id}`, { method: "DELETE" }); await Promise.all([load(), refresh()]); }
-    catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }
+  // Suppression annulable : la séance quitte la liste tout de suite, la suppression part après 5 s sans « Annuler ».
+  function remove(a: Activity) {
+    const key = `act:${a.id}`, items = ".view li.item.run";
+    haptic("warn");
+    morphItems(items, () => flushSync(() => later(key, { url: `/api/activities/${a.id}` }, () => Promise.all([load(), refresh()]))));
+    toast(`« ${a.name ?? SPORT_LABEL[a.sport]} » supprimée.`, { action: { label: "Annuler", run: () => { morphItems(items, () => flushSync(() => { cancelLater(key); })); toast("Séance rétablie."); } } });
   }
   const onFileRef = useRef<(f?: File) => void>(() => {});
   onFileRef.current = (f?: File) => { onFile(f); };
@@ -136,10 +159,12 @@ export default function Sessions({ me, refresh, toast }: Ctx) {
           {me.strava.connected && <button className="btn ghost sm" onClick={sync} disabled={syncing}><IconSync />{syncing ? "Synchro…" : "Synchro Strava"}</button>}
           <button className="btn ghost sm" onClick={() => fileRef.current?.click()} title="Fichier exporté de ta montre ou de ton appli : FIT, TCX ou GPX">Importer un fichier</button>
           <input ref={fileRef} type="file" accept=".gpx,.fit,.tcx,application/gpx+xml" hidden onChange={(e) => onFile(e.target.files?.[0])} />
+          {(acts?.length ?? 0) >= 2 && <button type="button" className={`btn ghost sm${pick.on ? " on" : ""}`} aria-pressed={pick.on} onClick={() => setPick(pick.on ? { on: false, ids: [] } : { on: true, ids: [] })}><IconCompare />{pick.on ? "Annuler" : "Comparer"}</button>}
           <button className="btn sm" onClick={() => setSheet({ source: "manual" })}><IconPlus />Ajouter</button>
         </div>
       </header>
       {me.strava.connected && <Freshness s={me.strava} />}
+      {pick.on && <p className="note small runs-pick" role="status">Touche deux sorties pour les comparer côte à côte.</p>}
 
       {!me.strava.connected && me.strava.configured && (
         <div className="banner" style={{ marginBottom: 14 }}>
@@ -164,10 +189,12 @@ export default function Sessions({ me, refresh, toast }: Ctx) {
         {!acts ? <div className="skeleton" /> : !acts.length ? <p className="empty">Aucune séance sur les 90 derniers jours.</p> : (
           <ul className="list">
             {acts.map((a) => (
-              <li key={a.id} className={`item run${a.check_state === 1 ? " excluded" : ""}`}>
-                <div className="date"><small>{shortDay(a.date)}</small><b>{dayNum(a.date)}</b></div>
+              <li key={a.id} data-vt-id={`act-${a.id}`} onClick={(e) => tapRun(a, e)}
+                className={`item run is-tappable${a.check_state === 1 ? " excluded" : ""}${pick.on ? " is-picking" : ""}${pick.ids.includes(a.id) ? " is-picked" : ""}`}>
+                <div className="date"><small>{shortDay(a.date)}</small><b>{dayNum(a.date)}</b>{pick.on && <span className="pick-mark" aria-hidden="true" />}</div>
                 <div style={{ minWidth: 0 }}>
-                  <div className="t">{a.name ?? SPORT_LABEL[a.sport]}</div>
+                  <button type="button" className="t run-open" aria-pressed={pick.on ? pick.ids.includes(a.id) : undefined}
+                    aria-label={pick.on ? `${pick.ids.includes(a.id) ? "Retirer" : "Choisir"} ${a.name ?? SPORT_LABEL[a.sport]} pour la comparaison` : undefined}>{a.name ?? SPORT_LABEL[a.sport]}</button>
                   <div className="s">
                     {SPORT_LABEL[a.sport]} · {fmtDur(a.duration_min)}{a.distance_km ? ` · ${fmtKm(a.distance_km)} km` : ""}{a.gain_m ? ` · ${fmtNum(a.gain_m)} m D+` : ""}{a.avg_hr ? ` · ${Math.round(a.avg_hr)} bpm` : ""}
                   </div>

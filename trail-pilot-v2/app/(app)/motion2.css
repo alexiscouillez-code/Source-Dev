@@ -277,3 +277,11 @@
   /* Terrains : le point qui parcourt le tracé */
   .tmap path.tm-tracer { filter: drop-shadow(0 0 6px #ff6a2b); }
 }
+
+/* ---------- Retrait et retour d'un élément de liste (suppression annulable) ----------
+   Seul dans sa paire (pas de nouvelle image) : il part. Seul côté nouveau : il revient. Les autres glissent. */
+html[data-vt="items"]::view-transition-group(*) { animation-duration: .42s; animation-timing-function: cubic-bezier(.3, 1.1, .4, 1); }
+html[data-vt="items"]::view-transition-old(*):only-child { animation: item-out .34s cubic-bezier(.4, 0, 1, 1) both; }
+html[data-vt="items"]::view-transition-new(*):only-child { animation: item-in .5s cubic-bezier(.2, 1.2, .4, 1) .08s both; }
+@keyframes item-out { to { opacity: 0; transform: translateX(-18px) scale(.94); filter: blur(3px); } }
+@keyframes item-in { from { opacity: 0; transform: translateY(-10px) scale(.96); filter: blur(3px); } }

@@ -170,6 +170,12 @@ select.rpe-select { background: var(--ink); border: 1px solid var(--line); borde
 
 /* ---------- Toast / overlays ---------- */
 .toast { position: fixed; z-index: 60; left: 50%; bottom: calc(100px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: var(--snow); color: var(--ink); padding: 12px 18px; border-radius: 14px; font-weight: 600; box-shadow: 0 20px 40px -10px #000c; animation: rise .4s var(--ease); max-width: calc(100% - 32px); text-align: center; }
+.toast.has-act { display: flex; align-items: center; gap: 14px; text-align: left; padding: 8px 8px 8px 18px; overflow: hidden; }
+.toast-act { flex: none; border: 0; border-radius: 10px; padding: 8px 14px; background: var(--ink); color: var(--snow); font: inherit; font-weight: 700; cursor: pointer; }
+.toast-act:hover { background: var(--ink-2); }
+.toast-act:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.toast.has-act::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--ember, #e4561c); transform-origin: left; animation: msg-time var(--msg-ms, 5s) linear both; }
+@keyframes msg-time { to { transform: scaleX(0); } }
 @media (min-width: 901px) { .toast { bottom: 28px; } }
 .skeleton { border-radius: 22px; background: linear-gradient(90deg, var(--ink-2), var(--ink-3), var(--ink-2)); background-size: 200% 100%; animation: shimmer 1.4s linear infinite; min-height: 180px; }
 @keyframes shimmer { to { background-position: -200% 0; } }

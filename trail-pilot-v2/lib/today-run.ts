@@ -30,7 +30,7 @@ type Row = { id: number; strava_id: string | null; analysis: string | null; trac
  * on relit d'abord les flux Strava (altitude de la montre), sinon on mesure l'altitude le long du tracé GPS.
  * Le résultat est gardé ; sans tracé ni altitude, on ne réessaie qu'une fois par jour. Jamais de profil inventé.
  */
-async function realProfile(userId: number, r: Row): Promise<number[] | null> {
+export async function realProfile(userId: number, r: Row): Promise<number[] | null> {
   const key = `altprof:${userId}:${r.id}`;
   const kept = await one<{ value: string; updated_at: number }>("SELECT value, updated_at FROM app_kv WHERE key = ?", [key]);
   if (kept) {

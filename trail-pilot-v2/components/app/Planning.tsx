@@ -4,6 +4,8 @@ import StrengthButton from "./StrengthButton";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { buzz, withTransition } from "./motion";
+import { cancelLater, isPending, later, usePending } from "./undo";
+import { openPanel } from "./panel";
 import { downloadWorkout } from "./workout";
 import type { Ctx } from "./AppShell";
 import { api, dayLabel, dayNum, fmtDur, fmtKm, fmtNum, localToday, PRESET_KEY, shortDay, type PlanSession, type Absence, type Review } from "./client";
@@ -76,24 +78,41 @@ export default function Planning({ me, refresh, toast, go }: Ctx) {
     catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }
     finally { setBusy(false); }
   }
-  async function setStatus(s: Session, status: string) {
+  async function setStatus(s: Session, status: string, undo = true) {
+    const prev = s.status;
     try {
       const flight = status === "done" ? flyCheck(s.id) : null;
       if (status === "done") buzz(18);
       await api(`/api/plan/${s.id}`, { method: "PATCH", body: { status } });
       await flight;
       await Promise.all([load(true), refresh()]);
+      // Faite ou sautée par erreur : « Annuler » remet la séance comme elle était.
+      if (undo && (status === "done" || status === "skipped") && (prev === "planned" || prev === "adapted")) {
+        toast(`${s.title} : ${status === "done" ? "faite" : "sautée"}.`, { action: { label: "Annuler", run: () => { setStatus({ ...s, status }, prev, false).then(() => toast("C’est annulé.")); } } });
+      }
     }
     catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }
   }
+  // Déplacement annulable : les séances reprennent leurs jours d'avant.
+  const undoMove = (moved: { id: number; date: string }[]) => ({
+    label: "Annuler",
+    run: async () => {
+      try {
+        for (const m of moved) await api(`/api/plan/${m.id}`, { method: "PATCH", body: { date: m.date } });
+        await Promise.all([load(true), refresh()]);
+        toast("Déplacement annulé.");
+      } catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }
+    },
+  });
   // Glisser-déposer : la séance prend le jour visé ; celle qui s’y trouvait (si elle est déplaçable) prend l’ancien jour.
   async function move(a: Session, b: Session) {
     try {
+      const swap = movable(b, v!.today);
       await api(`/api/plan/${a.id}`, { method: "PATCH", body: { date: b.date } });
-      if (movable(b, v!.today)) await api(`/api/plan/${b.id}`, { method: "PATCH", body: { date: a.date } });
+      if (swap) await api(`/api/plan/${b.id}`, { method: "PATCH", body: { date: a.date } });
       buzz([10, 40, 10]);
       await Promise.all([load(true), refresh()]);
-      toast(`${a.title} déplacée au ${dayLabel(b.date, { weekday: "long", day: "numeric", month: "long" })}.`);
+      toast(`${a.title} déplacée au ${dayLabel(b.date, { weekday: "long", day: "numeric", month: "long" })}.`, { action: undoMove([{ id: a.id, date: a.date }, ...(swap ? [{ id: b.id, date: b.date }] : [])]) });
     } catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }
   }
   // Calendrier : la séance va au jour touché ; si une séance déplaçable s’y trouve, elles échangent leurs jours.
@@ -103,7 +122,7 @@ export default function Planning({ me, refresh, toast, go }: Ctx) {
       if (swap) await api(`/api/plan/${swap.id}`, { method: "PATCH", body: { date: a.date } });
       buzz([10, 40, 10]);
       await Promise.all([load(), refresh()]);
-      toast(`${a.title} déplacée au ${dayLabel(date, { weekday: "long", day: "numeric", month: "long" })}.`);
+      toast(`${a.title} déplacée au ${dayLabel(date, { weekday: "long", day: "numeric", month: "long" })}.`, { action: undoMove([{ id: a.id, date: a.date }, ...(swap ? [{ id: swap.id, date: swap.date }] : [])]) });
     } catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }
   }
   async function restore(s: Session) {
@@ -111,6 +130,22 @@ export default function Planning({ me, refresh, toast, go }: Ctx) {
     catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }
   }
   const noted = async () => { await Promise.all([load(), refresh()]); };
+  // Imprévu annulé : le bandeau disparaît tout de suite, l'annulation part après 5 s sans « Annuler ».
+  usePending();
+  const cancelAbsence = () => {
+    later("absence", { url: `/api/absence?today=${v?.today ?? ""}` }, () => Promise.all([load(), refresh()]));
+    toast("Imprévu annulé : ton plan reprend son cours.", { action: { label: "Annuler", run: () => { cancelLater("absence"); toast("Imprévu maintenu."); } } });
+  };
+  // Nouvel imprévu : « Annuler » le retire aussitôt (une modification d'imprévu existant n'a pas d'annulation).
+  const absenceSaved = async (msg: string) => {
+    const fresh = !v?.absence;
+    setAway(false);
+    await Promise.all([load(), refresh()]);
+    toast(msg, fresh ? { action: { label: "Annuler", run: async () => {
+      try { await api(`/api/absence?today=${v?.today ?? ""}`, { method: "DELETE" }); await Promise.all([load(), refresh()]); toast("Imprévu retiré : ton plan reprend son cours."); }
+      catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }
+    } } } : undefined);
+  };
   const [away, setAway] = useState(false);
   const saved = async (msg: string) => { setEditing(false); setRefine(false); await Promise.all([load(), refresh()]); toast(msg); };
 
@@ -120,16 +155,16 @@ export default function Planning({ me, refresh, toast, go }: Ctx) {
     return (
       <>
         <Head sub={v.goal && !editing ? "Course passée" : undefined} />
-        {!editing && <Debriefs today={v.today} rev={rev} toast={toast} />}
+        {!editing && <Debriefs today={v.today} rev={rev} toast={toast} onAll={() => go("races")} />}
         {v.goal && !editing && <p className="muted small" style={{ margin: "0 0 10px" }}>Prochaine étape : choisis ta prochaine course, le plan repart de ta forme actuelle.</p>}
         <RaceForm goal={v.goal} today={v.today} refine={refine} onSaved={saved} onCancel={editing ? () => { setEditing(false); setRefine(false); } : undefined} />
         {!v.goal && v.sessions.length > 0 && (
           <section className="card" style={{ marginTop: 14 }}>
             <div className="card-head"><h2>En attendant : entretien</h2><div className="row"><button className="btn ghost sm" onClick={() => setAway(true)}>Imprévu</button><button className="btn ghost sm" onClick={recalc} disabled={busy}>Recalculer</button></div></div>
-            <AbsenceBanner a={v.absence ?? null} today={v.today} onEdit={() => setAway(true)} onCancel={async () => { try { await api(`/api/absence?today=${v.today}`, { method: "DELETE" }); await Promise.all([load(), refresh()]); toast("Imprévu annulé."); } catch (e) { toast(e instanceof Error ? e.message : "Erreur"); } }} />
-            <Debriefs today={v.today} rev={rev} toast={toast} />
+            <AbsenceBanner a={isPending("absence") ? null : v.absence ?? null} today={v.today} onEdit={() => setAway(true)} onCancel={cancelAbsence} />
+            <Debriefs today={v.today} rev={rev} toast={toast} onAll={() => go("races")} />
       <LearningCard l={v.learning} onToggle={async (off) => { try { await api("/api/plan", { method: "PATCH", body: { learningOff: off, today: v.today } }); await Promise.all([load(), refresh()]); toast(off ? "Plan d’origine rétabli, sans ajustement." : "Ajustements réactivés."); } catch (e) { toast(e instanceof Error ? e.message : "Erreur"); } }} />
-      {away && <AbsenceSheet a={v.absence ?? null} today={v.today} onClose={() => setAway(false)} onSaved={async (msg) => { setAway(false); await Promise.all([load(), refresh()]); toast(msg); }} />}
+      {away && <AbsenceSheet a={v.absence ?? null} today={v.today} onClose={() => setAway(false)} onSaved={absenceSaved} />}
             <p className="muted small" style={{ margin: 0 }}>Sans course choisie, Trail Pilot te propose 3 semaines pour garder ta forme, à partir de ce que tu fais en ce moment.</p>
             <PlanBoard today={v.today} rev={rev} targets={me.targets} onStatus={setStatus} onWhere={whereTo} onMoveTo={moveTo} onRestore={restore} onChanged={noted}>
               <WeekList sessions={v.sessions} weeks={[]} today={me.today} doneByWeek={v.doneByWeek} onStatus={setStatus} targets={me.targets} onWhere={whereTo} onMove={move} />
@@ -151,10 +186,10 @@ export default function Planning({ me, refresh, toast, go }: Ctx) {
           <button className="btn ghost sm" onClick={() => setEditing(true)}>Changer de course</button>
         </div>
       } />
-      <AbsenceBanner a={v.absence ?? null} today={v.today} onEdit={() => setAway(true)} onCancel={async () => { try { await api(`/api/absence?today=${v.today}`, { method: "DELETE" }); await Promise.all([load(), refresh()]); toast("Imprévu annulé : ton plan reprend son cours."); } catch (e) { toast(e instanceof Error ? e.message : "Erreur"); } }} />
-      <Debriefs today={v.today} rev={rev} toast={toast} />
+      <AbsenceBanner a={isPending("absence") ? null : v.absence ?? null} today={v.today} onEdit={() => setAway(true)} onCancel={cancelAbsence} />
+      <Debriefs today={v.today} rev={rev} toast={toast} onAll={() => go("races")} />
       <LearningCard l={v.learning} onToggle={async (off) => { try { await api("/api/plan", { method: "PATCH", body: { learningOff: off, today: v.today } }); await Promise.all([load(), refresh()]); toast(off ? "Plan d’origine rétabli, sans ajustement." : "Ajustements réactivés."); } catch (e) { toast(e instanceof Error ? e.message : "Erreur"); } }} />
-      {away && <AbsenceSheet a={v.absence ?? null} today={v.today} onClose={() => setAway(false)} onSaved={async (msg) => { setAway(false); await Promise.all([load(), refresh()]); toast(msg); }} />}
+      {away && <AbsenceSheet a={v.absence ?? null} today={v.today} onClose={() => setAway(false)} onSaved={absenceSaved} />}
       <RaceHeader p={p} onRefine={() => { setRefine(true); setEditing(true); }} />
       <section className="card plan-board" style={{ marginTop: 14 }}>
         <PlanBoard today={v.today} rev={rev} targets={me.targets} onStatus={setStatus} onWhere={whereTo} onMoveTo={moveTo} onRestore={restore} onChanged={noted}>
@@ -445,8 +480,9 @@ function WeekList({ sessions, weeks, today, doneByWeek, onStatus, targets, onWhe
                 {list.map((s) => (
                   <li key={s.id} data-sid={s.id} data-date={s.date} style={{ viewTransitionName: `sess-${s.id}` }} className={`item ${s.date === today ? "today" : ""} is-${s.status} ${s.template === "race" ? "is-race" : ""} ${movable(s, today) ? "is-movable" : ""}`}>
                     <div className="date" onPointerDown={drag(s)} title={movable(s, today) ? "Maintiens pour déplacer la séance" : undefined}><small>{shortDay(s.date)}</small><b>{dayNum(s.date)}</b></div>
-                    <button onClick={() => openDetail(s.id)} style={{ all: "unset", cursor: "pointer", minWidth: 0 }} aria-expanded={detail === s.id}>
-                      <div className="t">{s.template === "race" ? "⚑ " : ""}{s.title}</div>
+                    <button onClick={(e) => { if (s.template === "race" && s.date <= today) openPanel({ kind: "race", date: s.date }, e.currentTarget.closest("li")); else openDetail(s.id); }} style={{ all: "unset", cursor: "pointer", minWidth: 0 }}
+                      aria-expanded={s.template === "race" && s.date <= today ? undefined : detail === s.id} aria-haspopup={s.template === "race" && s.date <= today ? "dialog" : undefined}>
+                      <div className="t">{s.template === "race" ? "⚑ " : ""}{s.title}{s.template === "race" && s.date <= today && <span className="chip ember race-db">Débrief</span>}</div>
                       <div className="s">
                         {fmtDur(s.duration_min)}{s.gain_m ? ` · ${fmtNum(s.gain_m)} m D+` : ""}{s.template !== "race" ? ` · effort ${s.rpe_target}/10` : ""}
                         {s.status === "done" && s.a_duration ? ` — réalisé ${fmtDur(s.a_duration)}${s.a_distance ? `, ${fmtKm(s.a_distance)} km` : ""}` : ""}

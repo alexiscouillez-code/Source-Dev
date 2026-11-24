@@ -1,5 +1,7 @@
 "use client";
 
+import { openPanel } from "./panel";
+import { haptic } from "@/components/haptics";
 import TodayRun from "@/components/night/TodayRun";
 import StrengthButton from "./StrengthButton";
 import { useEffect, useState } from "react";
@@ -103,6 +105,7 @@ export default function Today({ me, refresh, go, toast }: Ctx) {
       <FormCard me={me} go={go} onAsk={() => setAsk((x) => !x)} asking={ask} />
       {ask && <Coach toast={toast} />}
       <WeekCard today={me.today} toast={toast} />
+      {Number(me.today.slice(8, 10)) <= 5 && me.recent.length > 0 && <RecapTeaser today={me.today} />}
     </>
   );
 }
@@ -224,6 +227,7 @@ function CheckinCard({ me, onDone, onCancel }: { me: Me; onDone: (msg: string) =
         api<{ decision: { verdict: keyof typeof VERDICT } }>("/api/checkins", { method: "POST", body: { ...v, note, today: me.today, painZones: v.pain > 0 && consent ? zones : [], healthConsent: consent && !me.settings.healthConsent, sleepH: w.sleepH, rhr: consent ? w.rhr : "", hrv: consent ? w.hrv : "" } }),
         new Promise((ok) => setTimeout(ok, window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : analyzeDelay())),
       ]);
+      haptic(r.decision.verdict === "rest" ? "warn" : "success");
       await onDone(`Décision du jour : ${VERDICT[r.decision.verdict].label}.`);
     } catch (e2) { setErr(e2 instanceof Error ? e2.message : "Erreur"); setBusy(false); }
   }
@@ -303,3 +307,16 @@ function analyzeDelay() {
   try { const n = Number(localStorage.getItem("tp-ci-count") || 0) + 1; localStorage.setItem("tp-ci-count", String(n)); return n <= 3 ? 1100 : 450; } catch { return 700; }
 }
 
+
+/** Les premiers jours du mois : le bilan du mois précédent, à ouvrir en story. */
+function RecapTeaser({ today }: { today: string }) {
+  const d = new Date(`${today.slice(0, 7)}-01T12:00:00Z`); d.setUTCMonth(d.getUTCMonth() - 1);
+  const month = d.toISOString().slice(0, 7), name = d.toLocaleDateString("fr-FR", { month: "long", timeZone: "UTC" });
+  return (
+    <button type="button" className="card recap-teaser" style={{ marginTop: 14 }} onClick={(e) => openPanel({ kind: "recap", month }, e.currentTarget)}>
+      <span className="recap-dots" aria-hidden="true">{Array.from({ length: 14 }, (_, i) => <i key={i} style={{ ["--i" as string]: i }} />)}</span>
+      <span><span className="eyebrow">Bilan du mois</span><b>Ton mois {/^[aeiouyéè]/i.test(name) ? "d’" : "de "}{name} en story</b><small>Kilomètres, dénivelé, régularité, plus belle sortie</small></span>
+      <span className="recap-go" aria-hidden="true">›</span>
+    </button>
+  );
+}

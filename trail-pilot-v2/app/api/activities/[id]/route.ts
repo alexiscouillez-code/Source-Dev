@@ -1,7 +1,36 @@
 import { body, HttpError, json, num, withUser } from "@/lib/api";
 import { one, run } from "@/db/client";
-import { ownActivity, regeneratePlan, resolveToday } from "@/lib/service";
+import { loadProfile, ownActivity, physioOf, regeneratePlan, resolveToday, withLoad } from "@/lib/service";
+import { parseAnalysis } from "@/lib/engine/streams";
+import { readReview } from "@/lib/engine/ai-review";
+import { realProfile } from "@/lib/today-run";
 import { parseActivity } from "@/lib/activity-input";
+
+/**
+ * Fiche d'une sortie : ses chiffres (comme dans la liste), son profil d'altitude (le vrai : montre, Strava ou
+ * mesuré le long du tracé), ses temps de passage au kilomètre et ses meilleurs efforts. Sert à la fiche de
+ * sortie, au partage en story et au comparateur.
+ */
+export const GET = withUser(async (user, _req, ctx) => {
+  const id = Number((await ctx.params).id);
+  const a = await ownActivity(user.id, id);
+  const p = await loadProfile(user.id);
+  const an = parseAnalysis(a.analysis);
+  const row = a as typeof a & { strava_id?: string | null; track?: string | null; ai_review?: string | null; max_hr?: number | null };
+  const profile = an?.alt ?? (row.track || row.strava_id ? await realProfile(user.id, { id: a.id, strava_id: row.strava_id ?? null, analysis: a.analysis ?? null, track: row.track ?? null }).catch(() => null) : null);
+  return json({
+    activity: (() => {
+      // Seulement ce que la fiche affiche (pas le résumé brut, le bilan IA brut ni les colonnes internes).
+      const { ai_review: _r, user_id: _u, stream_state: _s, created_at: _c, updated_at: _m, ...rest } = withLoad(a, physioOf(p)) as ReturnType<typeof withLoad> & Record<string, unknown>;
+      return { ...rest, track: row.track ?? null, review: readReview(row.ai_review), reviewable: !row.strava_id && a.source !== "strava" };
+    })(),
+    profile: profile ?? null,
+    km: an?.km?.length ? an.km : null,
+    moving: an?.moving && an.moving > 60 ? Math.round(an.moving) : null,
+    best: an?.best ?? null,
+    maxHr: row.max_hr ?? null,
+  });
+});
 
 export const PATCH = withUser(async (user, req, ctx) => {
   const id = Number((await ctx.params).id);

@@ -3,12 +3,15 @@ import { all, one, run } from "@/db/client";
 import { diffDays } from "@/lib/engine/dates";
 import { MAX_PLAN_DAYS } from "@/lib/engine/planner";
 import { loadSideRaces, regeneratePlan, resolveToday, setSideRacePlace, sideRaceGuides } from "@/lib/service";
+import { listRaces } from "@/lib/races";
 
 /** Courses de préparation (objectifs secondaires ou courses d’entraînement). */
 export const GET = withUser(async (user, req) => {
   const q = new URL(req.url).searchParams;
   // ?guides=1 : météo annoncée, temps visé et consignes pour chaque course à venir.
   if (q.get("guides") === "1") return json({ guides: await sideRaceGuides(user.id, resolveToday(q.get("today"))) });
+  // ?all=1 : toutes les courses (principale, préparation, passées et à venir) pour l'espace « Mes courses ».
+  if (q.get("all") === "1") return json({ races: await listRaces(user.id, resolveToday(q.get("today"))) });
   return json({ races: await loadSideRaces(user.id) });
 });
 

@@ -6,6 +6,10 @@ import { api, dayLabel, fmtDur, fmtKm, fmtNum, PRESET_KEY, type Targets } from "
 import type { Ctx } from "./AppShell";
 import type { MapLine, MapMarker } from "./TrackMap";
 import { IconPin, IconTrash } from "./icons";
+import { flushSync } from "react-dom";
+import { cancelLater, isPending, later, usePending } from "./undo";
+import { morphItems } from "./motion";
+import { haptic } from "@/components/haptics";
 import { decodePolyline } from "@/lib/polyline";
 import { dist } from "@/lib/terrain/graph";
 import type { Kind, Surface, Terrain } from "@/lib/terrain/finders";
@@ -164,7 +168,7 @@ function Card({ domId, t, on, onSelect, saved, onSave, onDelete, onEdit, onHover
   const s = t as Saved;
   const [name, setName] = useState(t.name), [note, setNote] = useState(s.note ?? "");
   return (
-    <li id={domId} className={`item terr ${on ? "on" : ""}`}>
+    <li id={domId} data-vt-id={"savedId" in t ? `terr-${(t as Saved).savedId}` : undefined} className={`item terr ${on ? "on" : ""}`}>
       <button className="terr-main" onClick={onSelect} aria-pressed={on}>
         <span className="terr-kind">{t.source === "mine" ? "Ta sortie" : KIND_LABEL[t.kind]}</span>
         <span className="t">{t.name}</span>
@@ -206,7 +210,10 @@ export default function Terrains({ me, toast }: Ctx) {
   const [err, setErr] = useState<string | null>(null);
   const [results, setResults] = useState<Terrain[] | null>(null);
   const [searched, setSearched] = useState<Query | null>(null);
-  const [saved, setSaved] = useState<Saved[]>([]);
+  const [savedAll, setSaved] = useState<Saved[]>([]);
+  // Terrains supprimés depuis moins de 5 s (annulables) : déjà retirés de la liste.
+  const pend = usePending();
+  const saved = useMemo(() => savedAll.filter((t) => !isPending(`terr:${t.savedId}`)), [savedAll, pend]);
   const [mine, setMine] = useState<Terrain[]>([]);
   const [sel, setSel] = useState(0);
   const [fitKey, setFitKey] = useState("init");
@@ -296,9 +303,12 @@ export default function Terrains({ me, toast }: Ctx) {
     try { await api("/api/terrains", { method: "POST", body: t }); await load(); toast("Terrain enregistré dans « Mes terrains »."); }
     catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }
   }
-  async function remove(t: Saved) {
-    if (!confirm(`Supprimer « ${t.name} » de tes terrains ?`)) return;
-    try { await api(`/api/terrains?id=${t.savedId}`, { method: "DELETE" }); await load(); } catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }
+  // Suppression annulable : le terrain quitte la liste, la suppression part après 5 s sans « Annuler ».
+  function remove(t: Saved) {
+    const key = `terr:${t.savedId}`, items = ".view li.item.terr";
+    haptic("warn");
+    morphItems(items, () => flushSync(() => later(key, { url: `/api/terrains?id=${t.savedId}` }, load)));
+    toast(`« ${t.name} » retiré de tes terrains.`, { action: { label: "Annuler", run: () => { morphItems(items, () => flushSync(() => { cancelLater(key); })); toast("Terrain rétabli."); } } });
   }
   async function edit(t: Saved, name: string, note: string) {
     try { await api("/api/terrains", { method: "PUT", body: { id: t.savedId, name, note } }); await load(); } catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }

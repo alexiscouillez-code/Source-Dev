@@ -448,6 +448,8 @@ export async function calendarView(userId: number, today: string, from: string, 
   ]);
   const notes = await all<{ date: string; note: string; signals: string | null }>("SELECT date, note, signals FROM day_notes WHERE user_id = ? AND date BETWEEN ? AND ?", [userId, from, to]);
   const fuel = await all<{ date: string; feel: string }>("SELECT date, feel FROM fuel_logs WHERE user_id = ? AND date BETWEEN ? AND ?", [userId, from, to]);
+  // Courses principales passées gardées dans les archives : leur jour reste marqué (et ouvre leur débrief).
+  const archived = await all<{ date: string; name: string }>("SELECT date, name FROM race_archive WHERE user_id = ? AND date BETWEEN ? AND ?", [userId, from, to]);
   const attached = new Set(sessions.map((p) => p.activity_id).filter((x): x is number => x != null));
   return {
     today, from, to,
@@ -465,6 +467,7 @@ export async function calendarView(userId: number, today: string, from: string, 
     races: [
       ...(goal && goal.date >= from && goal.date <= to ? [{ date: goal.date, name: goal.name, main: true }] : []),
       ...sides.filter((r) => r.date >= from && r.date <= to).map((r) => ({ date: r.date, name: r.name, main: false })),
+      ...archived.filter((r) => r.date !== goal?.date).map((r) => ({ date: r.date, name: r.name, main: true })),
     ],
     absence,
   };

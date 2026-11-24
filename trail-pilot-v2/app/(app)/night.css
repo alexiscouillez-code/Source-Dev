@@ -251,3 +251,5 @@ button.glass:hover { border-color: rgba(255, 255, 255, .5); }
 :root:is([data-theme="dark"], [data-theme="light"]) .night .g-example { color: var(--snow); background: var(--ink-3); border-color: var(--mute); }
 :root:is([data-theme="dark"], [data-theme="light"]) .night button.glass:hover { border-color: var(--mute); }
 .dp-tip { background: var(--n-dot, #fff); color: var(--n-tip, var(--n-0)); }
+/* Le grand chiffre posé sur la grille de charge ne doit pas intercepter le toucher destiné à la grille. */
+.night .g-num { pointer-events: none; }

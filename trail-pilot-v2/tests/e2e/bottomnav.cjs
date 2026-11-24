@@ -57,6 +57,7 @@ scenario("Barre de navigation inférieure (BottomNav)", async () => {
   // Page défilée, on change d'onglet : la vue ne doit pas « voler » de son ancienne place à la nouvelle,
   // et la barre du bas reste en place (pas de fondu avec la page).
   await tab(page, "today"); await page.waitForTimeout(800);
+  const top0 = await page.evaluate(() => { window.scrollTo(0, 0); return document.querySelector(".view").getBoundingClientRect().top; });
   await page.evaluate(() => window.scrollTo(0, 500)); await page.waitForTimeout(500);
   const during = page.evaluate(() => new Promise((res) => {
     const look = () => {
@@ -73,7 +74,10 @@ scenario("Barre de navigation inférieure (BottomNav)", async () => {
   const vt = await during;
   const group = vt.anims.filter((a) => a.pe === "::view-transition-group(tp-view)");
   check(group.every((a) => !/translate|matrix/.test(a.tr)), "changement d'onglet : la page ne saute pas d'une place à l'autre", vt.anims.map((a) => `${a.pe} ${a.tr.slice(0, 60)}`));
-  check(Math.abs(parseInt(vt.dy) + 500) < 40, "l'ancienne page reste là où on la voyait (décalage du défilement compensé)", vt.dy);
+  // Décalage attendu : l'ancienne vue était 500 px plus haut ; la nouvelle (Planning, avec son sélecteur) commence plus bas.
+  await page.waitForTimeout(900);
+  const top1 = await page.evaluate(() => document.querySelector(".view").getBoundingClientRect().top + window.scrollY);
+  check(Math.abs(parseInt(vt.dy) - (top0 - 500 - top1)) < 40, "l'ancienne page reste là où on la voyait (décalage du défilement compensé)", { dy: vt.dy, attendu: top0 - 500 - top1 });
   check(!vt.anims.some((a) => a.pe.includes("tp-bnav")), "la barre du bas reste en place pendant le changement d'onglet", vt.anims.map((a) => a.pe));
   await page.waitForTimeout(900);
   check((await bar(page)).on === "plan", "puis Planning est actif");
@@ -199,7 +203,7 @@ scenario("Barre de navigation inférieure (BottomNav)", async () => {
   await touch("touchStart", pb.x + pb.width / 2, pb.y + pb.height / 2); await page.waitForTimeout(700);
   const ctxm = await page.evaluate(() => ({ title: document.querySelector(".bnav-ctx-title")?.textContent, items: [...document.querySelectorAll(".bnav-ctx .bnav-act b")].map((e) => e.textContent) }));
   await lift(); await page.waitForTimeout(300);
-  check(ctxm.title === "Planning" && ctxm.items.join() === "Séance du jour,Ma course,Je ne peux pas courir", "appui long sur Planning : ses raccourcis s'ouvrent", ctxm);
+  check(ctxm.title === "Planning" && ctxm.items.join() === "Séance du jour,Ma course,Je ne peux pas courir,Mes courses", "appui long sur Planning : ses raccourcis s'ouvrent", ctxm);
   check((await hash()) === "#today" && (await page.locator(".bnav-ctx").count()) === 1, "l'appui long n'ouvre pas la page (le menu reste ouvert)");
   await page.screenshot({ path: `${OUT}/bnav-raccourcis.png` });
   await page.locator(".bnav-ctx .bnav-act", { hasText: "Ma course" }).click();

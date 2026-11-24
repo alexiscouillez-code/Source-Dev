@@ -161,15 +161,24 @@
 .bnav-ring circle { fill: none; stroke: var(--bn-on); stroke-width: 2.6; stroke-linecap: round; stroke-dasharray: 26 74; transform-origin: 50% 50%; }
 
 /* ---------- Île dynamique : un message dans la barre ---------- */
-.bnav-msg {
-  position: absolute; inset: 5px; z-index: 3; display: flex; align-items: center; gap: 11px; padding: 0 14px 0 12px;
+.bnav-msg { position: absolute; inset: 5px; z-index: 3; display: flex; align-items: center; gap: 6px; border-radius: 999px; }
+.bnav-msg-main {
+  flex: 1; min-width: 0; align-self: stretch; display: flex; align-items: center; gap: 11px; padding: 0 12px 0 12px;
   border: 0; border-radius: 999px; background: transparent; color: var(--bn-menu-fg); font: inherit; text-align: left; cursor: pointer;
 }
+.bnav-msg-act {
+  flex: none; display: inline-flex; align-items: center; gap: 6px; height: 40px; margin-right: 1px; padding: 0 15px 0 12px;
+  border: 0; border-radius: 999px; background: var(--bn-act-bg, var(--bn-on)); color: var(--bn-act-fg, #111);
+  font: inherit; font-size: 13.5px; font-weight: 700; cursor: pointer; box-shadow: 0 0 18px -6px var(--bn-on);
+}
+.bnav-msg-act svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.bnav-msg-act:focus-visible { outline: 2px solid var(--bn-on); outline-offset: 3px; }
+.bnav-msg-time { position: absolute; left: 24px; right: 24px; bottom: -3px; height: 2px; border-radius: 2px; background: var(--bn-on); opacity: .8; transform-origin: left center; }
 .bnav-msg-dot { width: 10px; height: 10px; flex: none; border-radius: 50%; background: var(--bn-plus); box-shadow: 0 0 12px var(--bn-on); }
 .bnav-msg-txt { font-size: 13.5px; font-weight: 600; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .bnav-pill.is-msg > :is(.bnav-bar, .bnav-sep, .bnav-plus) { opacity: 0; filter: blur(4px); transform: scale(.94); pointer-events: none; }
 .bnav-pill > :is(.bnav-bar, .bnav-sep, .bnav-plus) { transition: opacity .3s ease, filter .3s ease, transform .4s cubic-bezier(.3, 1.3, .5, 1); }
-.bnav-msg:focus-visible { outline: 2px solid var(--bn-on); outline-offset: 2px; }
+.bnav-msg-main:focus-visible { outline: 2px solid var(--bn-on); outline-offset: 2px; }
 
 /* ---------- Raccourcis (appui long) ---------- */
 .bnav-ctx { right: auto; left: clamp(0px, calc(var(--cx) - 130px), calc(100% - 260px)); width: 260px; justify-items: stretch; }
@@ -194,6 +203,14 @@
   .bnav-msg { animation: msg-in .45s cubic-bezier(.2, .9, .3, 1) .08s both; }
   @keyframes msg-in { from { opacity: 0; transform: translateY(8px); filter: blur(4px); } }
   .bnav-msg-dot { animation: msg-dot 1.6s ease-in-out infinite; }
+  /* Annuler : le bouton arrive avec un petit rebond, le trait se vide pendant le délai, la flèche tourne au toucher. */
+  .bnav-msg-act { animation: act-in .5s cubic-bezier(.3, 1.6, .5, 1) .18s both; transition: transform .2s cubic-bezier(.3, 1.4, .5, 1); }
+  .bnav-msg-act:active { transform: scale(.93); }
+  .bnav-msg-act:active svg { transform: rotate(-50deg); }
+  .bnav-msg-act svg { transition: transform .3s cubic-bezier(.3, 1.4, .5, 1); }
+  @keyframes act-in { from { opacity: 0; transform: translateX(14px) scale(.8); } }
+  .bnav-msg-time { animation: msg-time var(--msg-ms, 5s) linear both; }
+  @keyframes msg-time { to { transform: scaleX(0); } }
   @keyframes msg-dot { 50% { transform: scale(.7); } }
   .bnav-ctx { transform-origin: var(--cx) 100%; }
   .bnav-ctx .bnav-act { transform-origin: 50% 100%; }

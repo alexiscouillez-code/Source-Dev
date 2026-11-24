@@ -242,4 +242,15 @@ export const MIGRATIONS: { tag: string; statements: string[] }[] = [
     // Repères pour un temps de course au plus près du réel : { ref: { km, gain, min }, terrain, winnerMin } (engine/race-anchor).
     statements: [`ALTER TABLE goals ADD COLUMN anchor TEXT`],
   },
+  {
+    tag: "020_race_archive",
+    statements: [
+      // Courses principales passées, gardées quand on choisit la suivante (une seule course principale à la fois dans goals) :
+      // l'espace « Mes courses », leurs débriefs (clé main:<date>) et les comparaisons d'une édition à l'autre.
+      `CREATE TABLE IF NOT EXISTS race_archive (
+        user_id INTEGER NOT NULL REFERENCES app_users(id) ON DELETE CASCADE, date TEXT NOT NULL, name TEXT NOT NULL,
+        distance_km REAL, gain_m INTEGER, plan_meta TEXT, route TEXT, archived_at INTEGER NOT NULL,
+        PRIMARY KEY (user_id, date))`,
+    ],
+  },
 ];

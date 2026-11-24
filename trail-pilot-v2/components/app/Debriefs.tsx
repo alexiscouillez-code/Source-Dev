@@ -5,7 +5,7 @@ import { api, dayLabel, fmtDur, fmtKm, fmtNum } from "./client";
 import Fold from "./Fold";
 
 interface Section { label: string; from: number; to: number; planned: number; actual: number; delta: number; tone: "vite" | "ok" | "lent" }
-interface Ready {
+export interface Ready {
   key: string; main: boolean; name: string; date: string; distanceKm: number | null; gainM: number | null; status: "pret"; daysAgo: number;
   activity: { id: number; name: string | null; durationMin: number; distanceKm: number | null; gainM: number | null; avgHr: number | null; source: string };
   planned: { estimate: { low: number; high: number } | null; hasSections: boolean }; splits: boolean;
@@ -14,12 +14,12 @@ interface Ready {
   projection: { name: string; low: number; high: number; current: { low: number; high: number } | null } | null;
   feedback: { rpe: number | null; tags: string[]; note: string | null; done: boolean };
 }
-interface Waiting { key: string; main: boolean; name: string; date: string; distanceKm: number | null; gainM: number | null; status: "attente" }
-type Item = Ready | Waiting;
+export interface Waiting { key: string; main: boolean; name: string; date: string; distanceKm: number | null; gainM: number | null; status: "attente" }
+export type Item = Ready | Waiting;
 const TONE = { mieux: "ok", prevu: "", moins: "lite", inconnu: "dim" } as const;
 
 /** Débriefs des courses récentes : prévu contre réalisé, sections, enseignements et ressenti du coureur. */
-export default function Debriefs({ today, rev, toast }: { today: string; rev: number; toast: (m: string) => void }) {
+export default function Debriefs({ today, rev, toast, onAll }: { today: string; rev: number; toast: (m: string) => void; onAll?: () => void }) {
   const [items, setItems] = useState<Item[] | null>(null);
   const [tags, setTags] = useState<Record<string, string>>({});
   const load = useCallback(async () => {
@@ -39,16 +39,17 @@ export default function Debriefs({ today, rev, toast }: { today: string; rev: nu
         <Fold key={d.key} id={`debrief-${d.key}`} style={{ marginBottom: 14 }} className="debrief" defaultOpen={d.daysAgo <= 14 && !d.feedback.done}
           eyebrow={`Débrief · ${dayLabel(d.date, { weekday: "long", day: "numeric", month: "long" })}`} title={d.name}
           aside={<span className={`chip ${TONE[d.result.tone]}`}>{fmtDur(d.actual)}</span>}>
-          <DebriefBody d={d} tags={tags} today={today} onSaved={(l) => { setItems(l); toast("Débrief enregistré."); }} toast={toast} />
+          <DebriefBody d={d} tags={tags} today={today} onSaved={(r) => { if (r.debriefs) setItems(r.debriefs); toast("Débrief enregistré."); }} toast={toast} />
         </Fold>
       ))}
+      {onAll && <p className="db-all"><button type="button" className="link small" onClick={onAll}>Toutes mes courses et leurs débriefs →</button></p>}
     </>
   );
 }
 
 const addDays = (date: string, n: number) => { const x = new Date(`${date}T12:00:00Z`); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
 
-function DebriefBody({ d, tags, today, onSaved, toast }: { d: Ready; tags: Record<string, string>; today: string; onSaved: (l: Item[]) => void; toast: (m: string) => void }) {
+export function DebriefBody({ d, tags, today, onSaved, toast, one = false }: { d: Ready; tags: Record<string, string>; today: string; onSaved: (r: { debriefs?: Item[]; debrief?: Item | null }) => void; toast: (m: string) => void; one?: boolean }) {
   const [rpe, setRpe] = useState(d.feedback.rpe ? String(d.feedback.rpe) : "");
   const [picked, setPicked] = useState<string[]>(d.feedback.tags);
   const [note, setNote] = useState(d.feedback.note ?? "");
@@ -56,7 +57,7 @@ function DebriefBody({ d, tags, today, onSaved, toast }: { d: Ready; tags: Recor
   const dirty = rpe !== (d.feedback.rpe ? String(d.feedback.rpe) : "") || note.trim() !== (d.feedback.note ?? "") || picked.slice().sort().join() !== d.feedback.tags.slice().sort().join();
   async function save(e: React.FormEvent) {
     e.preventDefault(); setBusy(true);
-    try { onSaved((await api<{ debriefs: Item[] }>("/api/debrief", { method: "PUT", body: { key: d.key, today, rpe: rpe || null, tags: picked, note } })).debriefs); }
+    try { onSaved(await api<{ debriefs?: Item[]; debrief?: Item | null }>("/api/debrief", { method: "PUT", body: { key: d.key, today, rpe: rpe || null, tags: picked, note, one } })); }
     catch (e2) { toast(e2 instanceof Error ? e2.message : "Erreur"); }
     finally { setBusy(false); }
   }
@@ -120,7 +121,7 @@ function DebriefBody({ d, tags, today, onSaved, toast }: { d: Ready; tags: Recor
           </label>
           <button className="btn sm" disabled={busy || !dirty}>{busy ? "Enregistrement…" : "Enregistrer"}</button>
         </div>
-        <small className="muted">Ce que tu coches ajoute des conseils ciblés ci-dessus. Ton débrief reste consultable ici pendant 3 mois.</small>
+        <small className="muted">Ce que tu coches ajoute des conseils ciblés ci-dessus. Ton débrief reste consultable dans Mes courses.</small>
       </form>
     </>
   );

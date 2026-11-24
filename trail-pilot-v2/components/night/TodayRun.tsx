@@ -8,6 +8,7 @@ import { useAppearance } from "@/components/appearance";
 import DotProfile from "./DotProfile";
 import DotGrid from "./DotGrid";
 import RadarCard from "./RadarCard";
+import { openPanel } from "@/components/app/panel";
 
 const ArrowUp = () => (
   <svg className="g-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13V3M3.5 7.5 8 3l4.5 4.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
@@ -51,7 +52,13 @@ export default function TodayRun({ today, onTerrains }: { today: string; onTerra
           <span className="g-meta" aria-hidden="true" style={{ top: 112, right: 64 }}>{runEx ? "" : run.date.slice(5).replace("-", ".")}</span>
           {profile && <span className="g-meta" aria-hidden="true" style={{ top: 150, right: 26 }}>{Math.round(Math.min(...profile))} M</span>}
           <div className="g-row">
-            <span className="g-top">{run.name}</span>
+            {runEx ? <span className="g-top">{run.name}</span> : (
+              // Vraie sortie : son nom ouvre sa fiche (la carte s'agrandit jusqu'à elle).
+              <button type="button" className="g-top g-open" aria-haspopup="dialog"
+                onClick={(e) => openPanel({ kind: "run", id: run.id, initial: { id: run.id, name: run.name, date: run.date, sport: run.sport, distance_km: run.distanceKm, gain_m: run.gainM } }, e.currentTarget.closest<HTMLElement>(".run-card"))}>
+                {run.name}<span aria-hidden="true" className="g-open-chev">›</span><span className="sr-only"> : ouvrir la fiche de la sortie</span>
+              </button>
+            )}
             {runEx && <Example />}
           </div>
           {!runEx && !run.isToday && <span className="g-when">{dayLabel(run.date, { weekday: "long", day: "numeric", month: "long" })}</span>}

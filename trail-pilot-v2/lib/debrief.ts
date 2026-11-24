@@ -6,7 +6,8 @@ import { raceDemands } from "./engine/planner";
 import { buildStrategy, type RaceRoute } from "./engine/strategy";
 import { parseAnalysis } from "./engine/streams";
 import { estimateVo2 } from "./engine/vo2";
-import { loadGoal, loadState, readPlanMeta, toVo2Run, type ActivityRow } from "./service";
+import { loadGoal, loadState, readPlanMeta, toVo2Run, type ActivityRow, type GoalRow } from "./service";
+import type { RacePlan } from "./engine/planner";
 import { reanalyze } from "./strava";
 import { loadCalibration } from "./calibration";
 
@@ -41,56 +42,84 @@ async function plannedFor(userId: number, key: string, race: { name: string; dat
   return planned;
 }
 
-export async function loadDebriefs(userId: number, today: string) {
-  const since = addDays(today, -WINDOW);
-  const [goal, sides, prof] = await Promise.all([
-    loadGoal(userId),
-    all<{ id: number; name: string; date: string; distanceKm: number | null; gainM: number | null; priority: string }>(
-      "SELECT id, name, date, distance_km AS distanceKm, gain_m AS gainM, priority FROM side_races WHERE user_id = ? AND date <= ? AND date >= ? ORDER BY date DESC", [userId, today, since]),
-    one<{ hr_max: number | null; hr_rest: number | null; vo2_watch: number | null; vdot_ref: number | null }>("SELECT hr_max, hr_rest, vo2_watch, vdot_ref FROM profiles WHERE user_id = ?", [userId]),
-  ]);
-  const physio = { hrMax: prof?.hr_max ?? null, hrRest: prof?.hr_rest ?? null, vdot: prof?.vo2_watch ?? prof?.vdot_ref ?? null };
-  const races: { key: string; main: boolean; name: string; date: string; distanceKm: number | null; gainM: number | null }[] = [];
-  if (goal && goal.date <= today && goal.date >= since) races.push({ key: `main:${goal.date}`, main: true, name: goal.name, date: goal.date, distanceKm: goal.distance_km, gainM: goal.gain_m });
-  for (const s of sides) races.push({ key: `side:${s.id}`, main: false, name: s.name, date: s.date, distanceKm: s.distanceKm, gainM: s.gainM });
-  races.sort((a, b) => b.date.localeCompare(a.date));
+/** Course passée (principale actuelle ou archivée, ou de préparation) avec ce qu'il faut pour son débrief. */
+export interface RaceRef { key: string; main: boolean; name: string; date: string; distanceKm: number | null; gainM: number | null; meta: RacePlan | null; route: RaceRoute | null }
+const parse = <T,>(raw: string | null | undefined): T | null => { try { return raw ? (JSON.parse(raw) as T) : null; } catch { return null; } };
 
-  const out = [];
-  for (const r of races.slice(0, 6)) {
-    let act = await one<ActivityRow & { strava_id: string | null; analysis: string | null }>(
-      "SELECT * FROM activities WHERE user_id = ? AND date = ? AND sport IN ('trail', 'course', 'rando') ORDER BY duration_min DESC LIMIT 1", [userId, r.date]);
-    const base = { key: r.key, main: r.main, name: r.name, date: r.date, distanceKm: r.distanceKm, gainM: r.gainM };
-    if (!act) { out.push({ ...base, status: "attente" as const }); continue; }
-    const meta = r.main ? readPlanMeta(goal) : null;
-    let route: RaceRoute | null = null;
-    if (r.main) { try { route = goal?.route ? JSON.parse(goal.route) : null; } catch { route = null; } }
-    const planned = await plannedFor(userId, r.key, { name: r.name, date: r.date, distanceKm: r.distanceKm, gainM: r.gainM }, r.main ? { estimate: meta?.estimate ? { low: Math.round(meta.estimate.low), high: Math.round(meta.estimate.high) } : null, modelMid: meta?.modelMid ?? null, calib: meta?.calib?.factor ?? 1, route } : null);
-    const row = await one<Row>("SELECT planned, rpe, tags, note, tried FROM race_debriefs WHERE user_id = ? AND race_key = ?", [userId, r.key]);
-    // Temps de passage manquants sur une sortie Strava importée avant cette version : une relecture, une seule fois.
-    if (planned.sections?.length && !parseAnalysis(act.analysis)?.km && act.strava_id && !row?.tried) {
-      await run("UPDATE race_debriefs SET tried = 1 WHERE user_id = ? AND race_key = ?", [userId, r.key]);
-      if (await reanalyze(userId, act.strava_id)) act = (await one<ActivityRow & { strava_id: string | null; analysis: string | null }>("SELECT * FROM activities WHERE id = ?", [act.id])) ?? act;
-    }
-    const tags = (() => { try { return (JSON.parse(row?.tags ?? "[]") as string[]).filter((t) => t in TAGS); } catch { return []; } })();
-    const analysis = parseAnalysis(act.analysis);
-    const d = debrief(planned, { durationMin: act.duration_min, distanceKm: act.distance_km, gainM: act.gain_m, avgHr: act.avg_hr }, analysis, physio, tags);
-    // Ce que cette course de préparation laisse attendre sur la course principale à venir.
-    let projection: { name: string; low: number; high: number; current: { low: number; high: number } | null } | null = null;
-    if (!r.main && goal && goal.date > today && goal.distance_km && act.distance_km && d.route.match) {
-      const p = project(act.duration_min, { distanceKm: act.distance_km, gainM: act.gain_m ?? r.gainM ?? 0 }, { distanceKm: goal.distance_km, gainM: goal.gain_m ?? 0 });
-      const cur = readPlanMeta(goal)?.estimate ?? null;
-      if (p) projection = { name: goal.name, ...p, current: cur ? { low: Math.round(cur.low), high: Math.round(cur.high) } : null };
-    }
-    out.push({
-      ...base, status: "pret" as const, daysAgo: diffDays(r.date, today),
-      activity: { id: act.id, name: act.name, durationMin: act.duration_min, distanceKm: act.distance_km, gainM: act.gain_m, avgHr: act.avg_hr, source: act.source },
-      planned: { estimate: planned.estimate, hasSections: !!planned.sections?.length },
-      splits: !!analysis?.km?.length,
-      ...d, projection,
-      feedback: { rpe: row?.rpe ?? null, tags, note: row?.note ?? null, done: row?.rpe != null || tags.length > 0 || !!row?.note },
-    });
+/**
+ * Courses passées du compte, de la plus récente à la plus ancienne : la course principale si sa date est passée,
+ * les courses principales précédentes (archivées quand on a choisi la suivante) et les courses de préparation.
+ */
+export async function pastRaces(userId: number, today: string, since = "0000-01-01"): Promise<RaceRef[]> {
+  const [goal, archived, sides] = await Promise.all([
+    loadGoal(userId),
+    all<{ date: string; name: string; distance_km: number | null; gain_m: number | null; plan_meta: string | null; route: string | null }>(
+      "SELECT date, name, distance_km, gain_m, plan_meta, route FROM race_archive WHERE user_id = ? AND date <= ? AND date >= ? ORDER BY date DESC", [userId, today, since]),
+    all<{ id: number; name: string; date: string; distanceKm: number | null; gainM: number | null }>(
+      "SELECT id, name, date, distance_km AS distanceKm, gain_m AS gainM FROM side_races WHERE user_id = ? AND date <= ? AND date >= ? ORDER BY date DESC", [userId, today, since]),
+  ]);
+  const races: RaceRef[] = [];
+  if (goal && goal.date <= today && goal.date >= since) races.push({ key: `main:${goal.date}`, main: true, name: goal.name, date: goal.date, distanceKm: goal.distance_km, gainM: goal.gain_m, meta: readPlanMeta(goal), route: parse<RaceRoute>(goal.route) });
+  for (const g of archived) if (!races.some((r) => r.key === `main:${g.date}`)) races.push({ key: `main:${g.date}`, main: true, name: g.name, date: g.date, distanceKm: g.distance_km, gainM: g.gain_m, meta: parse<RacePlan>(g.plan_meta), route: parse<RaceRoute>(g.route) });
+  for (const x of sides) races.push({ key: `side:${x.id}`, main: false, name: x.name, date: x.date, distanceKm: x.distanceKm, gainM: x.gainM, meta: null, route: null });
+  return races.sort((a, b) => b.date.localeCompare(a.date));
+}
+
+/** Sortie de la course : la plus longue sortie à pied du jour. */
+export const raceActivity = (userId: number, date: string) => one<ActivityRow & { strava_id: string | null; analysis: string | null }>(
+  "SELECT * FROM activities WHERE user_id = ? AND date = ? AND sport IN ('trail', 'course', 'rando') AND COALESCE(check_state, 0) <> 1 ORDER BY duration_min DESC LIMIT 1", [userId, date]);
+
+async function buildDebrief(userId: number, today: string, r: RaceRef, goal: GoalRow | null, physio: { hrMax: number | null; hrRest: number | null; vdot: number | null }) {
+  let act = await raceActivity(userId, r.date);
+  const base = { key: r.key, main: r.main, name: r.name, date: r.date, distanceKm: r.distanceKm, gainM: r.gainM };
+  if (!act) return { ...base, status: "attente" as const };
+  const meta = r.meta;
+  const planned = await plannedFor(userId, r.key, { name: r.name, date: r.date, distanceKm: r.distanceKm, gainM: r.gainM }, r.main ? { estimate: meta?.estimate ? { low: Math.round(meta.estimate.low), high: Math.round(meta.estimate.high) } : null, modelMid: meta?.modelMid ?? null, calib: meta?.calib?.factor ?? 1, route: r.route } : null);
+  const row = await one<Row>("SELECT planned, rpe, tags, note, tried FROM race_debriefs WHERE user_id = ? AND race_key = ?", [userId, r.key]);
+  // Temps de passage manquants sur une sortie Strava importée avant cette version : une relecture, une seule fois.
+  if (planned.sections?.length && !parseAnalysis(act.analysis)?.km && act.strava_id && !row?.tried) {
+    await run("UPDATE race_debriefs SET tried = 1 WHERE user_id = ? AND race_key = ?", [userId, r.key]);
+    if (await reanalyze(userId, act.strava_id)) act = (await one<ActivityRow & { strava_id: string | null; analysis: string | null }>("SELECT * FROM activities WHERE id = ?", [act.id])) ?? act;
   }
+  const tags = (() => { try { return (JSON.parse(row?.tags ?? "[]") as string[]).filter((t) => t in TAGS); } catch { return []; } })();
+  const analysis = parseAnalysis(act.analysis);
+  const d = debrief(planned, { durationMin: act.duration_min, distanceKm: act.distance_km, gainM: act.gain_m, avgHr: act.avg_hr }, analysis, physio, tags);
+  // Ce que cette course de préparation laisse attendre sur la course principale à venir.
+  let projection: { name: string; low: number; high: number; current: { low: number; high: number } | null } | null = null;
+  if (!r.main && goal && goal.date > today && goal.distance_km && act.distance_km && d.route.match) {
+    const p = project(act.duration_min, { distanceKm: act.distance_km, gainM: act.gain_m ?? r.gainM ?? 0 }, { distanceKm: goal.distance_km, gainM: goal.gain_m ?? 0 });
+    const cur = readPlanMeta(goal)?.estimate ?? null;
+    if (p) projection = { name: goal.name, ...p, current: cur ? { low: Math.round(cur.low), high: Math.round(cur.high) } : null };
+  }
+  return {
+    ...base, status: "pret" as const, daysAgo: diffDays(r.date, today),
+    activity: { id: act.id, name: act.name, durationMin: act.duration_min, distanceKm: act.distance_km, gainM: act.gain_m, avgHr: act.avg_hr, source: act.source },
+    planned: { estimate: planned.estimate, hasSections: !!planned.sections?.length },
+    splits: !!analysis?.km?.length,
+    ...d, projection,
+    feedback: { rpe: row?.rpe ?? null, tags, note: row?.note ?? null, done: row?.rpe != null || tags.length > 0 || !!row?.note },
+  };
+}
+
+async function physioFor(userId: number) {
+  const prof = await one<{ hr_max: number | null; hr_rest: number | null; vo2_watch: number | null; vdot_ref: number | null }>("SELECT hr_max, hr_rest, vo2_watch, vdot_ref FROM profiles WHERE user_id = ?", [userId]);
+  return { hrMax: prof?.hr_max ?? null, hrRest: prof?.hr_rest ?? null, vdot: prof?.vo2_watch ?? prof?.vdot_ref ?? null };
+}
+
+/** Débriefs des courses des 90 derniers jours (les 6 plus récentes), affichés en haut du Planning. */
+export async function loadDebriefs(userId: number, today: string) {
+  const [refs, goal, physio] = await Promise.all([pastRaces(userId, today, addDays(today, -WINDOW)), loadGoal(userId), physioFor(userId)]);
+  const out = [];
+  for (const r of refs.slice(0, 6)) out.push(await buildDebrief(userId, today, r, goal ?? null, physio));
   return out;
+}
+
+/** Débrief d'une course passée, quelle que soit sa date (Mes courses, jour de course touché dans le Planning). */
+export async function loadDebrief(userId: number, today: string, key: string) {
+  const r = (await pastRaces(userId, today)).find((x) => x.key === key);
+  if (!r) return null;
+  const [goal, physio] = await Promise.all([loadGoal(userId), physioFor(userId)]);
+  return buildDebrief(userId, today, r, goal ?? null, physio);
 }
 
 export async function saveFeedback(userId: number, key: string, f: { rpe: number | null; tags: string[]; note: string | null }) {
