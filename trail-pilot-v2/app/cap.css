@@ -1,5 +1,6 @@
 /* Logo « Le cap » : toujours animé. Le cadran tourne, l'aiguille cherche le nord puis frémit sans jamais s'arrêter. */
 .cap { display: block; overflow: visible; }
+.cap-fill { width: 100%; height: 100%; }
 .cap :is(.cap-dial, .cap-needle, .cap-tremble) { transform-box: view-box; transform-origin: 50% 50%; }
 .cap-dial { animation: cap-turn 48s linear infinite; }
 .cap-needle { animation: cap-seek 7.5s cubic-bezier(.45, 0, .2, 1) infinite; }
