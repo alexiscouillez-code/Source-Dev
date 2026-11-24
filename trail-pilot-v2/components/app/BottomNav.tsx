@@ -14,6 +14,8 @@ export interface QuickAction {
   /** Ou : choix d'un fichier (le sélecteur s'ouvre directement depuis le toucher, comme l'exigent les téléphones). */
   file?: { accept: string; onFile: (f: File) => void };
 }
+/** Bouton d'outil (grand écran seulement) : recherche… */
+export interface NavTool { id: string; label: string; /** Raccourci affiché (« Ctrl K ») et sa forme pour les lecteurs d'écran. */ kbd?: string; keys?: string; Icon: () => React.JSX.Element; onSelect: () => void }
 /** Pastille sur une icône : un point, ou un nombre ; `label` est lu par les lecteurs d'écran. */
 export interface Badge { label: string; count?: number }
 /**
@@ -25,9 +27,20 @@ export interface IslandMessage { text: string; k: number; action?: { label: stri
 /** Événement de balayage entre onglets : `p` de −1 (vers la section précédente) à 1 (suivante), null au relâché. */
 export const SWIPE_EVENT = "tp-swipe";
 const LONG_PRESS_MS = 480;
+/** Grand écran : la barre flotte à gauche, à la verticale. */
+const WIDE = "(min-width: 901px)";
+function useWide() {
+  const [wide, setWide] = useState(false);
+  useEffect(() => {
+    const m = window.matchMedia(WIDE), on = () => setWide(m.matches);
+    on(); m.addEventListener("change", on);
+    return () => m.removeEventListener("change", on);
+  }, []);
+  return wide;
+}
 
 /**
- * Barre de navigation inférieure flottante (téléphone et tablette).
+ * Barre de navigation flottante : en bas sur téléphone et tablette, à gauche et à la verticale sur grand écran.
  *
  * - Pilule centrée en bas de l'écran : une icône par section ; la section active s'élargit et affiche son nom
  *   (au survol aussi, à la souris). Un fond glisse d'une section à l'autre, avec un léger rebond ; pendant un
@@ -39,12 +52,16 @@ const LONG_PRESS_MS = 480;
  * - Île dynamique : un message (enregistrement, synchro…) s'affiche dans la barre elle-même, puis elle revient.
  * - La barre se range quand on fait défiler vers le bas et revient en remontant et à chaque changement d'écran.
  * - Couleurs propres à chaque apparence (bottomnav.css). Sans animation si l'appareil demande moins de mouvement.
+ * - Grand écran : pilule verticale à gauche ; le nom de chaque section apparaît en bulle au survol, menus et
+ *   raccourcis s'ouvrent à droite, la barre ne se range pas, les messages restent en bulle en bas de l'écran.
+ *   Des outils (recherche) s'ajoutent au-dessus du +.
  */
-export default function BottomNav({ items, active, onSelect, actions = [], badges = {}, shortcuts = {}, message = null, onDismiss, busy = false, label = "Sections", plusLabel = "Actions rapides" }: {
+export default function BottomNav({ items, active, onSelect, actions = [], tools = [], badges = {}, shortcuts = {}, message: msg = null, onDismiss, busy = false, label = "Sections", plusLabel = "Actions rapides" }: {
   items: NavItem[];
   active: string;
   onSelect: (id: string) => void;
   actions?: QuickAction[];
+  tools?: NavTool[];
   badges?: Record<string, Badge | null | undefined>;
   shortcuts?: Record<string, QuickAction[] | undefined>;
   message?: IslandMessage | null;
@@ -57,11 +74,14 @@ export default function BottomNav({ items, active, onSelect, actions = [], badge
   const menu = useRef<HTMLDivElement>(null), ctxMenu = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null), fileAction = useRef<QuickAction | null>(null);
   const [open, setOpen] = useState(false);
-  const [ctx, setCtx] = useState<{ id: string; x: number } | null>(null);
+  const [ctx, setCtx] = useState<{ id: string; x: number; y: number } | null>(null);
   const [hidden, setHidden] = useState(false);
   const [bump, setBump] = useState<{ id: string; k: number } | null>(null);
   const menuId = useId(), ctxId = useId();
   const press = useRef<{ id: string; x: number; y: number; t: number; fired: boolean } | null>(null);
+  const wide = useWide(), wideRef = useRef(wide); wideRef.current = wide;
+  // Grand écran : les messages restent en bulle (la pilule verticale est trop étroite pour une île).
+  const message = wide ? null : msg;
 
   // ---------- Fond de la section active ----------
   const dragP = useRef<number | null>(null);
@@ -72,6 +92,13 @@ export default function BottomNav({ items, active, onSelect, actions = [], badge
     const at = list.findIndex((el) => el.getAttribute("aria-current") === "page");
     if (at < 0) { i.style.opacity = "0"; return; }
     i.style.opacity = "1";
+    // Barre verticale (grand écran) : le fond glisse de haut en bas.
+    if (getComputedStyle(b).flexDirection === "column") {
+      i.style.width = "";
+      i.style.height = `${list[at].offsetHeight}px`;
+      i.style.transform = `translateY(${list[at].offsetTop}px)`;
+      return;
+    }
     let x = list[at].offsetLeft, w = list[at].offsetWidth;
     // Balayage en cours : le fond va vers la section voisine, à proportion du geste.
     const p = dragP.current;
@@ -79,6 +106,7 @@ export default function BottomNav({ items, active, onSelect, actions = [], badge
       const n = list[at + Math.sign(p)];
       if (n) { const k = Math.min(1, Math.abs(p)); x += (n.offsetLeft - x) * k; w += (n.offsetWidth - w) * k; }
     }
+    i.style.height = "";
     i.style.width = `${w}px`;
     i.style.transform = `translateX(${x}px)`;
   }, []);
@@ -87,7 +115,7 @@ export default function BottomNav({ items, active, onSelect, actions = [], badge
     const ro = new ResizeObserver(place);
     bar.current?.querySelectorAll(".bnav-item").forEach((el) => ro.observe(el));
     return () => ro.disconnect();
-  }, [active, items, place, message]);
+  }, [active, items, place, message, wide]);
   useEffect(() => {
     const on = (e: Event) => {
       const p = (e as CustomEvent<{ p: number | null }>).detail.p;
@@ -111,6 +139,8 @@ export default function BottomNav({ items, active, onSelect, actions = [], badge
         const y = window.scrollY, d = y - last;
         if (Math.abs(d) < 6) return;
         last = y;
+        // Grand écran : la barre latérale reste toujours là.
+        if (wideRef.current) { setHidden(false); return; }
         // Un saut d'un coup (changement d'écran, fenêtre ouverte, lien interne) n'est pas un défilement : la barre reste.
         if (Math.abs(d) > 260 || document.querySelector(".sheet-back") || performance.now() < calm.current) { setHidden(false); return; }
         setHidden(d > 0 && y > 140);
@@ -164,7 +194,7 @@ export default function BottomNav({ items, active, onSelect, actions = [], badge
     if (!shortcuts[id]?.length) return false;
     const b = el.closest(".bnav-pill")!.getBoundingClientRect(), r = el.getBoundingClientRect();
     setOpen(false);
-    setCtx({ id, x: r.left + r.width / 2 - b.left });
+    setCtx({ id, x: r.left + r.width / 2 - b.left, y: r.top + r.height / 2 - b.top });
     haptic("select");
     return true;
   };
@@ -211,6 +241,17 @@ export default function BottomNav({ items, active, onSelect, actions = [], badge
             );
           })}
         </div>
+        {tools.length > 0 && (
+          <div className="bnav-tools">
+            <span className="bnav-sep" aria-hidden="true" />
+            {tools.map((t) => (
+              <button key={t.id} type="button" className="bnav-tool" aria-label={t.label} aria-keyshortcuts={t.keys} tabIndex={message ? -1 : undefined} onClick={t.onSelect}>
+                <t.Icon />
+                <span className="bnav-label" aria-hidden="true">{t.label}{t.kbd && <kbd>{t.kbd}</kbd>}</span>
+              </button>
+            ))}
+          </div>
+        )}
         {actions.length > 0 && (
           <>
             <span className="bnav-sep" aria-hidden="true" />
@@ -219,6 +260,7 @@ export default function BottomNav({ items, active, onSelect, actions = [], badge
               <span className="bnav-glow" aria-hidden="true" />
               {busy && <svg className="bnav-ring" viewBox="0 0 60 60" aria-hidden="true"><circle cx="30" cy="30" r="27" pathLength="100" /></svg>}
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+              <span className="bnav-label" aria-hidden="true">{plusLabel}</span>
             </button>
           </>
         )}
@@ -251,7 +293,7 @@ export default function BottomNav({ items, active, onSelect, actions = [], badge
         )}
         {ctx && (
           <div className="bnav-menu bnav-ctx" id={ctxId} role="menu" aria-label={`Raccourcis : ${ctxName}`} ref={ctxMenu} onKeyDown={menuKeys}
-            style={{ ["--cx" as string]: `${ctx.x}px` }}>
+            style={{ ["--cx" as string]: `${ctx.x}px`, ["--cy" as string]: `${ctx.y}px` }}>
             <span className="bnav-ctx-title" aria-hidden="true">{ctxName}</span>
             {ctxItems.map((a, i) => (
               <button key={a.id} type="button" role="menuitem" className="bnav-act" style={{ ["--i" as string]: ctxItems.length - 1 - i }} onClick={() => run(a)}>

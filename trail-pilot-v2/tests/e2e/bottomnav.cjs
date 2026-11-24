@@ -17,7 +17,10 @@ const bar = (page) => page.evaluate(() => {
 const boxes = (page) => page.evaluate(() => {
   const out = [{ sel: "racine", w: innerWidth, h: innerHeight }];
   for (const e of document.querySelectorAll(".bnav-label, .bnav-act-txt b, .bnav-act-txt small, .bnav-msg-txt, .ctop-title")) {
-    const r = e.getBoundingClientRect(), st = getComputedStyle(e);
+    // Bulle (grand écran) : on mesure le texte lui-même, pas la bulle et ses coins arrondis.
+    const st = getComputedStyle(e), rg = document.createRange();
+    if (e.firstChild) rg.selectNodeContents(e.firstChild.nodeType === 3 ? e : e.firstChild);
+    const r = st.position === "absolute" && e.firstChild ? rg.getBoundingClientRect() : e.getBoundingClientRect();
     if (r.width < 4 || +st.opacity < 0.5) continue;
     out.push({ sel: e.className || e.tagName.toLowerCase(), text: e.textContent.trim().slice(0, 30), x: r.left, y: r.top, w: r.width, h: r.height, color: st.color, size: parseFloat(st.fontSize), weight: Number(st.fontWeight) });
   }
@@ -271,10 +274,61 @@ scenario("Barre de navigation inférieure (BottomNav)", async () => {
   check(new Set(Object.values(looks)).size === 5, "la barre change d'aspect dans chacune des cinq apparences", looks);
   check(Object.entries(all).every(([k, bx]) => bx.length >= (k.endsWith("-ile") ? 2 : 1 + 1 + want.length * 2)), "nom actif et textes du menu mesurés dans chaque apparence", Object.fromEntries(Object.entries(all).map(([k, v]) => [k, v.length])));
 
-  // ---------- Grand écran : la barre latérale reste, la barre du bas disparaît ----------
+  // ---------- Grand écran : la même barre flotte à gauche, à la verticale ----------
   await setMode(page, MODES[1]);
-  await page.setViewportSize({ width: 1280, height: 860 }); await page.waitForTimeout(500);
-  check(!(await bar(page)).shown, "grand écran : barre latérale, pas de barre du bas");
+  await page.setViewportSize({ width: 1280, height: 860 }); await page.waitForTimeout(900);
+  await page.mouse.move(900, 400);
+  b = await bar(page);
+  check(b.shown && b.pill.left >= 12 && b.pill.left <= 24 && b.pill.height > b.pill.width * 4 && Math.abs((b.pill.top + b.pill.bottom) / 2 - 430) < 4, "grand écran : pilule verticale à gauche, centrée en hauteur", b.pill);
+  check(Math.abs(b.ind.top - b.onRect.top) < 2 && Math.abs(b.ind.height - b.onRect.height) < 2 && Math.abs(b.ind.width - b.onRect.width) < 2, "le fond de la section active est sous l'icône", { ind: b.ind, on: b.onRect });
+  const lay = await page.evaluate(() => ({ side: document.querySelectorAll(".side").length, main: document.querySelector(".main").getBoundingClientRect().left + parseFloat(getComputedStyle(document.querySelector(".main")).paddingLeft), pill: document.querySelector(".bnav-pill").getBoundingClientRect().right, head: getComputedStyle(document.querySelector(".mobile-top")).display, goal: !!document.querySelector(".top-goal .flap") }));
+  check(lay.side === 0 && lay.main > lay.pill + 24 && lay.head === "flex" && lay.goal, "plus de colonne latérale : le contenu commence après la barre, en-tête avec la course visée", lay);
+  // Bulle au survol.
+  await page.hover(".bnav-item[data-tab=plan]"); await page.waitForTimeout(450);
+  const tip = await page.evaluate(() => { const l = document.querySelector(".bnav-item[data-tab=plan] .bnav-label"), r = l.getBoundingClientRect(), i = l.parentElement.getBoundingClientRect(); return { op: +getComputedStyle(l).opacity, left: r.left - i.right, mid: Math.abs((r.top + r.bottom) / 2 - (i.top + i.bottom) / 2), text: l.textContent }; });
+  check(tip.op > 0.95 && tip.left > 8 && tip.mid < 2 && tip.text === "Planning", "au survol, le nom de la section apparaît en bulle à droite", tip);
+  await page.screenshot({ path: `${OUT}/bnav-desktop.png` });
+  // Changement de section : le fond glisse vers le bas.
+  await page.click(".bnav-item[data-tab=plan]"); await page.waitForTimeout(1200);
+  b = await bar(page);
+  check(b.on === "plan" && Math.abs(b.ind.top - b.onRect.top) < 2 && (await page.evaluate(() => location.hash)) === "#plan", "un clic change de section, le fond suit", b.on);
+  check(await page.locator(".subnav-plan").isVisible(), "Planning / Mes courses : le sélecteur apparaît en haut de page");
+  // Défilement : la barre reste.
+  await page.mouse.wheel(0, 1400); await page.waitForTimeout(700);
+  check(!(await page.evaluate(() => document.querySelector(".bnav").classList.contains("is-hidden"))), "grand écran : la barre ne se range pas au défilement");
+  await page.evaluate(() => window.scrollTo(0, 0)); await page.waitForTimeout(300);
+  // Bouton + : le menu s'ouvre à droite de la barre, en entier à l'écran.
+  await page.click(".bnav-plus"); await page.waitForTimeout(700);
+  const dm = await page.evaluate(() => { const m = document.querySelector(".bnav-menu:not([hidden])").getBoundingClientRect(), p = document.querySelector(".bnav-pill").getBoundingClientRect(); return { left: m.left - p.right, top: m.top, bottom: m.bottom, vh: innerHeight }; });
+  check(dm.left > 8 && dm.top >= 0 && dm.bottom <= dm.vh, "grand écran : le menu + s'ouvre à droite de la barre", dm);
+  await page.screenshot({ path: `${OUT}/bnav-desktop-menu.png` });
+  await page.keyboard.press("Escape"); await page.waitForTimeout(300);
+  // Clic droit : raccourcis à hauteur de l'icône.
+  await page.locator(".bnav-item[data-tab=analysis]").click({ button: "right" }); await page.waitForTimeout(600);
+  const dc = await page.evaluate(() => { const m = document.querySelector(".bnav-ctx").getBoundingClientRect(), i = document.querySelector(".bnav-item[data-tab=analysis]").getBoundingClientRect(); return { dx: m.left - i.right, top: m.top, bottom: m.bottom, icon: i.top, vh: innerHeight, n: document.querySelectorAll(".bnav-ctx .bnav-act").length }; });
+  check(dc.n >= 3 && dc.dx > 8 && dc.top < dc.icon + 10 && dc.bottom <= dc.vh, "grand écran : les raccourcis s'ouvrent à droite, à hauteur de l'icône", dc);
+  await page.keyboard.press("Escape"); await page.waitForTimeout(300);
+  // Recherche depuis la barre.
+  await page.click(".bnav-tool"); await page.waitForTimeout(500);
+  check(await page.locator(".pal").isVisible(), "le bouton loupe ouvre la recherche rapide");
+  await page.keyboard.press("Escape"); await page.waitForTimeout(400);
+  // Contraste des bulles dans chaque apparence.
+  for (const m of MODES) {
+    await setMode(page, m); await page.waitForTimeout(250);
+    await page.hover(".bnav-item[data-tab=terrains]"); await page.waitForTimeout(450);
+    const css = await still(page);
+    all[`${m[0]}-bureau`] = (await boxes(page)).filter((x) => x.sel === "racine" || x.text === "Terrains");
+    await page.screenshot({ path: `${OUT}/bnav-${m[0]}-bureau.png` });
+    const hide = await page.addStyleTag({ content: ".bnav * { color: transparent !important; -webkit-text-fill-color: transparent !important; }" });
+    await page.screenshot({ path: `${OUT}/bnav-${m[0]}-bureau-fond.png` });
+    await hide.evaluate((e) => e.remove()); await css.evaluate((e) => e.remove());
+  }
+  fs.writeFileSync(`${OUT}/bnav-boxes.json`, JSON.stringify(all));
+  check(Object.entries(all).filter(([k]) => k.endsWith("-bureau")).every(([, v]) => v.length === 2), "bulle mesurée dans chaque apparence");
+  await page.mouse.move(900, 400);
+  check((await overflow(page)) <= 0 && errors.length === 0, "grand écran : pas de débordement, aucune erreur", errors.slice(0, 3));
+  await setMode(page, MODES[1]);
+  await page.goto(page.url().replace(/#.*$/, "") + "#today"); await page.waitForTimeout(800);
   await page.setViewportSize({ width: 320, height: 640 }); await page.waitForTimeout(600);
   b = await bar(page);
   check(b.pill.left >= 8 && b.pill.right <= 312 && (await overflow(page)) <= 0, "petit téléphone (320 px) : la barre tient sans déborder", b.pill);

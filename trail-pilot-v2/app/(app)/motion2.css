@@ -128,11 +128,15 @@
   .item.run .item-actions { grid-column: 2; justify-content: flex-start; }
 }
 
-/* Sélecteur Analyse / X-Ray / Séances : seulement là où la barre du bas remplace le menu latéral */
+/* Sélecteur Analyse / X-Ray / Séances et Planning / Mes courses : la barre flottante ne montre que les sections principales */
 .subnav { display: none; }
 @media (max-width: 900px) {
   .subnav.seg { display: flex; width: 100%; margin-bottom: 16px; }
   .subnav.seg button { flex: 1; padding: 10px 8px; font-size: 14px; }
+}
+@media (min-width: 901px) {
+  .subnav.seg { display: inline-flex; margin-bottom: 20px; }
+  .subnav.seg button { padding: 9px 18px; font-size: 14px; }
 }
 
 /* Compte à rebours en tuiles */

@@ -1,7 +1,7 @@
 "use client";
 
 import WatchHelp from "./WatchHelp";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { api, localToday, type Me } from "./client";
 import { IconChart, IconCheck, IconCompare, IconFlag, IconPin, IconPlan, IconPlus, IconRecap, IconRuns, IconSearch, IconSync, IconTerrain, IconToday, IconUser, Logo } from "./icons";
@@ -135,24 +135,9 @@ export default function AppShell({ user }: { user: { name: string | null; email:
     return () => { document.removeEventListener("visibilitychange", onVis); window.removeEventListener("focus", onVis); window.clearInterval(timer); };
   }, [linked, refresh, toast]);
 
-  // Indicateur d’onglet qui glisse sous l’onglet actif (barre latérale ; la barre du bas a le sien, BottomNav).
-  const sideNav = useRef<HTMLElement>(null), mainRef = useRef<HTMLElement>(null);
-  useLayoutEffect(() => {
-    const place = () => {
-      for (const nav of [sideNav.current]) {
-        const ind = nav?.querySelector<HTMLElement>(".nav-ind"), on = nav?.querySelector<HTMLElement>(".navbtn.on");
-        if (!ind || !on) continue;
-        ind.style.width = `${on.offsetWidth}px`; ind.style.height = `${on.offsetHeight}px`;
-        ind.style.transform = `translate(${on.offsetLeft}px, ${on.offsetTop}px)`;
-      }
-    };
-    place();
-    window.addEventListener("resize", place);
-    return () => window.removeEventListener("resize", place);
-  }, [tab]);
+  const mainRef = useRef<HTMLElement>(null);
   useEffect(() => (mainRef.current ? startCountUps(mainRef.current) : undefined), []);
   useEffect(() => (mainRef.current ? startReveals(mainRef.current) : undefined), []);
-  useEffect(() => { const el = document.querySelector<HTMLElement>(".side"); return el ? startCountUps(el) : undefined; }, []);
 
   // Changement d’onglet : la vue glisse dans le sens de la navigation (transition de vue native).
   const go = (t: Tab) => {
@@ -334,31 +319,6 @@ export default function AppShell({ user }: { user: { name: string | null; email:
 
   return (
     <div className="shell">
-      <aside className="side">
-        <a className="logo" href="/"><Logo /><span>TRAIL PILOT</span></a>
-        <nav aria-label="Sections" ref={sideNav}>
-          <span className="nav-ind" aria-hidden="true" />
-          {TABS.map(({ id, label, Icon }) => (
-            <button key={id} data-tab={id} className={`navbtn ${tab === id ? "on" : ""}`} onClick={() => go(id)} aria-current={tab === id ? "page" : undefined}><Icon />{label}</button>
-          ))}
-        </nav>
-        {me?.goal && (
-          <button className="side-goal" onClick={() => go("plan")} style={{ textAlign: "left", cursor: "pointer", color: "inherit" }}>
-            <small>{me.goal.phase}</small>
-            <Flap days={me.goal.daysToGoal ?? 0} />
-            <span>{me.goal.name}</span>
-          </button>
-        )}
-        <button type="button" className="side-search" onClick={openPalette} aria-keyshortcuts="Control+K Meta+K"><IconSearch /><span>Rechercher</span><kbd>Ctrl K</kbd></button>
-        <div className="side-foot" style={me?.goal ? undefined : { marginTop: "auto" }}>
-          <div className="side-user" style={{ minWidth: 0 }}>
-            <span className="avatar">{initial}</span>
-            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.name ?? user.email}</span>
-          </div>
-          <ThemeToggle />
-        </div>
-      </aside>
-
       <main className="main" ref={mainRef}>
         <WatchHelp />
         {!online && (
@@ -367,10 +327,19 @@ export default function AppShell({ user }: { user: { name: string | null; email:
             <span>{stale ? `Données du ${new Date(stale).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}. ` : ""}Tu peux consulter ton planning ; les modifications reprendront avec le réseau.</span>
           </div>
         )}
+        {/* En-tête : logo, course visée et apparence (sur grand écran, la navigation flotte à gauche). */}
         <div className="mobile-top">
           <a className="logo" href="/"><Logo />TRAIL PILOT</a>
           <div className="row" style={{ gap: 8 }}>
-            {me?.goal && <span className="chip ember">{me.goal.daysToGoal! > 0 ? `J-${me.goal.daysToGoal}` : "Jour J"}</span>}
+            {me?.goal && <span className="chip ember top-j">{me.goal.daysToGoal! > 0 ? `J-${me.goal.daysToGoal}` : "Jour J"}</span>}
+            {me?.goal && (
+              <button type="button" className="top-goal" onClick={() => go("plan")}>
+                <small>{me.goal.phase}</small>
+                <Flap days={me.goal.daysToGoal ?? 0} />
+                <span className="tg-name">{me.goal.name}</span>
+              </button>
+            )}
+            <span className="top-user" title={user.name ?? user.email}><span className="avatar" aria-hidden="true">{initial}</span><span className="sr-only">{user.name ?? user.email}</span></span>
             <ThemeToggle />
           </div>
         </div>
@@ -416,6 +385,7 @@ export default function AppShell({ user }: { user: { name: string | null; email:
         active={navTab}
         onSelect={(id) => go(id as Tab)}
         actions={ctx ? quick : []}
+        tools={[{ id: "search", label: "Rechercher", kbd: "Ctrl K", keys: "Control+K Meta+K", Icon: IconSearch, onSelect: openPalette }]}
         badges={badges}
         shortcuts={ctx ? shortcuts : {}}
         message={toastMsg}

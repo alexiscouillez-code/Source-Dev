@@ -400,3 +400,62 @@
   .view .head h1 { will-change: transform; }
 }
 @media (prefers-reduced-motion: reduce) { .ctop, .ctop.is-on .ctop-title { transition: none; animation: none; } }
+
+/* =====================================================================
+   Grand écran : la barre flotte à gauche, à la verticale
+   ===================================================================== */
+.bnav-tools { display: none; }
+.bnav-plus .bnav-label { display: none; }
+@media (min-width: 901px) {
+  .bnav { display: flex; top: 0; bottom: 0; left: 18px; right: auto; align-items: center; }
+  .bnav.is-hidden { transform: none; opacity: 1; }
+  .bnav.is-hidden .bnav-pill { pointer-events: auto; }
+  .bnav-pill { flex-direction: column; width: auto; padding: 6px; gap: 6px; border-radius: 32px; }
+  .bnav-bar { flex: none; flex-direction: column; gap: 2px; }
+  .bnav-item, .bnav-item[aria-current=page] { flex: none; width: 50px; height: 50px; min-width: 0; padding: 0; }
+  .bnav-ind { right: 0; bottom: auto; transition: transform .5s cubic-bezier(.3, 1.35, .5, 1), height .5s cubic-bezier(.3, 1.35, .5, 1), opacity .2s; }
+  .bnav-sep { width: 26px; height: 1px; }
+  .bnav-tools { display: grid; justify-items: center; gap: 6px; }
+  .bnav-tool {
+    position: relative; display: grid; place-items: center; width: 50px; height: 50px; border: 0; border-radius: 999px;
+    background: none; color: var(--bn-fg); cursor: pointer; transition: color .25s ease, background .25s ease;
+  }
+  .bnav-tool:hover { color: var(--bn-fg-hover); background: var(--bn-ind); }
+  .bnav-tool:focus-visible { outline: 2px solid var(--bn-on); outline-offset: 2px; }
+  .bnav-tool svg { width: 21px; height: 21px; }
+  .bnav-plus { width: 50px; height: 50px; margin: 2px 0 0; }
+  .bnav-plus .bnav-label { display: flex; }
+
+  /* Nom de la section (et des outils) : une bulle à droite, au survol ou au clavier. */
+  .bnav .bnav-pill .bnav-label, .bnav .bnav-item[aria-current=page] .bnav-label {
+    position: absolute; left: calc(100% + 16px); top: 50%; z-index: 5; max-width: none; margin: 0; overflow: visible;
+    display: flex; align-items: center; gap: 10px; padding: 8px 13px; border-radius: 12px;
+    background: var(--bn-menu-bg); color: var(--bn-menu-fg); border: 1px solid var(--bn-border); box-shadow: var(--bn-shadow);
+    -webkit-backdrop-filter: var(--bn-pill-blur); backdrop-filter: var(--bn-pill-blur);
+    font-size: 13.5px; font-weight: 650; letter-spacing: -.005em; white-space: nowrap; pointer-events: none;
+    opacity: 0; transform: translate(-6px, -50%) scale(.96); transform-origin: left center;
+    transition: opacity .18s ease, transform .3s cubic-bezier(.3, 1.4, .5, 1);
+  }
+  .bnav .bnav-pill .bnav-label::before {
+    content: ""; position: absolute; left: -5px; top: 50%; width: 9px; height: 9px; margin-top: -5px;
+    background: var(--bn-menu-bg); border-left: 1px solid var(--bn-border); border-bottom: 1px solid var(--bn-border); transform: rotate(45deg);
+  }
+  .bnav .bnav-label kbd { font-family: var(--mono); font-size: 11px; padding: 2px 6px; border-radius: 6px; border: 1px solid var(--bn-border); background: transparent; color: var(--bn-menu-sub); box-shadow: none; }
+  .bnav :is(.bnav-item, .bnav-tool, .bnav-plus):is(:hover, :focus-visible) .bnav-label { opacity: 1; transform: translate(0, -50%); }
+  .bnav.is-open .bnav-pill .bnav-label { opacity: 0; }
+
+  /* Menus : ils s'ouvrent à droite de la barre (le + depuis le bas, les raccourcis à hauteur de l'icône). */
+  .bnav-scrim { background: color-mix(in srgb, var(--bn-scrim) 55%, transparent); }
+  .bnav-menu { left: calc(100% + 16px); right: auto; bottom: 0; justify-items: stretch; width: 300px; }
+  .bnav-ctx { left: calc(100% + 16px); top: calc(var(--cy) - 36px); bottom: auto; width: 260px; }
+}
+@media (min-width: 901px) and (prefers-reduced-motion: no-preference) {
+  .bnav { animation-name: bnav-in-x; }
+  @keyframes bnav-in-x { from { transform: translateX(-90px) scale(.94); opacity: 0; } }
+  .bnav-act { transform-origin: 0% 100%; animation-name: bnav-pop-x; }
+  @keyframes bnav-pop-x { from { opacity: 0; transform: translateX(-14px) scale(.92); } }
+  .bnav-ctx .bnav-act { transform-origin: 0% 50%; }
+  .bnav.is-open .bnav-item[aria-haspopup]:focus-within .bnav-ico { transform: translateX(2px); }
+  .bnav-tool:active svg, .bnav-item:active .bnav-ico { transform: scale(.88); }
+  .bnav-tool svg { transition: transform .3s cubic-bezier(.3, 1.5, .5, 1); }
+}
