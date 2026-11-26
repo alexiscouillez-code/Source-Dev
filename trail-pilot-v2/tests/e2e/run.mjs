@@ -19,7 +19,7 @@ const root = join(here, "../..");
 const tmp = join(here, ".tmp");
 const args = process.argv.slice(2);
 const only = args.filter((a) => !a.startsWith("--"));
-const SCENARIOS = ["engines", "planning", "suspects", "account", "charts", "night", "tour", "appearance", "charter", "bottomnav", "extras", "logo"].filter((s) => !only.length || only.includes(s));
+const SCENARIOS = ["engines", "planning", "suspects", "account", "charts", "night", "tour", "appearance", "charter", "bottomnav", "extras", "logo", "fuel"].filter((s) => !only.length || only.includes(s));
 const PORT = 3100, MOCK = 3200;
 
 const env = {
@@ -61,7 +61,9 @@ process.on("SIGINT", () => { stop(); process.exit(130); });
 procs.push(spawn(process.execPath, [join(here, "mock-tiles.cjs")], { stdio: "ignore", detached: true }));
 procs.push(spawn(process.execPath, [join(root, "node_modules/next/dist/bin/next"), "start", "-p", String(PORT)], {
   cwd: root, stdio: ["ignore", "ignore", "inherit"], detached: true,
-  env: { ...env, PORT: String(PORT), TURSO_DATABASE_URL: `file:${join(tmp, "e2e.db")}`, AUTH_SECRET: "cle-de-test-locale-uniquement-0123456789abcdef", STRAVA_CLIENT_ID: "", GROQ_API_KEY: "", RESEND_API_KEY: "" },
+  env: { ...env, PORT: String(PORT), TURSO_DATABASE_URL: `file:${join(tmp, "e2e.db")}`, AUTH_SECRET: "cle-de-test-locale-uniquement-0123456789abcdef", STRAVA_CLIENT_ID: "", GROQ_API_KEY: "", RESEND_API_KEY: "",
+    // Base de produits et lecture de photo simulées.
+    OFF_BASE: `http://localhost:${MOCK}`, VISION_BASE_URL: `http://localhost:${MOCK}/v1`, VISION_API_KEY: "test" },
 }));
 
 // Attente du serveur.

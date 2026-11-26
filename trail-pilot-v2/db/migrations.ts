@@ -253,4 +253,20 @@ export const MIGRATIONS: { tag: string; statements: string[] }[] = [
         PRIMARY KEY (user_id, date))`,
     ],
   },
+  {
+    tag: "021_fuel_kit",
+    statements: [
+      // Produits de ravitaillement du coureur (gels, barres, boissons…) : glucides, sodium et caféine par unité consommée.
+      `CREATE TABLE IF NOT EXISTS fuel_products (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+        name TEXT NOT NULL, brand TEXT, kind TEXT NOT NULL DEFAULT 'autre', carbs REAL NOT NULL, sodium REAL, caffeine REAL,
+        unit TEXT, barcode TEXT, source TEXT NOT NULL DEFAULT 'manuel', archived INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL)`,
+      `CREATE INDEX IF NOT EXISTS fuel_products_user ON fuel_products(user_id, archived)`,
+      // Ce qui a été pris pendant une sortie : [{ productId, name, carbs, qty }] (copie des produits au moment de la saisie),
+      // totaux, durée de la sortie, glucides par heure et cible du jour.
+      `CREATE TABLE IF NOT EXISTS fuel_intakes (
+        user_id INTEGER NOT NULL REFERENCES app_users(id) ON DELETE CASCADE, date TEXT NOT NULL, items TEXT NOT NULL,
+        carbs REAL NOT NULL, minutes REAL, g_per_hour REAL, target INTEGER, updated_at INTEGER NOT NULL, PRIMARY KEY (user_id, date))`,
+    ],
+  },
 ];

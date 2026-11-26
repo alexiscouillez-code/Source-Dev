@@ -19,6 +19,7 @@ import { estimateVo2, type Vo2Run } from "./engine/vo2";
 import { buildRacePlan, ENGINE, maintenancePlan, phaseFor, raceDemands, type Level, type RacePlan } from "./engine/planner";
 import { withSideRaces, withStrength, type SideRace } from "./engine/extras";
 import { timeline, weeklySummary } from "./engine/timeline";
+import { fuelDay } from "./fuel";
 import { HttpError } from "./api";
 import { cleanAnchor, type RaceAnchor } from "./engine/race-anchor";
 
@@ -309,8 +310,11 @@ export async function dashboard(userId: number, today: string) {
   if (checkin) checkin.note = dayNote?.note ?? null;
   const decision = checkin ? await decideFor(userId, today, checkin) : null;
   const daysToGoal = goal ? diffDays(today, goal.date) : null;
+  // Carburant du jour : assiette selon la charge et, après une grosse séance, la récupération (effort estimé si pas de ressenti).
+  const fuel = await fuelDay(userId, today, (id) => { const a = acts.find((x) => x.id === id); return a ? withLoad(a, physio).effort : null; }).catch(() => null);
   return {
     today,
+    fuel,
     profile,
     goal: goal ? { name: goal.name, date: goal.date, distance_km: goal.distance_km, gain_m: goal.gain_m, anchor: readAnchor(goal), daysToGoal, phase: upcoming[0]?.phase ?? phaseFor(daysToGoal), verdict: readPlanMeta(goal)?.verdict ?? null,
       gear: (() => { const g = readGear(goal); return g.length ? { total: g.length, ready: g.filter((x) => x.checked).length } : null; })() } : null,

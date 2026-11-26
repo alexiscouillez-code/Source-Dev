@@ -171,6 +171,7 @@ export default function RaceStrategy({ route, estimate, onChanged, toast, weathe
           </div>
         ))}
       </div>
+      <FuelTested perHour={strat.perHour.carbs} />
       <p className="muted small" style={{ margin: 0 }}>Un gel ou une barre apporte en général 20 à 30 g de glucides. Teste ta stratégie lors de ta sortie test et de tes sorties longues : rien de nouveau le jour J.</p>
     </Fold>
     {raceDay && <RaceDay route={route} strat={strat} onClose={() => setRaceDay(false)} />}
@@ -306,4 +307,20 @@ function RaceSheet({ route, strat, name, date, gear }: { route: RaceRoute; strat
       {gear.length > 0 && <div className="sheet-gear"><b>Matériel obligatoire</b><ul>{gear.map((g) => <li key={g.label}>☐ {g.label}</li>)}</ul></div>}
       <p className="foot">1 gel ≈ 25 g de glucides (ou l’équivalent en boisson, barre, compote). 1 flasque = 500 ml. Trail Pilot · estimation d’après ta forme et le profil du parcours. Mange et bois avant d’avoir faim ou soif ; rien de nouveau le jour J.</p>
     </div>, host);
+}
+
+/** Ce que ton ventre a déjà accepté à l'entraînement, à côté de ce que demande la course. */
+function FuelTested({ perHour }: { perHour: [number, number] }) {
+  const [t, setT] = useState<{ tests: number; best: { gPerHour: number; date: string } | null; products: string[] } | null>(null);
+  useEffect(() => { api<NonNullable<typeof t>>("/api/fuel/summary").then(setT).catch(() => setT(null)); }, []);
+  if (!t || !perHour[1]) return null;
+  const date = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("fr-FR", { day: "numeric", month: "long", timeZone: "UTC" });
+  if (!t.best) return <p className="fuel-tested small">Testé à l’entraînement : {t.tests ? "pas encore de sortie longue où l’alimentation est bien passée." : "rien pour l’instant."} Note tes prises et ton ressenti après tes sorties longues pour savoir ce que ton ventre accepte.</p>;
+  const short = t.best.gPerHour < perHour[0];
+  return (
+    <p className={`fuel-tested small${short ? " is-short" : ""}`}>
+      Testé à l’entraînement : <b>{t.best.gPerHour} g/h</b> passés sans souci (le {date(t.best.date)}){t.products.length ? ` avec ${t.products.join(", ")}` : ""}.
+      {short ? ` La course demande ${perHour[0]} à ${perHour[1]} g/h : monte progressivement sur tes prochaines sorties longues.` : ` C’est dans ce que demande la course (${perHour[0]} à ${perHour[1]} g/h).`}
+    </p>
+  );
 }

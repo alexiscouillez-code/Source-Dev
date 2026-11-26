@@ -19,6 +19,7 @@ import { Fiche, FicheHead, useFiche } from "./Fiche";
 import DaySheet from "./DaySheet";
 import { planActions } from "./planActions";
 import { useMemo } from "react";
+import FuelCard from "./FuelCard";
 
 export default function Today({ me, refresh, go, toast }: Ctx) {
   // Check-in, séance du jour et coach : en fiches, par-dessus l'accueil.
@@ -81,6 +82,7 @@ export default function Today({ me, refresh, go, toast }: Ctx) {
       {/* Téléphone : une colonne. Grand écran : « Ta journée » à gauche, la course, la forme et la semaine à droite. */}
       <div className="today-grid">
         <DayCard me={me} go={go} busy={busy} generate={generate} refresh={refresh} toast={toast} onCheckin={(el) => ci.open(true, el)} onSession={(x, el) => sheet.open(x, el)} />
+        {me.fuel && <FuelCard fuel={me.fuel} today={me.today} toast={toast} />}
         {!me.goal && (
           <div className="banner today-goal">
             <div><b>Choisis ta course</b><div className="small muted">Un plan jusqu’au jour J, construit à partir de ta charge actuelle pour que tu finisses.</div></div>
@@ -205,7 +207,7 @@ function DayCard({ me, go, busy, generate, refresh, toast, onCheckin, onSession 
           <button className="link small dc-edit" aria-haspopup="dialog" onClick={(e) => onCheckin(card(e))}>Modifier mon check-in</button>
         </div>
       )}
-      {doneToday && me.todayPlan && <DoneBlock p={me.todayPlan} go={go} refresh={refresh} toast={toast} />}
+      {doneToday && me.todayPlan && <DoneBlock p={me.todayPlan} go={go} refresh={refresh} toast={toast} onIntake={(el) => onSession(me.todayPlan!, el)} />}
       <div className={`dc-next${d ? "" : " is-quiet"}`}>
         <div className="row between">
           <span className="eyebrow" id="next-title">{s ? (s === me.todayPlan ? "Séance du jour" : "Demain") : "Au programme"}</span>
@@ -230,7 +232,7 @@ const nearestFeel = (rpe: number | null | undefined) => (rpe == null ? null : FE
  * Séance faite : prévu / réalisé en une ligne, le verdict (tenue, courte, trop intense…) et le ressenti en une touche.
  * Le ressenti remplace l'effort estimé de la sortie dans le calcul de la charge : la décision de demain en tient compte.
  */
-function DoneBlock({ p, go, refresh, toast }: { p: PlanSession; go: Ctx["go"]; refresh: Ctx["refresh"]; toast: Ctx["toast"] }) {
+function DoneBlock({ p, go, refresh, toast, onIntake }: { p: PlanSession; go: Ctx["go"]; refresh: Ctx["refresh"]; toast: Ctx["toast"]; onIntake: (el: HTMLElement) => void }) {
   const [rpe, setRpe] = useState<number | null>(nearestFeel(p.a_rpe));
   const [busy, setBusy] = useState(false);
   const save = async (v: number) => {
@@ -265,6 +267,7 @@ function DoneBlock({ p, go, refresh, toast }: { p: PlanSession; go: Ctx["go"]; r
           </div>
         </div>
       )}
+      {(p.a_duration ?? 0) >= 75 && <button type="button" className="link small dc-intake" aria-haspopup="dialog" onClick={(e) => onIntake(e.currentTarget.closest<HTMLElement>(".day-card") ?? e.currentTarget)}>Noter ce que tu as mangé pendant la sortie</button>}
     </div>
   );
 }

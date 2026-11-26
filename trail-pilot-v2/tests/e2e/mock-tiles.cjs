@@ -67,10 +67,27 @@ http.createServer((req, res) => {
     if (u.pathname === '/planet') { res.setHeader('content-type', 'application/json'); return res.end(JSON.stringify({ tiles: ['http://localhost:3200/vt/{z}/{x}/{y}.pbf'], maxzoom: 14 })); }
     if (v) { global.vt = (global.vt || 0) + 1; res.setHeader('content-type', 'application/x-protobuf'); return res.end(mvt(+v[1], +v[2], +v[3])); }
     if (m) { global.tiles = (global.tiles || 0) + 1; res.setHeader('content-type', 'image/png'); return res.end(png(+m[1], +m[2], +m[3])); }
-    if (u.pathname === '/stats') return res.end(JSON.stringify({ tiles: global.tiles || 0, elev: global.elev || 0, vt: global.vt || 0, overpass: global.op || 0 }));
+    if (u.pathname === '/stats') return res.end(JSON.stringify({ tiles: global.tiles || 0, elev: global.elev || 0, vt: global.vt || 0, overpass: global.op || 0, vision: global.vision || 0 }));
     if (u.pathname.endsWith('/elevation')) { global.elev = (global.elev || 0) + 1;
       const la = u.searchParams.get('latitude').split(',').map(Number), lo = u.searchParams.get('longitude').split(',').map(Number);
       res.setHeader('content-type', 'application/json'); return res.end(JSON.stringify({ elevation: la.map((a, i) => Math.round(z(a, lo[i]) * 10) / 10) }));
+    }
+    // Open Food Facts simulé : un seul produit connu.
+    const off = u.pathname.match(/^\/api\/v2\/product\/(\d+)\.json$/);
+    if (off) {
+      res.setHeader('content-type', 'application/json');
+      if (off[1] !== '3760000000017') { res.statusCode = 404; return res.end(JSON.stringify({ status: 0 })); }
+      return res.end(JSON.stringify({ status: 1, product: { product_name_fr: 'Gel énergétique citron', brands: 'Montagne', quantity: '32 g', nutriments: { carbohydrates_100g: 78, sodium_100g: 0.15 } } }));
+    }
+    // Lecture de photo simulée (compatible OpenAI) : étiquette d'une barre, ou assiette pauvre en féculents.
+    if (u.pathname === '/v1/chat/completions') {
+      global.vision = (global.vision || 0) + 1;
+      const label = /étiquette/.test(body);
+      const content = label
+        ? JSON.stringify({ name: 'Barre amande miel', brand: 'Sommet', kind: 'barre', carbs: 34, sodium: 90, caffeine: null, unit: 'barre 50 g', barcode: null })
+        : JSON.stringify({ feculents: 15, legumes: 60, proteines: 25, foods: ['salade verte', 'tomates', 'poulet'] });
+      res.setHeader('content-type', 'application/json');
+      return res.end(JSON.stringify({ choices: [{ message: { content } }] }));
     }
     global.op = (global.op || 0) + 1;
     const q = decodeURIComponent(new URLSearchParams(body).get('data') || '');

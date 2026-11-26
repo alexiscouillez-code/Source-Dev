@@ -1,0 +1,77 @@
+/* ---------- Carburant : assiette du jour, récupération, produits de course, prises pendant une sortie ---------- */
+.fk-file { display: none; }
+.fuel-card { display: grid; gap: 14px; align-content: start; }
+.fuel-card .card-head { margin-bottom: 0; }
+
+/* Récupération après une grosse séance : encadré bien visible, en tête de carte. */
+.fuel-rec { display: grid; gap: 6px; padding: 12px 14px; border-radius: 14px; background: var(--ink-3); border-left: 4px solid var(--ok); }
+.fuel-rec ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 14px; line-height: 1.45; }
+.fuel-rec small { line-height: 1.4; color: var(--soft); }
+
+/* Assiette : anneau en trois parts et légende. */
+.fuel-plate { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px; align-items: center; }
+.plate-ring { display: block; flex: none; }
+.plate-ring .pl-base { fill: none; stroke: var(--ink-3); stroke-width: 16; }
+.plate-ring .pl-arc { fill: none; stroke-width: 16; stroke-linecap: butt; }
+.pl-carb { --pl: var(--lite); } .pl-veg { --pl: var(--ok); } .pl-prot { --pl: var(--rest); }
+.plate-ring .pl-arc { stroke: var(--pl); }
+.plate-legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.plate-legend li { display: grid; grid-template-columns: 10px 44px minmax(0, 1fr); gap: 8px; align-items: start; font-size: 14px; line-height: 1.3; }
+.plate-legend i { width: 10px; height: 10px; border-radius: 3px; background: var(--pl); margin-top: 4px; }
+.plate-legend b { white-space: nowrap; }
+.plate-legend b { font-family: var(--mono); font-size: 13px; }
+.plate-legend small { display: block; color: var(--mute); font-size: 12.5px; line-height: 1.35; }
+.fuel-photo { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.fuel-photo small { flex: 1 1 200px; }
+.plate-res { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: center; padding: 10px 12px; border-radius: 14px; background: var(--ink-3); border-left: 4px solid var(--lite); }
+.plate-res.is-ok { border-left-color: var(--ok); }
+.plate-res b { display: block; font-size: 14.5px; line-height: 1.4; }
+.plate-res small { display: block; color: var(--soft); margin-top: 4px; line-height: 1.4; }
+@media (max-width: 380px) { .fuel-plate { grid-template-columns: 1fr; justify-items: start; } }
+
+/* Mes produits */
+.prod-manager, .prod-add { display: grid; gap: 12px; }
+.prod-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.prod-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 10px 10px 10px 12px; border-radius: 14px; border: 1px solid var(--line); background: var(--ink-2); }
+.prod-row b { display: block; font-size: 15px; overflow-wrap: anywhere; }
+.prod-row small { display: block; color: var(--mute); font-size: 12.5px; }
+.prod-kind { font-family: var(--mono); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--soft); padding: 4px 7px; border-radius: 8px; background: var(--ink-3); }
+.prod-carbs { text-align: right; font-size: 13px; color: var(--soft); }
+.prod-carbs b { display: inline; font-family: var(--mono); font-size: 16px; color: var(--snow); }
+.prod-add-btns { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.prod-code input { flex: 1 1 180px; min-height: 44px; border-radius: 12px; border: 1px solid var(--line); background: var(--ink); color: var(--snow); padding: 10px 12px; font: inherit; font-size: 16px; }
+.prod-form { padding: 12px; border-radius: 14px; border: 1px solid var(--line); background: var(--ink-2); }
+.prod-form-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.prod-form label { display: grid; gap: 6px; font-size: 13.5px; color: var(--soft); }
+.unit-in { position: relative; display: block; }
+.unit-in input { padding-right: 38px !important; }
+.unit-in i { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-style: normal; color: var(--mute); font-size: 13px; pointer-events: none; }
+.err { color: var(--danger); margin: 0; }
+@media (max-width: 420px) { .prod-form-row { grid-template-columns: 1fr; } }
+
+/* Prises pendant une sortie */
+.intake { display: grid; gap: 10px; padding: 12px; border-radius: 16px; border: 1px solid var(--line); background: var(--ink-2); }
+.intake-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.intake-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.intake-list b { display: block; font-size: 14.5px; overflow-wrap: anywhere; }
+.intake-list small { color: var(--mute); font-size: 12.5px; }
+.stepper { display: inline-grid; grid-template-columns: 40px 34px 40px; align-items: center; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--ink); }
+.stepper button { all: unset; display: grid; place-items: center; height: 40px; cursor: pointer; font-size: 20px; color: var(--snow); }
+.stepper button:disabled { opacity: .35; cursor: default; }
+.stepper button:focus-visible { outline: 2px solid var(--ember); outline-offset: -2px; }
+.stepper output { text-align: center; font-family: var(--mono); font-size: 15px; }
+.intake-sum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 10px; border-radius: 12px; background: var(--ink-3); border-left: 4px solid var(--mute); }
+.intake-sum.is-dans-cible { border-left-color: var(--ok); } .intake-sum.is-en-dessous { border-left-color: var(--lite); } .intake-sum.is-au-dessus { border-left-color: var(--rest); }
+.intake-sum b { display: block; font-family: var(--mono); font-size: 17px; }
+.intake-sum b i { font-style: normal; font-size: 12px; color: var(--soft); }
+.intake-sum small { color: var(--mute); font-size: 12px; }
+.dc-intake { justify-self: start; }
+
+/* Plan de course : ce qui a été testé à l'entraînement. */
+.fuel-tested { margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--ink-3); border-left: 4px solid var(--ok); line-height: 1.45; }
+.fuel-tested.is-short { border-left-color: var(--lite); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .plate-res, .fuel-rec { animation: bubble-in .4s var(--ease) both; }
+  .stepper button:active { transform: scale(.9); }
+}

@@ -19,6 +19,7 @@ const boxes = (page, root) => page.evaluate((root) => {
   for (const e of scope ? scope.querySelectorAll("h1, h2, b, small, .eyebrow, .chip, .duel-k, .duel-v, .rr-meta, .rr-name, .fiche-h, .pal-txt b, .pal-txt small, .pal-g, .rc-sub, .rc-kicker, .cmp-cap span, .btn, .link") : []) {
     const r = e.getBoundingClientRect(), st = getComputedStyle(e);
     if (r.width < 4 || r.height < 4 || +st.opacity < 0.5 || r.top < 0 || r.bottom > innerHeight - 2 || r.left < 0 || r.right > innerWidth) continue;
+    if (e.closest("button:disabled")) continue; // commande inactive : pas d’exigence de contraste (WCAG 1.4.3)
     if (!e.textContent.trim() || e.closest("svg") || under(r)) continue;
     out.push({ sel: e.className || e.tagName.toLowerCase(), text: e.textContent.trim().slice(0, 30), x: r.left, y: r.top, w: r.width, h: r.height, color: st.color, size: parseFloat(st.fontSize), weight: Number(st.fontWeight) });
   }

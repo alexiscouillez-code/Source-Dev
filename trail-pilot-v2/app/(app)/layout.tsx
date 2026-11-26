@@ -8,6 +8,7 @@ import "./features2.css";
 import "./terrains.css";
 import "./motion2.css";
 import "./graphcards.css";
+import "./fuel.css";
 import "./night.css";
 import "../glass-theme.css";
 import "../modes.css";

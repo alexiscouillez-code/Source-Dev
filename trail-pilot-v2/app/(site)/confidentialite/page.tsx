@@ -5,7 +5,7 @@ const MAIL = "alexiscou@outlook.fr";
 export default function Page() {
   return (
     <LegalShell kicker="Document légal" title="Politique de confidentialité">
-      <p>Dernière mise à jour : 7 novembre 2026.</p>
+      <p>Dernière mise à jour : 26 novembre 2026.</p>
       <h2>Responsable du traitement</h2>
       <p>Alexis Couillez, éditeur de Trail Pilot. Contact pour toute question sur tes données : <a href={`mailto:${MAIL}?subject=Donn%C3%A9es%20personnelles`}>{MAIL}</a>. Le service est réservé aux personnes de 18 ans et plus.</p>
       <h2>Ton compte</h2>
@@ -22,6 +22,8 @@ export default function Page() {
       <p>Si tu crées un lien de partage (rubrique Compte), toute personne qui a ce lien voit, sans compte, ton prénom, ta course, ton calendrier de séances avec leur statut, tes courses de préparation et ta stratégie de course. Ton check-in, tes commentaires, tes données de santé, ton e-mail et le détail de tes sorties n’y figurent jamais. Tu peux arrêter le partage ou changer de lien à tout moment.</p>
       <h2>Retours</h2>
       <p>Les messages envoyés avec le bouton « Un retour ? » sont enregistrés avec ton numéro de compte pour pouvoir y donner suite, et peuvent être transmis par e-mail à l’éditeur. Si tu supprimes ton compte, ils sont gardés sans lien avec toi.</p>
+      <h2>Carburant : photos et produits</h2>
+      <p>Pour ajouter un produit de ravitaillement, tu peux saisir son code-barres : il est cherché dans Open Food Facts, une base libre de produits alimentaires, et seul le numéro du code-barres lui est envoyé. Tu peux aussi prendre en photo l’étiquette d’un produit ou ton assiette : la photo, réduite dans ton téléphone, est transmise à Groq LLC (États-Unis) pour être lue, puis oubliée. Trail Pilot ne la conserve pas, ni sa description ; seuls la fiche du produit que tu enregistres et ce que tu notes avoir pris pendant une sortie sont gardés dans ton compte. Évite d’y faire figurer des personnes. Selon ses conditions, Groq ne conserve pas ces données, hormis des journaux temporaires (30 jours au plus) en cas d’incident technique ou d’abus. Base légale : ton consentement, puisque tu choisis de prendre la photo.</p>
       <h2>Coach IA</h2>
       <p>Quand tu poses une question au coach, ta question et un résumé de tes données d’entraînement (profil, course, plan, charge, check-in du jour, séances récentes importées par fichier ou saisies à la main) sont transmis à Groq LLC (États-Unis), qui fait tourner le modèle d’IA, pour produire la réponse. Conformément aux conditions de Strava, le détail des activités synchronisées depuis Strava n’est jamais transmis à ce service : elles ne comptent que dans les chiffres calculés par Trail Pilot (charge, forme). Selon ses conditions, Groq ne conserve pas ces données, hormis des journaux temporaires (30 jours au plus) en cas d’incident technique ou d’abus. La conversation est gardée dans ton compte et tu peux l’effacer à tout moment. Base légale : ton consentement, puisque tu choisis d’utiliser le coach.</p>
       <h2>Notifications et e-mails</h2>
@@ -35,7 +37,7 @@ export default function Page() {
       <h2>Mesure d’audience et erreurs</h2>
       <p>Nous utilisons Vercel Web Analytics, qui mesure la fréquentation des pages sans cookie et sans identifier les visiteurs. En cas d’erreur technique, nous enregistrons le message d’erreur et la page concernée pendant 30 jours pour la corriger. Base légale : notre intérêt légitime à faire fonctionner et améliorer le service.</p>
       <h2>Qui reçoit tes données</h2>
-      <p>Seuls l’éditeur et les prestataires nécessaires au service y ont accès : Vercel (hébergement de l’application), Turso (base de données), Resend (e-mails), Groq (coach IA), et, selon ce que tu actives, Strava, Open-Meteo, OpenFreeMap, les tuiles d’altitude d’Amazon Web Services et le service de notification de ton navigateur. Tes données ne sont jamais vendues ni utilisées pour de la publicité.</p>
+      <p>Seuls l’éditeur et les prestataires nécessaires au service y ont accès : Vercel (hébergement de l’application), Turso (base de données), Resend (e-mails), Groq (coach IA et lecture des photos), et, selon ce que tu actives, Open Food Facts, Strava, Open-Meteo, OpenFreeMap, les tuiles d’altitude d’Amazon Web Services et le service de notification de ton navigateur. Tes données ne sont jamais vendues ni utilisées pour de la publicité.</p>
       <h2>Transferts hors de l’Union européenne</h2>
       <p>Ces prestataires sont en partie établis aux États-Unis. Les transferts reposent sur le cadre de protection des données UE–États-Unis (Data Privacy Framework) lorsque le prestataire y adhère, comme Vercel, ou sur les clauses contractuelles types de la Commission européenne.</p>
       <h2>Durée de conservation</h2>

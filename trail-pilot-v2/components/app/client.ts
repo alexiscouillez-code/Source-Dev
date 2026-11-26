@@ -82,4 +82,11 @@ export interface Me {
   decision: { verdict: Verdict; score: number; reasons: string[] } | null;
   todayPlan: PlanSession | null; tomorrowPlan: PlanSession | null; upcoming: PlanSession[]; needsPlan: boolean;
   recent: Activity[];
+  /** Carburant du jour : assiette selon la charge, récupération après une grosse séance. */
+  fuel?: FuelDay | null;
 }
+export type DayKind = "facile" | "modere" | "dur";
+export interface Plate { feculents: number; legumes: number; proteines: number }
+export interface FuelDay { kind: DayKind; label: string; reason: string; plate: Plate; recovery: { title: string; why: string; items: string[]; next: string | null } | null }
+export interface FuelProduct { id: number; name: string; brand: string | null; kind: string; carbs: number; sodium: number | null; caffeine: number | null; unit: string | null; barcode: string | null; source: string }
+export interface ProductDraft { name: string; brand: string | null; kind: string; carbs: number | null; sodium: number | null; caffeine: number | null; unit: string | null; barcode: string | null }
