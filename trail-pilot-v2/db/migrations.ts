@@ -280,4 +280,17 @@ export const MIGRATIONS: { tag: string; statements: string[] }[] = [
         drank_ml INTEGER NOT NULL, minutes REAL NOT NULL, band TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (user_id, date))`,
     ],
   },
+  {
+    tag: "023_season",
+    statements: [
+      // Courses principales suivantes de la saison. La prochaine reste dans goals (le plan la vise) ; à son tour, chacune y passe
+      // avec son tracé, son lieu, son matériel et ses repères. chained = 1 : écart court accepté (enchaînement).
+      `CREATE TABLE IF NOT EXISTS next_goals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+        name TEXT NOT NULL, date TEXT NOT NULL, distance_km REAL, gain_m INTEGER, route TEXT, place TEXT, gear TEXT, anchor TEXT,
+        chained INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL)`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS next_goals_user_date ON next_goals(user_id, date)`,
+      `ALTER TABLE goals ADD COLUMN chained INTEGER NOT NULL DEFAULT 0`,
+    ],
+  },
 ];

@@ -1,5 +1,5 @@
 import { body, HttpError, isoDate, json, num, text, withUser } from "@/lib/api";
-import { all, one, run } from "@/db/client";
+import { all, run } from "@/db/client";
 import { diffDays } from "@/lib/engine/dates";
 import { MAX_PLAN_DAYS } from "@/lib/engine/planner";
 import { loadSideRaces, regeneratePlan, resolveToday, setSideRacePlace, sideRaceGuides } from "@/lib/service";
@@ -39,11 +39,11 @@ export const POST = withUser(async (user, req) => {
   if (date <= today) throw new HttpError(400, "La course doit être dans le futur.");
   if (diffDays(today, date) > MAX_PLAN_DAYS) throw new HttpError(400, "Choisis une course dans les 13 prochains mois.");
   const priority = b.priority === "C" ? "C" : "B";
-  const main = await one<{ date: string }>("SELECT date FROM goals WHERE user_id = ?", [user.id]);
-  if (main) {
+  const mains = await all<{ date: string }>("SELECT date FROM goals WHERE user_id = ? UNION SELECT date FROM next_goals WHERE user_id = ?", [user.id, user.id]);
+  for (const main of mains) {
     const gap = diffDays(date, main.date);
-    if (gap === 0) throw new HttpError(400, "C’est la date de ta course principale.");
-    if (gap > 0 && gap < 14) throw new HttpError(400, "Trop proche de ta course principale : garde au moins deux semaines entre les deux pour arriver frais.");
+    if (gap === 0) throw new HttpError(400, "C’est la date d’une de tes courses principales.");
+    if (gap > 0 && gap < 14) throw new HttpError(400, "Trop proche d’une course principale : garde au moins deux semaines entre les deux pour arriver frais.");
   }
   const existing = await all<{ date: string }>("SELECT date FROM side_races WHERE user_id = ? AND date >= ?", [user.id, today]);
   if (existing.length >= 8) throw new HttpError(400, "8 courses de préparation au plus.");

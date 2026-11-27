@@ -44,7 +44,7 @@ interface RacePlan {
   diagnosis?: { causes: string[]; fixes: string[]; gaps?: { key: string; label: string; reach: number; need: number; unit: "min" | "m" }[]; options?: { title: string; text: string }[]; keep?: string };
 }
 type Session = PlanSession;
-interface View { today: string; goal: { name: string; date: string; distance_km: number | null; gain_m: number | null; route?: RaceRoute | null; gear?: GearItem[]; anchor?: RaceAnchor | null } | null; plan: RacePlan | null; sessions: Session[]; doneByWeek: Record<string, number>; races: SideRaceRow[]; absence?: Absence | null; learning?: { items: { kind: string; text: string; changes: boolean }[]; off: boolean } }
+interface View { nextMains?: { name: string; date: string }[]; today: string; goal: { name: string; date: string; distance_km: number | null; gain_m: number | null; route?: RaceRoute | null; gear?: GearItem[]; anchor?: RaceAnchor | null } | null; plan: RacePlan | null; sessions: Session[]; doneByWeek: Record<string, number>; races: SideRaceRow[]; absence?: Absence | null; learning?: { items: { kind: string; text: string; changes: boolean }[]; off: boolean } }
 
 const VERDICT: Record<Verdict, { label: string; color: string }> = {
   solide: { label: "Objectif solide", color: "var(--ok)" },
@@ -151,6 +151,12 @@ export default function Planning({ me, refresh, toast, go }: Ctx) {
       <LearningCard l={v.learning} onToggle={async (off) => { try { await api("/api/plan", { method: "PATCH", body: { learningOff: off, today: v.today } }); await Promise.all([load(), refresh()]); toast(off ? "Plan d’origine rétabli, sans ajustement." : "Ajustements réactivés."); } catch (e) { toast(e instanceof Error ? e.message : "Erreur"); } }} />
       {away && <AbsenceSheet a={v.absence ?? null} today={v.today} onClose={() => setAway(false)} onSaved={absenceSaved} />}
       <RaceHeader p={p} onRefine={(el) => raceF.open({ refine: true }, el)} />
+      {(v.nextMains?.length ?? 0) > 0 && (
+        <p className="season-next small">
+          Ensuite dans ta saison : {v.nextMains!.map((n, i) => <span key={n.date}>{i ? ", " : ""}<b>{n.name}</b> ({dayLabel(n.date, { day: "numeric", month: "long" })})</span>)}. Le plan les visera à leur tour, après la récupération.{" "}
+          <button type="button" className="link small" onClick={() => go("races")}>Voir ma saison</button>
+        </p>
+      )}
       <Fiche ctl={raceF} kind="raceform">
         {raceF.value && (
           <>

@@ -218,7 +218,7 @@ export default function AppShell({ user }: { user: { name: string | null; email:
   const paletteExtra = useCallback(async () => {
     const r = await api<{ races: { key: string; name: string; date: string; past: boolean; main: boolean }[] }>("/api/races?all=1");
     return r.races.map((x) => ({ id: `race-${x.key}`, group: "Courses", label: x.name, hint: `${new Date(`${x.date}T12:00:00`).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}${x.past ? " · débrief" : " · à venir"}`, Icon: IconFlag, keywords: "course debrief",
-      run: () => (x.past ? openPanel({ kind: "race", key: x.key }) : goRef.current(x.main ? "plan" : "races")) }));
+      run: () => (x.past ? openPanel({ kind: "race", key: x.key }) : goRef.current(x.main && !x.key.startsWith("next:") ? "plan" : "races")) }));
   }, []);
   // Mode « comparer » : on choisit deux sorties dans Séances.
   const startCompare = () => openPanel({ kind: "pick" });

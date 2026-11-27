@@ -4,7 +4,8 @@ import { diffDays } from "./engine/dates";
 import { debrief, type PlannedRace } from "./engine/debrief";
 import { parseAnalysis } from "./engine/streams";
 import { pastRaces, raceActivity } from "./debrief";
-import { loadGoal, readPlanMeta } from "./service";
+import { loadGoal, readPlanMeta, regeneratePlan } from "./service";
+import { loadNextGoals, rollSeason } from "./season";
 
 /** Garde la course principale passée avant qu'elle soit remplacée ou retirée (Mes courses, débrief). */
 export async function archiveGoal(userId: number, today: string) {
@@ -37,8 +38,9 @@ export const raceSlug = (name: string) => name.toLowerCase().normalize("NFD").re
 
 /** Toutes les courses : à venir (principale et préparation) et passées, avec résultat et débrief. */
 export async function listRaces(userId: number, today: string): Promise<RaceEntry[]> {
-  const [goal, upcomingSides, past, debriefs] = await Promise.all([
-    loadGoal(userId),
+  if (await rollSeason(userId, today)) await regeneratePlan(userId, today);
+  const [goal, nextMains, upcomingSides, past, debriefs] = await Promise.all([
+    loadGoal(userId), loadNextGoals(userId),
     all<{ id: number; name: string; date: string; distance_km: number | null; gain_m: number | null; priority: string }>(
       "SELECT id, name, date, distance_km, gain_m, priority FROM side_races WHERE user_id = ? AND date > ? ORDER BY date", [userId, today]),
     pastRaces(userId, today),
@@ -50,6 +52,11 @@ export async function listRaces(userId: number, today: string): Promise<RaceEntr
     const est = readPlanMeta(goal)?.estimate ?? null;
     out.push({ key: `main:${goal.date}`, main: true, name: goal.name, date: goal.date, distanceKm: goal.distance_km, gainM: goal.gain_m, priority: "A", past: false, daysTo: diffDays(today, goal.date),
       activity: null, estimate: est ? { low: Math.round(est.low), high: Math.round(est.high) } : null, result: null, debriefDone: false, edition: null });
+  }
+  // Courses principales suivantes de la saison (le plan les visera à leur tour).
+  for (const n of nextMains.filter((x) => x.date > today)) {
+    out.push({ key: `next:${n.id}`, main: true, name: n.name, date: n.date, distanceKm: n.distance_km, gainM: n.gain_m, priority: "A", past: false, daysTo: diffDays(today, n.date),
+      activity: null, estimate: null, result: null, debriefDone: false, edition: null });
   }
   for (const s of upcomingSides) {
     out.push({ key: `side:${s.id}`, main: false, name: s.name, date: s.date, distanceKm: s.distance_km, gainM: s.gain_m, priority: s.priority === "C" ? "C" : "B", past: false, daysTo: diffDays(today, s.date),

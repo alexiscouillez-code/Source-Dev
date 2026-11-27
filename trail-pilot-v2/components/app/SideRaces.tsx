@@ -67,7 +67,7 @@ export default function SideRaces({ races, today, mainDate, onChanged, toast }: 
         <form className="form" onSubmit={add}>
           <label className="field">Nom<input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} required maxLength={80} placeholder="Trail du Salève" /></label>
           <div className="fields f3">
-            <label className="field">Date<input type="date" min={min} max={mainDate ?? undefined} value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} required /></label>
+            <label className="field">Date<input type="date" min={min} value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} required /></label>
             <label className="field">Distance (km)<input inputMode="decimal" value={f.distanceKm} onChange={(e) => setF({ ...f, distanceKm: e.target.value })} placeholder="21" /></label>
             <label className="field">D+ (m)<input inputMode="numeric" value={f.gainM} onChange={(e) => setF({ ...f, gainM: e.target.value })} placeholder="1100" /></label>
           </div>

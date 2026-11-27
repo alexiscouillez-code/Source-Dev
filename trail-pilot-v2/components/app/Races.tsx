@@ -1,12 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, dayLabel, fmtDur, fmtKm, fmtNum } from "./client";
+import { api, dayLabel, fmtDur, fmtKm, fmtNum, localToday } from "./client";
 import type { Ctx } from "./AppShell";
 import { IconCompare, IconFlag, IconPlus } from "./icons";
 import { getPick, openPanel, PICK_EVENT, setPick, togglePick, type PickState } from "./panel";
 import { setQuick } from "./quick";
 import type { RaceEntry } from "@/lib/races";
+import { useFiche } from "./Fiche";
+import { AddRaceFiche, NextRaceCard, SeasonStrip, SeasonWarnings, useSeason } from "./Season";
 
 const TONE = { mieux: "ok", prevu: "", moins: "lite", inconnu: "dim" } as const;
 
@@ -20,6 +22,12 @@ export default function Races({ go, toast }: Ctx) {
   const load = useCallback(async () => { try { setList((await api<{ races: RaceEntry[] }>("/api/races?all=1")).races); } catch (e) { toast(e instanceof Error ? e.message : "Erreur"); setList([]); } }, [toast]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { const on = () => { load(); }; window.addEventListener("tp-synced", on); window.addEventListener("tp-panel-closed", on); return () => { window.removeEventListener("tp-synced", on); window.removeEventListener("tp-panel-closed", on); }; }, [load]);
+  const { season, reload: reloadSeason } = useSeason(toast);
+  const addF = useFiche<true>();
+  const [sel, setSel] = useState<number | null>(null);
+  const changed = useCallback(async () => { await Promise.all([load(), reloadSeason()]); }, [load, reloadSeason]);
+  const nextMains = useMemo(() => (season?.races ?? []).filter((r) => !r.active), [season]);
+  const selRace = nextMains.find((r) => r.id === sel) ?? nextMains[0] ?? null;
   const [pick, setP] = useState<PickState>(getPick());
   useEffect(() => { const on = (e: Event) => setP((e as CustomEvent<PickState>).detail); window.addEventListener(PICK_EVENT, on); return () => window.removeEventListener(PICK_EVENT, on); }, []);
 
@@ -33,6 +41,12 @@ export default function Races({ go, toast }: Ctx) {
   const openRace = (r: RaceEntry, el: HTMLElement) => {
     if (pick.on) { if (r.activity) togglePick(r.activity.id, el); else toast("Pas de sortie enregistrée pour cette course."); return; }
     if (r.past) { openPanel({ kind: "race", key: r.key }, el); return; }
+    // Course principale suivante : sa préparation, juste en dessous (tracé, stratégie, matériel).
+    if (r.key.startsWith("next:")) {
+      setSel(Number(r.key.slice(5)));
+      requestAnimationFrame(() => document.getElementById(`next-${r.key.slice(5)}`)?.scrollIntoView({ behavior: "smooth", block: "start" }));
+      return;
+    }
     // Course à venir : la principale dans le Planning, une course de préparation dans sa rubrique.
     setQuick({ kind: "jump", sel: r.main ? ".race" : "[data-fold=plan-sides]" });
     go("plan");
@@ -44,7 +58,7 @@ export default function Races({ go, toast }: Ctx) {
         <div><span className="eyebrow">{list ? `${past.length} courue${past.length > 1 ? "s" : ""} · ${upcoming.length} à venir` : "Courses"}</span><h1>Mes courses</h1></div>
         <div className="row">
           {done.length >= 2 && <button type="button" className={`btn ghost sm${pick.on ? " on" : ""}`} aria-pressed={pick.on} onClick={() => setPick(pick.on ? { on: false, ids: [] } : { on: true, ids: [] })}><IconCompare />{pick.on ? "Annuler" : "Comparer"}</button>}
-          <button type="button" className="btn sm" onClick={() => { setQuick({ kind: "jump", fold: "plan-sides", sel: "[data-fold-fiche=plan-sides] .btn", text: "Ajouter une course", press: true }); go("plan"); }}><IconPlus />Ajouter</button>
+          <button type="button" className="btn sm" aria-haspopup="dialog" onClick={(e) => addF.open(true, e.currentTarget)}><IconPlus />Ajouter</button>
         </div>
       </header>
       {!list ? <div className="skeleton" style={{ height: 260 }} /> : (
@@ -59,6 +73,13 @@ export default function Races({ go, toast }: Ctx) {
           )}
           {pick.on && <p className="note small races-pick">Touche deux courses courues pour comparer leurs sorties.</p>}
 
+          {season && (season.races.length > 0 || season.sides.length > 0) && (
+            <section className="card season-card" style={{ marginTop: 14 }} aria-labelledby="season-title">
+              <div className="card-head"><h2 id="season-title">Ma saison</h2><span className="small muted">{season.races.length} principale{season.races.length > 1 ? "s" : ""}</span></div>
+              <SeasonStrip s={season} />
+              <SeasonWarnings s={season} onChanged={changed} toast={toast} />
+            </section>
+          )}
           <section className="card" style={{ marginTop: 14 }} aria-labelledby="races-next">
             <div className="card-head"><h2 id="races-next">À venir</h2></div>
             {upcoming.length === 0 ? (
@@ -74,7 +95,7 @@ export default function Races({ go, toast }: Ctx) {
                         <span className="rr-meta">{dayLabel(r.date, { weekday: "short", day: "numeric", month: "long", year: "numeric" })}{r.distanceKm ? ` · ${fmtKm(r.distanceKm)} km` : ""}{r.gainM ? ` · ${fmtNum(r.gainM)} m D+` : ""}</span>
                       </span>
                       <span className="rr-side">
-                        {r.estimate ? <><b className="mono">{fmtDur(r.estimate.low)} – {fmtDur(r.estimate.high)}</b><small>estimé</small></> : <span className="chip dim">{r.main ? "Principale" : r.priority === "B" ? "Objectif secondaire" : "Entraînement"}</span>}
+                        {r.estimate ? <><b className="mono">{fmtDur(r.estimate.low)} – {fmtDur(r.estimate.high)}</b><small>estimé</small></> : <span className={`chip ${r.main ? "" : "dim"}`}>{r.main ? "Principale" : r.priority === "B" ? "Objectif secondaire" : "Entraînement"}</span>}
                       </span>
                     </button>
                   </li>
@@ -83,6 +104,7 @@ export default function Races({ go, toast }: Ctx) {
             )}
           </section>
 
+          {season && selRace && <NextRaceCard key={selRace.key} r={selRace} s={season} onChanged={changed} toast={toast} />}
           <section className="card" style={{ marginTop: 14 }} aria-labelledby="races-done">
             <div className="card-head"><h2 id="races-done">Courues</h2>{past.length > 0 && <span className="small muted">Touche une course pour son débrief</span>}</div>
             {past.length === 0 ? (
@@ -117,6 +139,7 @@ export default function Races({ go, toast }: Ctx) {
           </section>
         </>
       )}
+      <AddRaceFiche ctl={addF} today={season?.today ?? localToday()} onSaved={async (m) => { await changed(); toast(m); }} />
     </>
   );
 }

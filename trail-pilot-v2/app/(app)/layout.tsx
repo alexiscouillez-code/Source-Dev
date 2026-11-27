@@ -9,6 +9,7 @@ import "./terrains.css";
 import "./motion2.css";
 import "./graphcards.css";
 import "./fuel.css";
+import "./season.css";
 import "./night.css";
 import "../glass-theme.css";
 import "../modes.css";

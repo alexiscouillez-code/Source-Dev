@@ -18,14 +18,14 @@ export const GEAR_SUGGESTIONS = [
  * Matériel obligatoire de la course : à saisir une fois d’après le règlement, à cocher la veille en faisant le sac.
  * Il apparaît aussi sur la fiche de course imprimable.
  */
-export default function GearList({ items: initial, daysTo, toast }: { items: GearItem[]; daysTo: number; toast: (m: string) => void }) {
+export default function GearList({ items: initial, daysTo, toast, raceId }: { items: GearItem[]; daysTo: number; toast: (m: string) => void; raceId?: number }) {
   const [items, setItems] = useState(initial);
   const [add, setAdd] = useState("");
   const [busy, setBusy] = useState(false);
   const [suggest, setSuggest] = useState(!initial.length);
   async function save(next: GearItem[], msg?: string) {
     const prev = items; setItems(next); setBusy(true);
-    try { setItems((await api<{ items: GearItem[] }>("/api/goal/gear", { method: "PUT", body: { items: next } })).items); if (msg) toast(msg); }
+    try { setItems((await api<{ items: GearItem[] }>(`/api/goal/gear${raceId ? `?race=${raceId}` : ""}`, { method: "PUT", body: { items: next } })).items); if (msg) toast(msg); }
     catch (e) { setItems(prev); toast(e instanceof Error ? e.message : "Erreur"); }
     finally { setBusy(false); }
   }

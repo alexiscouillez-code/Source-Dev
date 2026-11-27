@@ -18,12 +18,15 @@ import { parseRouteFile } from "@/lib/activity-file";
 import InfoTip from "./InfoTip";
 
 /** Stratégie de course : profil du tracé, temps de passage par section, ravitaillements et nutrition. */
-export default function RaceStrategy({ route, estimate, onChanged, toast, weather, raceName, raceDate, gear = [] }: {
+export default function RaceStrategy({ route, estimate, onChanged, toast, weather, raceName, raceDate, gear = [], raceId }: {
   raceName?: string; raceDate?: string; gear?: { label: string; checked: boolean }[];
+  /** Course principale suivante de la saison (sinon : la course active). */
+  raceId?: number;
   route: RaceRoute | null; estimate: { low: number; high: number }; weather?: WeatherAdjust | null;
   onChanged: () => Promise<void>; toast: (m: string) => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const q = raceId ? `?race=${raceId}` : "";
   const [busy, setBusy] = useState(false);
   const [editAid, setEditAid] = useState(false);
   const [rows, setRows] = useState<AidRow[]>([]);
@@ -59,7 +62,7 @@ export default function RaceStrategy({ route, estimate, onChanged, toast, weathe
     setBusy(true);
     try {
       const r = await parseRouteFile(file);
-      const res = await api<{ replanned: boolean }>("/api/goal/trace", { method: "PUT", body: { points: r.points, aid: r.aid, distanceKm: r.distanceKm, gainM: r.gainM, lossM: r.lossM, line: r.line } });
+      const res = await api<{ replanned: boolean }>(`/api/goal/trace${q}`, { method: "PUT", body: { points: r.points, aid: r.aid, distanceKm: r.distanceKm, gainM: r.gainM, lossM: r.lossM, line: r.line } });
       await onChanged();
       toast(res.replanned ? `Tracé importé : ${fmtKm(r.distanceKm)} km, ${fmtNum(r.gainM)} m D+. Le plan a été recalculé sur ces chiffres.` : "Tracé importé.");
       if (!r.aid.length) { setRows([{ km: "", name: "", cutoff: "" }]); setEditAid(true); }
@@ -86,14 +89,14 @@ export default function RaceStrategy({ route, estimate, onChanged, toast, weathe
     const fin = parseDuration(finish);
     if (fin === undefined) { toast(`Barrière d’arrivée invalide : « ${finish} »`); return; }
     setBusy(true);
-    try { await api("/api/goal/trace", { method: "PATCH", body: { aid, startTime: start || null, finishCutoff: fin } }); await onChanged(); setEditAid(false); toast("Ravitaillements et barrières enregistrés."); }
+    try { await api(`/api/goal/trace${q}`, { method: "PATCH", body: { aid, startTime: start || null, finishCutoff: fin } }); await onChanged(); setEditAid(false); toast("Ravitaillements et barrières enregistrés."); }
     catch (e2) { toast(e2 instanceof Error ? e2.message : "Erreur"); }
     finally { setBusy(false); }
   }
 
   async function remove() {
     if (!confirm("Retirer le tracé de la course ?")) return;
-    try { await api("/api/goal/trace", { method: "DELETE" }); await onChanged(); } catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }
+    try { await api(`/api/goal/trace${q}`, { method: "DELETE" }); await onChanged(); } catch (e) { toast(e instanceof Error ? e.message : "Erreur"); }
   }
 
   // À moins de 3 semaines de la course, la stratégie est dépliée d’office : c’est le moment de la travailler.

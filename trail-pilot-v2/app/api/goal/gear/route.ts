@@ -13,7 +13,11 @@ export const PUT = withUser(async (user, req) => {
     seen.add(label.toLowerCase());
     return [{ label, checked: o.checked === true }];
   });
-  const { changes } = await run("UPDATE goals SET gear = ? WHERE user_id = ?", [JSON.stringify(items), user.id]);
+  // Course active, ou course principale suivante (?race=<id>).
+  const race = Number(new URL(req.url).searchParams.get("race"));
+  const { changes } = Number.isInteger(race) && race > 0
+    ? await run("UPDATE next_goals SET gear = ? WHERE id = ? AND user_id = ?", [JSON.stringify(items), race, user.id])
+    : await run("UPDATE goals SET gear = ? WHERE user_id = ?", [JSON.stringify(items), user.id]);
   if (!changes) throw new HttpError(400, "Choisis d’abord ta course.");
   return json({ items });
 });

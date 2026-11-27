@@ -20,6 +20,8 @@ import { buildRacePlan, ENGINE, maintenancePlan, phaseFor, raceDemands, type Lev
 import { withSideRaces, withStrength, type SideRace } from "./engine/extras";
 import { timeline, weeklySummary } from "./engine/timeline";
 import { fuelDay } from "./fuel";
+import { rollSeason } from "./season";
+import { withRecovery } from "./engine/season";
 import { HttpError } from "./api";
 import { cleanAnchor, type RaceAnchor } from "./engine/race-anchor";
 
@@ -109,7 +111,11 @@ function matches(p: PlanRow, sport: Sport) {
  * sans toucher aux séances verrouillées, réalisées ou passées.
  */
 export async function regeneratePlan(userId: number, today: string) {
-  const [{ profile, acts, tl }, goal, sides] = await Promise.all([loadState(userId, today), loadGoal(userId), loadSideRaces(userId)]);
+  await rollSeason(userId, today);
+  const [{ profile, acts, tl }, goal, sides, prevMain] = await Promise.all([loadState(userId, today), loadGoal(userId), loadSideRaces(userId),
+    // Course principale courue il y a moins de 5 semaines : la reprise passe d'abord par une récupération.
+    one<{ name: string; date: string; distanceKm: number | null; gainM: number | null }>("SELECT name, date, distance_km AS distanceKm, gain_m AS gainM FROM race_archive r WHERE user_id = ? AND date < ? AND date >= ? AND EXISTS (SELECT 1 FROM activities a WHERE a.user_id = r.user_id AND a.date = r.date AND a.duration_min >= 45 AND COALESCE(a.check_state, 0) <> 1) ORDER BY date DESC LIMIT 1", [userId, today, addDays(today, -35)])]);
+
   const pp = { daysPerWeek: profile.days_per_week, longDay: profile.long_day, maxWeeklyMinutes: profile.max_weekly_minutes, level: profile.level };
   const likes = acts.map(toActivityLike);
   let items;
@@ -121,11 +127,13 @@ export async function regeneratePlan(userId: number, today: string) {
       // Estimation recalée sur tes vraies courses (débriefs).
       calib: await loadCalibration(userId, today) });
     items = r.items;
+    if (prevMain) { const rec = withRecovery(items, prevMain, today); items = rec.items; if (rec.note) r.plan.notes.unshift(rec.note); }
     const upcoming = sides.filter((s) => s.date > today && s.date < goal.date);
     if (upcoming.length) r.plan.notes.push(`Course${upcoming.length > 1 ? "s" : ""} de préparation intégrée${upcoming.length > 1 ? "s" : ""} au plan : ${upcoming.map((s) => `${s.name} (${s.priority === "B" ? "objectif secondaire" : "entraînement"}, le ${new Date(`${s.date}T12:00:00Z`).toLocaleDateString("fr-FR", { day: "numeric", month: "long", timeZone: "UTC" })})`).join(", ")}. La sortie longue de ces semaines est remplacée par la course, avec allègement avant et récupération après.`);
     await run("UPDATE goals SET plan_meta = ? WHERE user_id = ?", [JSON.stringify(r.plan), userId]);
   } else {
     items = maintenancePlan({ today, profile: pp, activities: likes });
+    if (prevMain) items = withRecovery(items, prevMain, today).items;
   }
   items = withSideRaces(withStrength(items), sides, { start: addDays(today, 1), level: profile.level, ctl: tl.ctl, mainDate: goal && goal.date > today ? goal.date : null });
   const absence = await loadAbsence(userId, today);
@@ -294,6 +302,8 @@ async function applyVerdict(p: PlanRow, v: Verdict) {
 
 /** Tout ce qu’il faut pour l’écran « Aujourd’hui ». */
 export async function dashboard(userId: number, today: string) {
+  // Course principale passée et suivante prévue : la saison avance, le plan vise la suivante.
+  if (await rollSeason(userId, today)) await regeneratePlan(userId, today);
   await reconcile(userId, today);
   const [{ profile, acts, physio, tl }, goal, checkin, upcoming, planCount] = await Promise.all([
     loadState(userId, today),
@@ -532,6 +542,7 @@ export async function setSideRacePlace(userId: number, id: number, place: Place 
 
 /** Le plan suit la charge réelle : il se recalcule automatiquement chaque nouvelle semaine. */
 export async function planView(userId: number, today: string) {
+  if (await rollSeason(userId, today)) await regeneratePlan(userId, today);
   await reconcile(userId, today);
   let goal = await loadGoal(userId);
   let meta = readPlanMeta(goal);
@@ -573,5 +584,7 @@ export async function planView(userId: number, today: string) {
     })),
     doneByWeek, races, absence: await loadAbsence(userId, today),
     learning: { items: lr.learning.items, off: lr.off },
+    // Courses principales suivantes : le plan les visera à leur tour.
+    nextMains: (await all<{ name: string; date: string }>("SELECT name, date FROM next_goals WHERE user_id = ? AND date > ? ORDER BY date", [userId, today])),
   };
 }

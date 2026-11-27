@@ -1,0 +1,41 @@
+/* ---------- Saison : frise des courses, écarts, courses principales suivantes ---------- */
+.season-card { display: grid; gap: 12px; }
+.season-card .card-head { margin-bottom: 0; }
+.season-strip { margin: 0; display: grid; gap: 8px; }
+.season-strip { min-width: 0; }
+.season-strip svg { display: block; max-width: 100%; overflow: visible; }
+.ss-num { fill: var(--snow); font-family: var(--mono); font-size: 13px; font-weight: 700; text-anchor: middle; }
+.ss-axis { stroke: var(--line); stroke-width: 2; }
+.ss-tick { stroke: var(--line); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.ss-month { fill: var(--soft); font-family: var(--mono); font-size: 12px; text-anchor: middle; }
+.ss-band.is-affutage { fill: var(--lite); opacity: .45; }
+.ss-band.is-recup { fill: var(--ok); opacity: .35; }
+.ss-dot.is-B { fill: var(--snow); stroke: var(--ink); stroke-width: 2; }
+.ss-dot.is-C { fill: var(--mute); }
+.ss-pole { stroke: var(--ember); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.ss-flag { fill: var(--ember); }
+.ss-a { fill: var(--ember); stroke: var(--ink); stroke-width: 2.5; }
+.ss-main:not(.is-active) .ss-flag, .ss-main:not(.is-active) .ss-a { fill: color-mix(in srgb, var(--ember) 55%, var(--ink-3)); }
+.ss-today { stroke: var(--snow); stroke-width: 2; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
+.season-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; color: var(--soft); }
+.season-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.season-legend small { font-size: 12.5px; color: var(--soft); }
+.season-legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.lg-a { background: var(--ember); } .lg-b { background: var(--snow); border: 2px solid var(--ink-3); } .lg-c { background: var(--mute); width: 7px !important; height: 7px !important; }
+.lg-taper { background: var(--lite); border-radius: 3px !important; width: 16px !important; opacity: .7; }
+.lg-recup { background: var(--ok); border-radius: 3px !important; width: 16px !important; opacity: .6; }
+.season-names { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13.5px; color: var(--soft); counter-reset: sn; }
+.season-names li { counter-increment: sn; }
+.season-names li::before { content: counter(sn) ". "; font-family: var(--mono); color: var(--ember); }
+.season-names b { color: var(--snow); }
+.season-warn { display: grid; gap: 10px; }
+.warn-gap { display: grid; gap: 8px; border-left: 4px solid var(--lite); }
+.warn-gap p { margin: 0; line-height: 1.45; }
+.next-race { display: grid; gap: 12px; margin-top: 14px; border: 1px solid color-mix(in srgb, var(--ember) 35%, var(--line)); }
+.next-race .card-head { margin-bottom: 0; align-items: flex-start; }
+.next-rows { margin-top: 0; }
+.season-next { margin: 10px 2px 0; color: var(--soft); line-height: 1.5; }
+.season-next b { color: var(--snow); }
+.picks.p3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 420px) { .picks.p3 { grid-template-columns: 1fr; } }
+:root[data-theme="glass"] :is(.next-race, .season-card) .btn.ghost { background: rgba(8, 14, 28, .42); }
