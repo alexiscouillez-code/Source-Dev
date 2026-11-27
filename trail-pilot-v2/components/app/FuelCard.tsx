@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { api, type FuelDay, type Plate } from "./client";
+import type { Tab } from "./AppShell";
 import { PlateLegend, PlateRing, ProductsManager } from "./FuelKit";
 import { shrinkPhoto } from "./photo";
 import { Fiche, FicheHead, useFiche } from "./Fiche";
@@ -19,7 +20,7 @@ interface PlateResult { read: Plate & { foods: string[] }; target: Plate; label:
  * Carburant du jour, sur l'accueil : après une grosse séance, de quoi récupérer dans l'heure ; puis l'assiette du jour
  * selon la charge (proportions, jamais de calories), une photo d'assiette pour vérifier, et les produits de course.
  */
-export default function FuelCard({ fuel, today, toast }: { fuel: FuelDay; today: string; toast: (m: string) => void }) {
+export default function FuelCard({ fuel, today, toast, go }: { fuel: FuelDay; today: string; toast: (m: string) => void; go: (t: Tab) => void }) {
   const kit = useFiche<true>();
   const file = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -60,7 +61,19 @@ export default function FuelCard({ fuel, today, toast }: { fuel: FuelDay; today:
           <PlateLegend plate={fuel.plate} examples={EXAMPLES} />
         </div>
       </div>
-      <p className="muted small" style={{ margin: 0 }}>Plus une touche de bonnes graisses (huile d’olive, noix) et de l’eau à chaque repas. Ce sont des proportions, pas des quantités : mange à ta faim.</p>
+      {fuel.grams ? (
+        <div className="fuel-grams">
+          <div className="fg-head"><small className="cal-kicker">{fuel.grams.label}</small><b>{fuel.grams.total[0]} à {fuel.grams.total[1]} g de glucides</b><small>sur la journée, soit {fuel.grams.perKg[0]} à {fuel.grams.perKg[1]} g par kilo</small></div>
+          <ul>
+            <li><b>À chaque repas</b> environ {fuel.grams.meal} g : par exemple {fuel.grams.pasta} g de pâtes ou de riz pesés crus, du pain et un fruit.</li>
+            <li><b>En collations</b> environ {fuel.grams.snacks} g : banane, compote, pain d’épices, jus de fruits.</li>
+          </ul>
+          <small>{fuel.grams.why}</small>
+        </div>
+      ) : fuel.needsWeight ? (
+        <p className="small soft" style={{ margin: 0 }}>Aujourd’hui, des quantités en grammes aideraient. <button type="button" className="link small" onClick={() => go("account")}>Ajoute ton poids</button> (facultatif) dans ton profil pour les avoir.</p>
+      ) : null}
+      <p className="muted small" style={{ margin: 0 }}>Plus une touche de bonnes graisses (huile d’olive, noix) et de l’eau à chaque repas. {fuel.grams ? "Hors de ces jours-là, les proportions suffisent : mange à ta faim." : "Ce sont des proportions, pas des quantités : mange à ta faim."}</p>
 
       <div className="fuel-photo">
         <button type="button" className="btn ghost sm" disabled={busy} onClick={() => file.current?.click()}>{busy ? "Analyse de l’assiette…" : "Photo de mon assiette"}</button>

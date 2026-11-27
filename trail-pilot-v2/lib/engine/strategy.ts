@@ -66,7 +66,8 @@ export function weatherAdjust(w: WeatherLike): WeatherAdjust {
   return { water, sodium, timeFactor, tips, tone };
 }
 
-export function buildStrategy(route: RaceRoute, rawEstimate: { low: number; high: number }, weather?: WeatherAdjust | null): Strategy {
+/** `personal.water` : eau par heure tirée des tests de sudation du coureur, prioritaire sur les repères généraux. */
+export function buildStrategy(route: RaceRoute, rawEstimate: { low: number; high: number }, weather?: WeatherAdjust | null, personal?: { water?: [number, number] | null } | null): Strategy {
   const estimate = weather ? { low: rawEstimate.low * weather.timeFactor, high: rawEstimate.high * weather.timeFactor } : rawEstimate;
   const dist = route.distanceKm;
   const named = new Map<number, string>();
@@ -85,7 +86,8 @@ export function buildStrategy(route: RaceRoute, rawEstimate: { low: number; high
   });
   const W = raw.reduce((s, x) => s + x.w, 0) || 1;
   const base = perHourNeeds((estimate.low + estimate.high) / 2);
-  const needs = weather ? { ...base, water: weather.water, sodium: weather.sodium } : base;
+  const withWx = weather ? { ...base, water: weather.water, sodium: weather.sodium } : base;
+  const needs = personal?.water ? { ...withWx, water: personal.water } : withWx;
   let accLow = 0, accHigh = 0;
   const sections: Section[] = raw.map((x, i) => {
     const low = (estimate.low * x.w) / W, high = (estimate.high * x.w) / W;

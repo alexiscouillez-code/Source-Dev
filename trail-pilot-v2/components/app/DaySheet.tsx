@@ -14,7 +14,7 @@ import { ZONES } from "@/lib/engine/legs";
 import { FicheHead } from "./Fiche";
 import { movable, type planActions } from "./planActions";
 import { haptic } from "@/components/haptics";
-import { IntakeLogger } from "./FuelKit";
+import { IntakeLogger, SweatTest } from "./FuelKit";
 
 export interface Extra { id: number; date: string; sport: string; name: string | null; duration_min: number; distance_km: number | null; gain_m: number | null; source: string }
 export interface CalData {
@@ -93,6 +93,10 @@ export default function DaySheet({ date, focus, today, targets, data: given, act
             {/* Sortie de 75 min et plus (prévue ou non) : ce qui a été mangé et bu, en glucides par heure. */}
             {date <= today && (day.sessions.some((s) => s.status === "done" && (s.a_duration ?? 0) >= 75) || day.extras.some((a) => a.duration_min >= 75)) && (
               <IntakeLogger key={`in-${date}`} date={date} today={today} onSaved={() => { window.dispatchEvent(new CustomEvent("tp-plan-changed")); }} />
+            )}
+            {/* Sortie d'une heure ou plus : test de sudation (pesée avant et après). */}
+            {date <= today && (day.sessions.some((s) => s.status === "done" && (s.a_duration ?? 0) >= 60) || day.extras.some((a) => a.duration_min >= 60)) && (
+              <SweatTest key={`sw-${date}`} date={date} today={today} />
             )}
             {day.extras.map((a) => (
               <button key={a.id} type="button" className="day-extra" onClick={(e) => openPanel({ kind: "run", id: a.id, initial: { id: a.id, date: a.date, sport: a.sport, name: a.name, duration_min: a.duration_min, distance_km: a.distance_km, gain_m: a.gain_m } }, e.currentTarget)}>

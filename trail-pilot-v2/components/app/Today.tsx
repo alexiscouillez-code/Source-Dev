@@ -82,7 +82,7 @@ export default function Today({ me, refresh, go, toast }: Ctx) {
       {/* Téléphone : une colonne. Grand écran : « Ta journée » à gauche, la course, la forme et la semaine à droite. */}
       <div className="today-grid">
         <DayCard me={me} go={go} busy={busy} generate={generate} refresh={refresh} toast={toast} onCheckin={(el) => ci.open(true, el)} onSession={(x, el) => sheet.open(x, el)} />
-        {me.fuel && <FuelCard fuel={me.fuel} today={me.today} toast={toast} />}
+        {me.fuel && <FuelCard fuel={me.fuel} today={me.today} toast={toast} go={go} />}
         {!me.goal && (
           <div className="banner today-goal">
             <div><b>Choisis ta course</b><div className="small muted">Un plan jusqu’au jour J, construit à partir de ta charge actuelle pour que tu finisses.</div></div>

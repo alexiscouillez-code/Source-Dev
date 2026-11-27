@@ -23,7 +23,7 @@ import { fuelDay } from "./fuel";
 import { HttpError } from "./api";
 import { cleanAnchor, type RaceAnchor } from "./engine/race-anchor";
 
-export interface ProfileRow { hr_max: number | null; hr_rest: number | null; vo2_watch: number | null; vdot_ref?: number | null; days_per_week: number; long_day: number; max_weekly_minutes: number | null; level: Level }
+export interface ProfileRow { hr_max: number | null; hr_rest: number | null; vo2_watch: number | null; vdot_ref?: number | null; days_per_week: number; long_day: number; max_weekly_minutes: number | null; level: Level; weight_kg?: number | null }
 export interface GoalRow { name: string; date: string; distance_km: number | null; gain_m: number | null; plan_meta?: string | null; route?: string | null; gear?: string | null; anchor?: string | null }
 export interface ActivityRow { id: number; date: string; sport: Sport; name: string | null; duration_min: number; distance_km: number | null; gain_m: number | null; loss_m: number | null; avg_hr: number | null; max_hr: number | null; rpe: number | null; source: string; strava_id: string | null; analysis?: string | null; check_state?: number | null }
 export interface PlanRow { id: number; date: string; template: string; title: string; sport: string; duration_min: number; gain_m: number | null; rpe_target: number; description: string; phase: string; status: string; activity_id: number | null; locked: number; original: string | null }
@@ -49,8 +49,8 @@ export const toVo2Run = (r: ActivityRow): Vo2Run => ({ date: r.date, sport: r.sp
 const toPlanned = (p: PlanRow): PlannedLike => ({ title: p.title, durationMin: p.duration_min, rpeTarget: p.rpe_target, template: p.template, sport: p.sport, description: p.description, gainM: p.gain_m });
 
 export async function loadProfile(userId: number) {
-  const p = await one<ProfileRow>("SELECT hr_max, hr_rest, vo2_watch, vdot_ref, days_per_week, long_day, max_weekly_minutes, level FROM profiles WHERE user_id = ?", [userId]);
-  return p ?? { hr_max: null, hr_rest: null, vo2_watch: null, days_per_week: 4, long_day: 6, max_weekly_minutes: null, level: "regulier" as Level };
+  const p = await one<ProfileRow>("SELECT hr_max, hr_rest, vo2_watch, vdot_ref, days_per_week, long_day, max_weekly_minutes, level, weight_kg FROM profiles WHERE user_id = ?", [userId]);
+  return p ?? { hr_max: null, hr_rest: null, vo2_watch: null, days_per_week: 4, long_day: 6, max_weekly_minutes: null, level: "regulier" as Level, weight_kg: null };
 }
 /** Repères physiologiques d’un profil : FC max, FC de repos et VO2max de référence (montre, sinon dernière estimation). */
 export const physioOf = (p: { hr_max: number | null; hr_rest: number | null; vo2_watch?: number | null; vdot_ref?: number | null }) =>

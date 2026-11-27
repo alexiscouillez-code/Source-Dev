@@ -269,4 +269,15 @@ export const MIGRATIONS: { tag: string; statements: string[] }[] = [
         carbs REAL NOT NULL, minutes REAL, g_per_hour REAL, target INTEGER, updated_at INTEGER NOT NULL, PRIMARY KEY (user_id, date))`,
     ],
   },
+  {
+    tag: "022_weight_sweat",
+    statements: [
+      // Poids facultatif : sert seulement aux quantités (glucides, protéines). Ni historique, ni IMC.
+      `ALTER TABLE profiles ADD COLUMN weight_kg REAL`,
+      // Test de sudation : seul le résultat est gardé (pas les pesées).
+      `CREATE TABLE IF NOT EXISTS sweat_tests (
+        user_id INTEGER NOT NULL REFERENCES app_users(id) ON DELETE CASCADE, date TEXT NOT NULL, rate REAL NOT NULL, loss_pct REAL NOT NULL,
+        drank_ml INTEGER NOT NULL, minutes REAL NOT NULL, band TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (user_id, date))`,
+    ],
+  },
 ];

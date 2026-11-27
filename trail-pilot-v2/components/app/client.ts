@@ -74,7 +74,7 @@ export interface Me {
   targets: Targets;
   strava: { configured: boolean; connected: boolean; athleteName: string | null; lastSyncAt: number | null; lastError: string | null; analyzed?: { done: number; total: number } | null };
   today: string;
-  profile: { hr_max: number | null; hr_rest: number | null; vo2_watch: number | null; days_per_week: number; long_day: number; max_weekly_minutes: number | null; level: "debutant" | "regulier" | "confirme" };
+  profile: { hr_max: number | null; hr_rest: number | null; vo2_watch: number | null; days_per_week: number; long_day: number; max_weekly_minutes: number | null; level: "debutant" | "regulier" | "confirme"; weight_kg?: number | null };
   goal: { name: string; date: string; distance_km: number | null; gain_m: number | null; daysToGoal: number | null; phase: string; gear?: { total: number; ready: number } | null; anchor?: RaceAnchor | null } | null;
   load: { atl: number; ctl: number; form: number; ratio: number | null; monotony: number | null; load7: number; calibrated: boolean; historyDays: number };
   dayNote?: { note: string; resume: string | null } | null;
@@ -87,6 +87,11 @@ export interface Me {
 }
 export type DayKind = "facile" | "modere" | "dur";
 export interface Plate { feculents: number; legumes: number; proteines: number }
-export interface FuelDay { kind: DayKind; label: string; reason: string; plate: Plate; recovery: { title: string; why: string; items: string[]; next: string | null } | null }
+export interface CarbDay { label: string; why: string; perKg: [number, number]; total: [number, number]; meal: number; pasta: number; snacks: number }
+export interface FuelDay {
+  kind: DayKind; label: string; reason: string; plate: Plate; grams?: CarbDay | null; needsWeight?: boolean;
+  recovery: { title: string; why: string; items: string[]; next: string | null; grams?: { carbs: [number, number]; protein: [number, number] } | null } | null;
+}
+export type HeatBand = "frais" | "doux" | "chaud";
 export interface FuelProduct { id: number; name: string; brand: string | null; kind: string; carbs: number; sodium: number | null; caffeine: number | null; unit: string | null; barcode: string | null; source: string }
 export interface ProductDraft { name: string; brand: string | null; kind: string; carbs: number | null; sodium: number | null; caffeine: number | null; unit: string | null; barcode: string | null }

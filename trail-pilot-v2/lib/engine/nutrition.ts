@@ -48,19 +48,26 @@ export const PLATE_EXAMPLES: Record<keyof Plate, string> = {
 };
 
 // ---------- Récupération ----------
-export interface RecoveryAdvice { title: string; why: string; items: string[]; next: string | null }
+export interface RecoveryAdvice { title: string; why: string; items: string[]; next: string | null; grams: { carbs: [number, number]; protein: [number, number] } | null }
 
 /**
  * Après une séance lourde (75 min et plus, qualité, effort ressenti dur), manger dans l'heure accélère la recharge :
  * des glucides pour les réserves, des protéines pour les muscles, de l'eau et du sel.
  * Repères usuels : environ 1 g de glucides par kilo et 20 à 25 g de protéines ; ici traduits en portions.
  */
-export function recoveryFor(o: { durationMin: number; template?: string | null; effort?: number | null; tomorrow?: SessionLike | null }): RecoveryAdvice | null {
+export function recoveryFor(o: { durationMin: number; template?: string | null; effort?: number | null; tomorrow?: SessionLike | null; weightKg?: number | null }): RecoveryAdvice | null {
   const heavy = o.durationMin >= 75 || (!!o.template && (QUALITY.has(o.template) || BIG.has(o.template))) || (o.effort ?? 0) >= 7;
   if (!heavy || o.durationMin < 30) return null;
   const long = o.durationMin >= 150;
+  // Avec le poids : environ 1 à 1,2 g de glucides par kilo après une très longue sortie (0,8 à 1 g sinon),
+  // et 0,25 à 0,3 g de protéines par kilo.
+  const w = o.weightKg && o.weightKg >= 30 && o.weightKg <= 200 ? o.weightKg : null;
+  const r5 = (v: number) => Math.round(v / 5) * 5;
+  const grams = w ? { carbs: [r5(w * (long ? 1 : 0.8)), r5(w * (long ? 1.2 : 1))] as [number, number], protein: [r5(w * 0.25), r5(w * 0.3)] as [number, number] } : null;
+  const span = (r: [number, number]) => (r[0] === r[1] ? `environ ${r[0]}` : `${r[0]} à ${r[1]}`);
+  const qty = grams ? ` Vise ${span(grams.carbs)} g de glucides et ${span(grams.protein)} g de protéines (${mealExample(grams.carbs[1], grams.protein[0], long)}).` : "";
   const items = [
-    long ? "Un vrai repas dans l’heure : une grande part de féculents (riz, pâtes, pommes de terre) avec des œufs, du poisson ou de la viande." : "Une collation dans l’heure : par exemple un bol de céréales avec du lait, ou un sandwich jambon ou fromage, ou un yaourt à boire et une banane.",
+    (long ? "Un vrai repas dans l’heure : une grande part de féculents (riz, pâtes, pommes de terre) avec des œufs, du poisson ou de la viande." : "Une collation dans l’heure : par exemple un bol de céréales avec du lait, ou un sandwich jambon ou fromage, ou un yaourt à boire et une banane.") + qty,
     "Bois de l’eau par petites gorgées jusqu’à retrouver une urine claire ; un peu de sel (bouillon, pain, fromage) si tu as beaucoup transpiré.",
   ];
   const tm = o.tomorrow;
@@ -70,8 +77,81 @@ export function recoveryFor(o: { durationMin: number; template?: string | null; 
   return {
     title: long ? "Récupère : repas complet dans l’heure" : "Récupère : collation dans l’heure",
     why: "Glucides pour refaire les réserves, protéines pour réparer les muscles : c’est dans l’heure qui suit que le corps les stocke le mieux.",
-    items, next,
+    items, next, grams,
   };
+}
+
+/** Exemple concret pour une quantité de glucides et de protéines (aliments du quotidien, poids crus pour les féculents). */
+function mealExample(carbs: number, protein: number, meal: boolean): string {
+  if (meal) {
+    const pasta = Math.max(60, Math.round(((carbs - 25) / 0.72) / 10) * 10);
+    return `par exemple ${pasta} g de pâtes ou de riz crus, une tranche de pain${protein >= 20 ? ", 2 œufs ou une portion de poisson" : ", un yaourt"}`;
+  }
+  const bowls = carbs >= 70 ? "un grand bol de céréales avec du lait et une banane" : "un bol de céréales avec du lait";
+  return `par exemple ${bowls}${protein >= 20 ? ", et un yaourt ou un verre de lait en plus" : ""}`;
+}
+
+// ---------- Quantités de glucides de la journée ----------
+export interface CarbDay { label: string; why: string; perKg: [number, number]; total: [number, number]; meal: number; pasta: number; snacks: number }
+
+/**
+ * Glucides de la journée en grammes, seulement quand ça compte : recharge des deux jours avant une course de plus
+ * d'1 h 30 (8 à 10 g par kilo) et grosses journées (6 à 8 g par kilo). Les autres jours, les proportions suffisent.
+ * Répartition : trois repas (75 %) et des collations (25 %). Féculents donnés crus (pâtes ou riz : environ 72 g de glucides
+ * pour 100 g), le reste du repas (pain, fruit, dessert) apportant environ 45 g.
+ */
+export function carbDay(o: { kind: DayKind; loading: boolean; weightKg: number | null | undefined }): CarbDay | null {
+  const w = o.weightKg && o.weightKg >= 30 && o.weightKg <= 200 ? o.weightKg : null;
+  if (!w || (!o.loading && o.kind !== "dur")) return null;
+  const perKg: [number, number] = o.loading ? [8, 10] : [6, 8];
+  const r10 = (v: number) => Math.round(v / 10) * 10;
+  const total: [number, number] = [r10(w * perKg[0]), r10(w * perKg[1])];
+  const mid = (total[0] + total[1]) / 2;
+  const meal = r10(mid * 0.25);
+  return {
+    label: o.loading ? "Recharge avant la course" : "Grosse journée",
+    why: o.loading
+      ? "Les deux jours avant une course de plus d’1 h 30, on remplit les réserves de glycogène : beaucoup plus de féculents que d’habitude, en diminuant un peu les fibres (crudités, céréales complètes) pour ménager le ventre."
+      : "Après une grosse séance ou avant une sortie longue, les réserves se vident vite : ces quantités évitent de repartir à vide.",
+    perKg, total, meal,
+    pasta: Math.max(60, r10((meal - 45) / 0.72)),
+    snacks: r10(mid * 0.25),
+  };
+}
+
+// ---------- Test de sudation ----------
+export type HeatBand = "frais" | "doux" | "chaud";
+export interface SweatResult { rate: number; lossPct: number; verdict: "ok" | "trop-perdu" | "trop-bu"; text: string }
+
+/**
+ * Pesée avant et après une sortie, plus ce qui a été bu : perte de sueur par heure.
+ * Sueur (L/h) = (poids avant − poids après + boisson en litres) / durée en heures.
+ * Repères : rester sous 2 % de perte de poids ; ne jamais finir plus lourd qu'au départ (trop boire dilue le sodium du sang).
+ */
+export function sweatTest(o: { preKg: number; postKg: number; drankMl: number; minutes: number | null }): SweatResult | null {
+  const { preKg, postKg, drankMl, minutes } = o;
+  if (!minutes || minutes < 45 || !(preKg >= 30 && preKg <= 200) || !(postKg >= 30 && postKg <= 200) || Math.abs(preKg - postKg) > 6 || !(drankMl >= 0 && drankMl <= 6000)) return null;
+  const rate = Math.round(((preKg - postKg + drankMl / 1000) / (minutes / 60)) * 100) / 100;
+  if (rate < 0.1 || rate > 3.5) return null;
+  const lossPct = Math.round(((preKg - postKg) / preKg) * 1000) / 10;
+  const fmt = (v: number) => String(v).replace(".", ",");
+  const per = Math.round((rate * 0.7) / 0.05) * 50;
+  if (lossPct >= 2) return { rate, lossPct, verdict: "trop-perdu", text: `Tu as perdu ${fmt(lossPct)} % de ton poids : au-delà de 2 %, l’effort devient plus dur et la récupération plus longue. Bois davantage la prochaine fois, autour de ${per} ml par heure.` };
+  if (lossPct < 0) return { rate, lossPct, verdict: "trop-bu", text: "Tu as fini plus lourd qu’au départ : tu as bu plus que tu n’as transpiré. Sur une longue course, ça peut trop diluer le sodium du sang ; bois un peu moins, à ta soif." };
+  return { rate, lossPct, verdict: "ok", text: `Perte de ${fmt(lossPct)} % de ton poids : ton hydratation était adaptée à ces conditions.` };
+}
+
+/**
+ * Eau par heure en course d'après la sudation mesurée : compenser 60 à 80 % des pertes (jamais plus que ce qu'on
+ * transpire), corrigé si la course s'annonce plus chaude ou plus fraîche que le test.
+ */
+export function personalWater(rate: number, band: HeatBand, raceTone?: string | null): [number, number] {
+  const heat = raceTone === "tres-chaud" ? 2 : raceTone === "chaud" ? 1 : raceTone === "froid" ? -1 : 0;
+  const test = band === "chaud" ? 1 : band === "frais" ? -1 : 0;
+  const k = 1 + Math.max(-0.15, Math.min(0.35, (heat - test) * 0.15));
+  const r50 = (v: number) => Math.round(v / 50) * 50;
+  const lo = Math.max(300, r50(rate * 1000 * 0.6 * k)), hi = Math.max(lo, r50(Math.min(rate * 1000 * 0.8 * k, rate * 1000 * k)));
+  return [lo, hi];
 }
 
 // ---------- Prises pendant une sortie ----------

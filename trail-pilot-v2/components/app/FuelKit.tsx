@@ -235,3 +235,66 @@ export function IntakeLogger({ date, today, toast, onSaved }: { date: string; to
     </div>
   );
 }
+
+// ---------- Test de sudation ----------
+interface Sweat { date: string; minutes: number | null; test: { rate: number; lossPct: number; drankMl: number; band: string } | null; verdict?: string; text?: string }
+const BANDS: { v: string; label: string }[] = [{ v: "frais", label: "Frais (< 12 °C)" }, { v: "doux", label: "Doux" }, { v: "chaud", label: "Chaud (> 22 °C)" }];
+const dec = (v: number) => String(v).replace(".", ",");
+
+/**
+ * Pesée avant et après la sortie, plus ce qui a été bu : perte de sueur par heure. Seul le résultat est enregistré ;
+ * il règle l'eau par heure du plan de course.
+ */
+export function SweatTest({ date, today, toast }: { date: string; today: string; toast?: (m: string) => void }) {
+  const [s, setS] = useState<Sweat | null>(null);
+  const [open, setOpen] = useState(false);
+  const [f, setF] = useState({ preKg: "", postKg: "", drankMl: "", band: "doux" });
+  const [busy, setBusy] = useState(false), [err, setErr] = useState<string | null>(null);
+  const id = useId();
+  useEffect(() => { api<Sweat>(`/api/fuel/sweat?date=${date}`).then(setS).catch(() => setS(null)); }, [date]);
+  if (!s) return null;
+  async function save(e: React.FormEvent) {
+    e.preventDefault(); setBusy(true); setErr(null);
+    try {
+      const r = await api<Sweat>("/api/fuel/sweat", { method: "PUT", body: { date, today, ...f } });
+      setS(r); setOpen(false); setF({ ...f, preKg: "", postKg: "" }); haptic("success");
+    } catch (x) { setErr((x as Error).message); } finally { setBusy(false); }
+  }
+  const t = s.test;
+  return (
+    <div className="sweat">
+      <div className="row between"><small className="cal-kicker">Test de sudation</small>{t && <button type="button" className="link small" onClick={() => setOpen(!open)}>{open ? "Fermer" : "Refaire"}</button>}</div>
+      {t && !open && (
+        <div className={`sweat-res is-${s.verdict ?? (t.lossPct >= 2 ? "trop-perdu" : t.lossPct < 0 ? "trop-bu" : "ok")}`}>
+          <div><b>{dec(t.rate)} L/h</b><small>de sueur</small></div>
+          <div><b>{dec(t.lossPct)} %</b><small>de poids perdu</small></div>
+          <div><b>{t.drankMl} ml</b><small>bus</small></div>
+        </div>
+      )}
+      {t && !open && s.text && <p className="small" style={{ margin: 0 }}>{s.text}</p>}
+      {t && !open && <p className="muted small" style={{ margin: 0 }}>Ce résultat règle l’eau par heure de ton plan de course.</p>}
+      {!t && !open && (
+        <>
+          <p className="small soft" style={{ margin: 0 }}>Pèse-toi juste avant et juste après une sortie d’une heure ou plus : tu sauras combien tu transpires, et ton plan de course dira combien boire.</p>
+          <button type="button" className="btn ghost sm" onClick={() => setOpen(true)}>Faire le test sur cette sortie</button>
+        </>
+      )}
+      {open && (
+        <form className="form sweat-form" onSubmit={save}>
+          <p className="small soft" style={{ margin: 0 }}>Pèse-toi après être passé aux toilettes, en tenue légère et sèche, et de même au retour après t’être séché. Tes pesées ne sont pas gardées : seul le résultat l’est.</p>
+          <div className="prod-form-row">
+            <label htmlFor={`${id}-a`}>Poids avant<span className="unit-in"><input id={`${id}-a`} required inputMode="decimal" value={f.preKg} onChange={(e) => setF({ ...f, preKg: e.target.value })} placeholder="70,4" /><i>kg</i></span></label>
+            <label htmlFor={`${id}-b`}>Poids après<span className="unit-in"><input id={`${id}-b`} required inputMode="decimal" value={f.postKg} onChange={(e) => setF({ ...f, postKg: e.target.value })} placeholder="69,3" /><i>kg</i></span></label>
+          </div>
+          <label htmlFor={`${id}-d`}>Bu pendant la sortie<span className="unit-in"><input id={`${id}-d`} inputMode="numeric" value={f.drankMl} onChange={(e) => setF({ ...f, drankMl: e.target.value })} placeholder="500" /><i>ml</i></span></label>
+          <div className="seg sm sweat-band" role="group" aria-label="Conditions de la sortie">
+            {BANDS.map((b) => <button key={b.v} type="button" aria-pressed={f.band === b.v} className={f.band === b.v ? "on" : ""} onClick={() => setF({ ...f, band: b.v })}>{b.label}</button>)}
+          </div>
+          {s.minutes != null && <small className="muted">Durée de la sortie : {fmtDur(s.minutes)}</small>}
+          {err && <p className="err small" role="alert">{err}</p>}
+          <div className="row"><button className="btn sm" type="submit" disabled={busy}>{busy ? "Calcul…" : "Calculer ma sudation"}</button><button className="btn ghost sm" type="button" onClick={() => { setOpen(false); setErr(null); toast?.("Test annulé."); }}>Annuler</button></div>
+        </form>
+      )}
+    </div>
+  );
+}

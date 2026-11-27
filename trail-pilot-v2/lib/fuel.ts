@@ -4,8 +4,8 @@ import { HttpError } from "./api";
 import { aiVisionJson, visionConfigured } from "./ai";
 import { addDays } from "./engine/dates";
 import {
-  cleanDraft, cleanPlate, compareIntake, DAY_LABEL, dayKind, fromOpenFoodFacts, intakeStats, PLATES, plateFeedback, recoveryFor, testedBest,
-  type DayKind, type FuelProduct, type IntakeItem, type ProductDraft, type SessionLike,
+  carbDay, cleanDraft, cleanPlate, compareIntake, DAY_LABEL, dayKind, fromOpenFoodFacts, intakeStats, PLATES, plateFeedback, recoveryFor, sweatTest, testedBest,
+  type DayKind, type FuelProduct, type HeatBand, type IntakeItem, type ProductDraft, type SessionLike,
 } from "./engine/nutrition";
 
 /**
@@ -123,20 +123,28 @@ export async function readPlate(userId: number, image: string, today: string) {
 // ---------- Journée : assiette et récupération ----------
 interface DaySession extends SessionLike { activity_id: number | null }
 
-/** Assiette du jour et, après une grosse séance aujourd'hui, de quoi récupérer. */
+/** Assiette du jour, quantités de glucides quand elles comptent, et, après une grosse séance aujourd'hui, de quoi récupérer. */
 export async function fuelDay(userId: number, today: string, effortOf?: (activityId: number) => number | null) {
-  const [sessions, acts] = await Promise.all([
+  const [sessions, acts, prof, race] = await Promise.all([
     all<DaySession & { date: string; duration_min: number }>("SELECT date, template, duration_min, sport, status, activity_id FROM plan_sessions WHERE user_id = ? AND date IN (?, ?) AND template <> 'strength' ORDER BY duration_min DESC", [userId, today, addDays(today, 1)]),
     all<{ id: number; duration_min: number; sport: string; rpe: number | null }>("SELECT id, duration_min, sport, rpe FROM activities WHERE user_id = ? AND date = ? AND COALESCE(check_state, 0) <> 1 AND sport <> 'renfo' ORDER BY duration_min DESC", [userId, today]),
+    one<{ weight_kg: number | null }>("SELECT weight_kg FROM profiles WHERE user_id = ?", [userId]),
+    // Course de plus d'1 h 30 dans un ou deux jours : recharge en glucides.
+    one<{ date: string }>("SELECT date FROM plan_sessions WHERE user_id = ? AND template = 'race' AND date IN (?, ?) AND duration_min >= 90 ORDER BY date LIMIT 1", [userId, addDays(today, 1), addDays(today, 2)]),
   ]);
   const mk = (s: (typeof sessions)[number] | undefined): DaySession | null => (s ? { template: s.template, durationMin: s.duration_min, sport: s.sport, status: s.status, activity_id: s.activity_id } : null);
   const t = mk(sessions.find((s) => s.date === today)), tm = mk(sessions.find((s) => s.date !== today));
   const doneMin = acts.reduce((m, a) => Math.max(m, a.duration_min), 0);
-  const { kind, reason } = dayKind({ today: t, doneMin, tomorrow: tm });
+  const day = dayKind({ today: t, doneMin, tomorrow: tm });
+  const loading = !!race;
+  const { kind, reason } = loading ? { kind: "dur" as DayKind, reason: race!.date === addDays(today, 1) ? "Veille de course : recharge en glucides, des féculents à chaque repas, sans plat nouveau." : "Course après-demain : la recharge en glucides commence aujourd’hui, des féculents à chaque repas." } : day;
+  const weight = prof?.weight_kg ?? null;
   const big = acts[0];
   const linked = big ? sessions.find((s) => s.activity_id === big.id) : undefined;
-  const recovery = big ? recoveryFor({ durationMin: big.duration_min, template: linked?.template ?? null, effort: big.rpe ?? effortOf?.(big.id) ?? null, tomorrow: tm }) : null;
-  return { kind, label: DAY_LABEL[kind], reason, plate: PLATES[kind], recovery };
+  const recovery = big ? recoveryFor({ durationMin: big.duration_min, template: linked?.template ?? null, effort: big.rpe ?? effortOf?.(big.id) ?? null, tomorrow: tm, weightKg: weight }) : null;
+  const grams = carbDay({ kind, loading, weightKg: weight });
+  // Sans poids, on dit seulement que des quantités sont possibles les jours où elles comptent.
+  return { kind, label: loading ? "Recharge avant la course" : DAY_LABEL[kind], reason, plate: PLATES[kind], recovery, grams, needsWeight: !weight && (loading || kind === "dur") };
 }
 export type FuelDay = Awaited<ReturnType<typeof fuelDay>>;
 export type { DayKind };
@@ -189,6 +197,31 @@ export async function takenPerHour(userId: number, date: string) {
   return (await one<{ g: number | null }>("SELECT g_per_hour AS g FROM fuel_intakes WHERE user_id = ? AND date = ?", [userId, date]))?.g ?? null;
 }
 
+// ---------- Test de sudation ----------
+export const BANDS: HeatBand[] = ["frais", "doux", "chaud"];
+
+export async function sweatFor(userId: number, date: string) {
+  const [row, minutes] = await Promise.all([
+    one<{ rate: number; loss_pct: number; drank_ml: number; minutes: number; band: HeatBand }>("SELECT rate, loss_pct, drank_ml, minutes, band FROM sweat_tests WHERE user_id = ? AND date = ?", [userId, date]),
+    minutesOn(userId, date),
+  ]);
+  return { date, minutes, test: row ? { rate: row.rate, lossPct: row.loss_pct, drankMl: row.drank_ml, band: row.band } : null };
+}
+
+/** Pesées avant et après + boisson : seul le résultat (perte par heure, % de poids) est enregistré, pas les pesées. */
+export async function saveSweat(userId: number, date: string, b: Record<string, unknown>) {
+  const nb = (v: unknown) => (typeof v === "string" ? Number(v.replace(",", ".")) : Number(v));
+  const band = BANDS.includes(b.band as HeatBand) ? (b.band as HeatBand) : "doux";
+  const minutes = await minutesOn(userId, date);
+  if (!minutes) throw new HttpError(400, "Aucune sortie ce jour-là : le test se fait sur une sortie enregistrée.");
+  if (minutes < 45) throw new HttpError(400, "Sortie trop courte : le test demande au moins 45 minutes, idéalement une heure ou plus.");
+  const r = sweatTest({ preKg: nb(b.preKg), postKg: nb(b.postKg), drankMl: nb(b.drankMl ?? 0), minutes });
+  if (!r) throw new HttpError(400, "Valeurs incohérentes : vérifie les deux pesées (en kg) et ce que tu as bu (en ml).");
+  await run("INSERT OR REPLACE INTO sweat_tests(user_id, date, rate, loss_pct, drank_ml, minutes, band, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    [userId, date, r.rate, r.lossPct, Math.round(nb(b.drankMl ?? 0)), minutes, band, Date.now()]);
+  return { date, minutes, test: { rate: r.rate, lossPct: r.lossPct, drankMl: Math.round(nb(b.drankMl ?? 0)), band }, verdict: r.verdict, text: r.text };
+}
+
 /** Ce que le coureur a testé à l'entraînement : repère pour le plan de course. */
 export async function fuelSummary(userId: number) {
   const rows = await all<{ date: string; feel: string; target: number | null; g: number | null; items: string | null }>(
@@ -196,5 +229,13 @@ export async function fuelSummary(userId: number) {
   const best = testedBest(rows.map((r) => ({ date: r.date, feel: r.feel, gPerHour: r.g ?? r.target })));
   const okProducts = new Map<string, number>();
   for (const r of rows) if (r.feel === "ok" && r.items) for (const it of JSON.parse(r.items) as { name: string }[]) okProducts.set(it.name, (okProducts.get(it.name) ?? 0) + 1);
-  return { tests: rows.length, best, products: [...okProducts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4).map(([name]) => name) };
+  // Sudation : moyenne des trois derniers tests (une mesure isolée varie avec la forme et la météo).
+  const sweat = await all<{ date: string; rate: number; band: HeatBand }>("SELECT date, rate, band FROM sweat_tests WHERE user_id = ? ORDER BY date DESC LIMIT 3", [userId]);
+  return {
+    tests: rows.length, best, products: [...okProducts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4).map(([name]) => name),
+    sweat: sweat.length ? (() => {
+      const same = sweat.filter((x) => x.band === sweat[0].band); // mêmes conditions que le dernier test
+      return { rate: Math.round((same.reduce((t, x) => t + x.rate, 0) / same.length) * 100) / 100, band: sweat[0].band, date: sweat[0].date, count: same.length };
+    })() : null,
+  };
 }

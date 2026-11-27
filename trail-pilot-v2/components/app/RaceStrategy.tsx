@@ -7,6 +7,7 @@ import { motionOk } from "./motion";
 import RaceDay from "./RaceDay";
 import dynamic from "next/dynamic";
 import { api, fmtDur, fmtKm, fmtNum } from "./client";
+import { personalWater, type HeatBand } from "@/lib/engine/nutrition";
 import { buildStrategy, clockAt, parseDuration, passageAt, type RaceRoute, type Strategy, type WeatherAdjust } from "@/lib/engine/strategy";
 import { createPortal } from "react-dom";
 import { decodePolyline } from "@/lib/polyline";
@@ -29,7 +30,11 @@ export default function RaceStrategy({ route, estimate, onChanged, toast, weathe
   const [start, setStart] = useState("");
   const [finish, setFinish] = useState("");
   const [raceDay, setRaceDay] = useState(false);
-  const strat = useMemo(() => (route ? buildStrategy(route, estimate, weather) : null), [route, estimate, weather]);
+  // Ce qui a été testé à l'entraînement : alimentation et sudation (l'eau par heure devient personnelle).
+  const [tested, setTested] = useState<Tested | null>(null);
+  useEffect(() => { api<Tested>("/api/fuel/summary").then(setTested).catch(() => setTested(null)); }, []);
+  const water = useMemo(() => (tested?.sweat ? personalWater(tested.sweat.rate, tested.sweat.band, weather?.tone) : null), [tested, weather]);
+  const strat = useMemo(() => (route ? buildStrategy(route, estimate, weather, { water }) : null), [route, estimate, weather, water]);
   const map = useMemo(() => {
     if (!route?.line) return null;
     try {
@@ -121,7 +126,7 @@ export default function RaceStrategy({ route, estimate, onChanged, toast, weathe
         <button className="btn ghost sm" onClick={remove} aria-label="Retirer le tracé">Retirer</button>
         <span className="tip-label small muted">Comment c’est calculé<InfoTip title="Comment c’est calculé">
           <span className="p">Le temps total estimé par ton plan est réparti entre les sections selon leur effort : distance, plus 1 km par 100 m de D+, plus un peu pour la descente. La fatigue qui s’accumule allonge les dernières sections.</span>
-          <span className="p">Nutrition : repères usuels en endurance (<em>{strat.perHour.carbs[0]}-{strat.perHour.carbs[1]} g de glucides</em>, <em>{strat.perHour.water[0]}-{strat.perHour.water[1]} ml d’eau</em> et {strat.perHour.sodium[0]}-{strat.perHour.sodium[1]} mg de sodium par heure). À tester à l’entraînement et à ajuster selon la chaleur.</span>
+          <span className="p">Nutrition : repères usuels en endurance (<em>{strat.perHour.carbs[0]}-{strat.perHour.carbs[1]} g de glucides</em>, <em>{strat.perHour.water[0]}-{strat.perHour.water[1]} ml d’eau{water ? " (d’après ta sudation)" : ""}</em> et {strat.perHour.sodium[0]}-{strat.perHour.sodium[1]} mg de sodium par heure). À tester à l’entraînement et à ajuster selon la chaleur.</span>
         </InfoTip></span>
       </div>
 
@@ -171,7 +176,7 @@ export default function RaceStrategy({ route, estimate, onChanged, toast, weathe
           </div>
         ))}
       </div>
-      <FuelTested perHour={strat.perHour.carbs} />
+      <FuelTested perHour={strat.perHour.carbs} t={tested} water={water} />
       <p className="muted small" style={{ margin: 0 }}>Un gel ou une barre apporte en général 20 à 30 g de glucides. Teste ta stratégie lors de ta sortie test et de tes sorties longues : rien de nouveau le jour J.</p>
     </Fold>
     {raceDay && <RaceDay route={route} strat={strat} onClose={() => setRaceDay(false)} />}
@@ -309,12 +314,25 @@ function RaceSheet({ route, strat, name, date, gear }: { route: RaceRoute; strat
     </div>, host);
 }
 
-/** Ce que ton ventre a déjà accepté à l'entraînement, à côté de ce que demande la course. */
-function FuelTested({ perHour }: { perHour: [number, number] }) {
-  const [t, setT] = useState<{ tests: number; best: { gPerHour: number; date: string } | null; products: string[] } | null>(null);
-  useEffect(() => { api<NonNullable<typeof t>>("/api/fuel/summary").then(setT).catch(() => setT(null)); }, []);
+interface Tested { tests: number; best: { gPerHour: number; date: string } | null; products: string[]; sweat: { rate: number; band: HeatBand; date: string; count: number } | null }
+const dayOf = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("fr-FR", { day: "numeric", month: "long", timeZone: "UTC" });
+
+/** Ce que ton ventre a déjà accepté à l'entraînement, et ta sudation mesurée, à côté de ce que demande la course. */
+function FuelTested({ perHour, t, water }: { perHour: [number, number]; t: Tested | null; water: [number, number] | null }) {
   if (!t || !perHour[1]) return null;
-  const date = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("fr-FR", { day: "numeric", month: "long", timeZone: "UTC" });
+  return <><FuelLine perHour={perHour} t={t} /><SweatLine t={t} water={water} /></>;
+}
+function SweatLine({ t, water }: { t: Tested; water: [number, number] | null }) {
+  if (!t.sweat || !water) return <p className="fuel-tested small is-short">Hydratation : repères généraux. Fais un test de sudation (pesée avant et après une sortie d’une heure ou plus, depuis la fiche du jour) pour savoir combien boire, toi.</p>;
+  const band = t.sweat.band === "chaud" ? "au chaud" : t.sweat.band === "frais" ? "au frais" : "par temps doux";
+  return (
+    <p className="fuel-tested small">
+      Hydratation personnelle : tu transpires environ <b>{String(t.sweat.rate).replace(".", ",")} L/h</b> {band} ({t.sweat.count > 1 ? `moyenne de ${t.sweat.count} tests` : `test du ${dayOf(t.sweat.date)}`}). Ce plan prévoit <b>{water[0]} à {water[1]} ml d’eau par heure</b>, de quoi compenser l’essentiel sans boire plus que tu ne transpires{t.sweat.band !== "chaud" ? " ; s’il fait chaud le jour J, la quantité monte" : ""}.
+    </p>
+  );
+}
+function FuelLine({ perHour, t }: { perHour: [number, number]; t: Tested }) {
+  const date = dayOf;
   if (!t.best) return <p className="fuel-tested small">Testé à l’entraînement : {t.tests ? "pas encore de sortie longue où l’alimentation est bien passée." : "rien pour l’instant."} Note tes prises et ton ressenti après tes sorties longues pour savoir ce que ton ventre accepte.</p>;
   const short = t.best.gPerHour < perHour[0];
   return (

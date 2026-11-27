@@ -53,6 +53,7 @@ scenario("Carburant : assiette, récupération, produits et prises", async () =>
   check(/Récupère : repas complet/.test(card.rec ?? ""), "récupération proposée après 155 min", card.rec);
   check(/demain/.test(card.next ?? ""), "rappel de la séance importante de demain", card.next);
   check(card.first === "50 %" && card.arcs === 3, "assiette : moitié féculents, anneau en trois parts", card);
+  check(await page.locator(".fuel-card", { hasText: "Ajoute ton poids" }).count() === 1 && !(await page.locator(".fuel-grams").count()), "sans poids : invitation à le renseigner, pas de grammes");
   await page.locator(".fuel-card").scrollIntoViewIfNeeded();
   await page.screenshot({ path: `${OUT}/fuel-carte.png` });
 
@@ -122,9 +123,36 @@ scenario("Carburant : assiette, récupération, produits et prises", async () =>
   await page.screenshot({ path: `${OUT}/fuel-prises.png` });
   await page.keyboard.press("Escape"); await page.waitForTimeout(700);
 
+  // ---------- Poids (facultatif) : quantités en grammes ----------
+  await api.put("/api/profile", { level: "confirme", daysPerWeek: 5, longDay: 6, maxWeeklyMinutes: 480, hrMax: 188, hrRest: 48, weightKg: "70,0", regenerate: false });
+  await page.reload(); await page.waitForSelector(".fuel-grams", { timeout: 8000 });
+  const g = await page.evaluate(() => ({ head: document.querySelector(".fuel-grams .fg-head b")?.textContent, rec: document.querySelector(".fuel-rec li")?.textContent }));
+  check(g.head === "420 à 560 g de glucides", "grosse journée à 70 kg : 6 à 8 g par kilo", g.head);
+  check(/70 à 85 g de glucides et environ 20 g de protéines/.test(g.rec ?? "") && /pâtes ou de riz crus/.test(g.rec ?? ""), "récupération en grammes, en aliments du quotidien", g.rec);
+  check(!/kcal|calorie|IMC/i.test(await page.locator(".fuel-card").textContent()), "ni calories ni IMC");
+
+  // ---------- Test de sudation (fiche du jour) ----------
+  await page.locator(".dc-intake").click();
+  await page.waitForSelector(".panel-day .sweat .btn", { timeout: 8000 });
+  await page.locator(".panel-day .sweat .btn", { hasText: "Faire le test" }).click();
+  const sw = page.locator(".panel-day .sweat-form input");
+  await sw.nth(0).fill("70"); await sw.nth(1).fill("68,9"); await sw.nth(2).fill("600");
+  await page.locator(".panel-day .sweat-band button", { hasText: "Chaud" }).click();
+  await page.locator(".panel-day .sweat-form .btn", { hasText: "Calculer" }).click();
+  await page.waitForSelector(".panel-day .sweat-res", { timeout: 6000 });
+  const res = await page.locator(".panel-day .sweat-res").textContent();
+  check(/0,66 L\/h/.test(res) && /1,6 %/.test(res), "sudation : (1,1 kg + 0,6 L) / 2 h 35 ≈ 0,66 L/h, 1,6 % perdus", res);
+  const cols = (await db().execute({ sql: "PRAGMA table_info(sweat_tests)", args: [] })).rows.map((r) => r.name);
+  check(!cols.some((c) => /pre|post|kg/.test(String(c))), "les pesées ne sont pas enregistrées, seulement le résultat", cols);
+  const sum2 = await api.get("/api/fuel/summary");
+  check(sum2.sweat?.rate === 0.66 && sum2.sweat?.band === "chaud", "sudation reprise pour le plan de course", sum2.sweat);
+  await page.locator(".panel-day .sweat").scrollIntoViewIfNeeded();
+  await page.screenshot({ path: `${OUT}/fuel-sudation.png` });
+  await page.keyboard.press("Escape"); await page.waitForTimeout(700);
+
   // Données du compte : export complet.
   const exp = await api.get("/api/account");
-  check(exp.fuelProducts?.length === 3 && exp.fuelIntakes?.length === 1 && exp.fuelLogs?.length === 1, "export du compte : produits, prises et ressentis");
+  check(exp.fuelProducts?.length === 3 && exp.fuelIntakes?.length === 1 && exp.fuelLogs?.length === 1 && exp.sweatTests?.length === 1 && exp.profile?.weight_kg === 70, "export du compte : produits, prises, ressentis, sudation et poids");
 
   // ---------- Contraste, cinq apparences ----------
   const all = {};
@@ -142,6 +170,15 @@ scenario("Carburant : assiette, récupération, produits et prises", async () =>
     all[`${m[0]}-produits`] = await boxes(page, ".panel");
     hide = await page.addStyleTag({ content: ".panel * { color: transparent !important; -webkit-text-fill-color: transparent !important; }" });
     await page.screenshot({ path: `${OUT}/fuel-${m[0]}-produits-fond.png` });
+    await hide.evaluate((e) => e.remove()); await css.evaluate((e) => e.remove());
+    await page.keyboard.press("Escape"); await page.waitForTimeout(700);
+    await page.locator(".dc-intake").click();
+    await page.waitForSelector(".panel-day .sweat-res", { timeout: 8000 });
+    await page.locator(".panel-day .sweat").scrollIntoViewIfNeeded(); await page.waitForTimeout(500);
+    css = await still(page); await page.waitForTimeout(150);
+    all[`${m[0]}-jour`] = await boxes(page, ".panel");
+    hide = await page.addStyleTag({ content: ".panel * { color: transparent !important; -webkit-text-fill-color: transparent !important; }" });
+    await page.screenshot({ path: `${OUT}/fuel-${m[0]}-jour-fond.png` });
     await hide.evaluate((e) => e.remove()); await css.evaluate((e) => e.remove());
     await page.keyboard.press("Escape"); await page.waitForTimeout(700);
   }

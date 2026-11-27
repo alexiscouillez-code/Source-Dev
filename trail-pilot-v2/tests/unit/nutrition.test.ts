@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cleanDraft, cleanPlate, compareIntake, dayKind, fromOpenFoodFacts, guessKind, intakeStats, PLATES, plateFeedback, recoveryFor, testedBest } from "../../lib/engine/nutrition";
+import { carbDay, cleanDraft, cleanPlate, compareIntake, dayKind, fromOpenFoodFacts, guessKind, intakeStats, personalWater, PLATES, plateFeedback, recoveryFor, sweatTest, testedBest } from "../../lib/engine/nutrition";
 
 const s = (template: string, durationMin: number, status = "planned") => ({ template, durationMin, status });
 
@@ -75,4 +75,53 @@ test("produits : nettoyage des saisies et lecture d'une fiche Open Food Facts", 
   const serving = fromOpenFoodFacts("123456789012", { product_name: "Drink mix", serving_size: "1 dose (40 g)", serving_quantity: 40, nutriments: { carbohydrates_serving: 38, carbohydrates_100g: 95 } });
   assert.equal(serving?.carbs, 38, "la portion prime sur les valeurs pour 100 g");
   assert.equal(serving?.unit, "1 dose (40 g)");
+});
+
+test("récupération en grammes quand le poids est connu", () => {
+  assert.equal(recoveryFor({ durationMin: 180, template: "long" })?.grams, null, "sans poids : portions seulement");
+  const r = recoveryFor({ durationMin: 180, template: "long", weightKg: 70 })!;
+  assert.deepEqual(r.grams, { carbs: [70, 85], protein: [20, 20] });
+  assert.match(r.items[0], /70 à 85 g de glucides et environ 20 g de protéines/);
+  assert.match(r.items[0], /g de pâtes ou de riz crus/);
+  const q = recoveryFor({ durationMin: 60, template: "tempo", weightKg: 60 })!;
+  assert.deepEqual(q.grams?.carbs, [50, 60], "0,8 à 1 g/kg après une séance moins longue");
+  assert.equal(recoveryFor({ durationMin: 180, template: "long", weightKg: 500 })?.grams, null, "poids aberrant ignoré");
+});
+
+test("glucides de la journée : seulement en recharge ou grosse journée, avec un poids", () => {
+  assert.equal(carbDay({ kind: "dur", loading: false, weightKg: null }), null);
+  assert.equal(carbDay({ kind: "modere", loading: false, weightKg: 70 }), null, "jour normal : les proportions suffisent");
+  const big = carbDay({ kind: "dur", loading: false, weightKg: 70 })!;
+  assert.deepEqual(big.total, [420, 560]);
+  const load = carbDay({ kind: "dur", loading: true, weightKg: 70 })!;
+  assert.deepEqual(load.perKg, [8, 10]);
+  assert.deepEqual(load.total, [560, 700]);
+  assert.equal(load.meal, 160, "un quart par repas");
+  assert.equal(load.pasta, 160, "(160 − 45) / 0,72 ≈ 160 g crus");
+  assert.equal(load.snacks, 160);
+});
+
+test("test de sudation : perte par heure, seuil des 2 %, jamais finir plus lourd", () => {
+  const ok = sweatTest({ preKg: 70, postKg: 69.2, drankMl: 500, minutes: 90 })!;
+  assert.equal(ok.rate, 0.87, "(0,8 kg + 0,5 L) / 1,5 h");
+  assert.equal(ok.lossPct, 1.1);
+  assert.equal(ok.verdict, "ok");
+  const dry = sweatTest({ preKg: 70, postKg: 68.4, drankMl: 0, minutes: 120 })!;
+  assert.equal(dry.verdict, "trop-perdu");
+  assert.match(dry.text, /2,3 %/);
+  const wet = sweatTest({ preKg: 70, postKg: 70.3, drankMl: 1500, minutes: 120 })!;
+  assert.equal(wet.verdict, "trop-bu");
+  assert.equal(sweatTest({ preKg: 70, postKg: 69, drankMl: 0, minutes: 30 }), null, "sortie trop courte");
+  assert.equal(sweatTest({ preKg: 70, postKg: 60, drankMl: 0, minutes: 90 }), null, "pesées incohérentes");
+});
+
+test("eau par heure en course : 60 à 80 % de la sudation, plus s'il fait plus chaud que pendant le test", () => {
+  assert.deepEqual(personalWater(1, "doux"), [600, 800]);
+  const hot = personalWater(1, "doux", "chaud");
+  assert.ok(hot[0] > 600 && hot[1] > 800);
+  assert.deepEqual(personalWater(1, "chaud", "chaud"), [600, 800], "test déjà au chaud : pas de majoration");
+  assert.ok(personalWater(1, "doux", "froid")[1] < 800);
+  assert.equal(personalWater(0.3, "frais")[0], 300, "plancher de 300 ml/h");
+  const [lo, hi] = personalWater(1.4, "frais", "tres-chaud");
+  assert.ok(hi <= 1.4 * 1.35 * 1000 && lo <= hi, "jamais plus que la sueur, même majorée");
 });

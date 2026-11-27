@@ -64,8 +64,25 @@
 .intake-sum.is-dans-cible { border-left-color: var(--ok); } .intake-sum.is-en-dessous { border-left-color: var(--lite); } .intake-sum.is-au-dessus { border-left-color: var(--rest); }
 .intake-sum b { display: block; font-family: var(--mono); font-size: 17px; }
 .intake-sum b i { font-style: normal; font-size: 12px; color: var(--soft); }
-.intake-sum small { color: var(--mute); font-size: 12px; }
+.intake-sum small, .sweat-res small { display: block; line-height: 1.3; margin-top: 2px; }
+.intake-sum small { color: var(--soft); font-size: 12px; }
 .dc-intake { justify-self: start; }
+
+/* Quantités de glucides de la journée (recharge, grosse journée). */
+.fuel-grams { display: grid; gap: 8px; padding: 12px 14px; border-radius: 14px; background: var(--ink-3); border-left: 4px solid var(--lite); }
+.fg-head { display: grid; gap: 2px; }
+.fg-head b { font-family: var(--display); font-size: 19px; line-height: 1.2; }
+.fg-head small:last-child, .fuel-grams > small { color: var(--soft); line-height: 1.4; }
+.fuel-grams ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 14px; line-height: 1.45; }
+
+/* Test de sudation */
+.sweat { display: grid; gap: 10px; padding: 12px; border-radius: 16px; border: 1px solid var(--line); background: var(--ink-2); }
+.sweat-res { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 10px; border-radius: 12px; background: var(--ink-3); border-left: 4px solid var(--ok); }
+.sweat-res.is-trop-perdu { border-left-color: var(--lite); } .sweat-res.is-trop-bu { border-left-color: var(--rest); }
+.sweat-res b { display: block; font-family: var(--mono); font-size: 17px; }
+.sweat-res small { color: var(--soft); font-size: 12px; }
+.sweat-form label { display: grid; gap: 6px; font-size: 13.5px; color: var(--soft); }
+.sweat-band { display: flex; flex-wrap: wrap; justify-self: start; }
 
 /* Plan de course : ce qui a été testé à l'entraînement. */
 .fuel-tested { margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--ink-3); border-left: 4px solid var(--ok); line-height: 1.45; }
